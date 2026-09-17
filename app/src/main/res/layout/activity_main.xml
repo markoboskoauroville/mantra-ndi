@@ -100,6 +100,16 @@
             android:layout_weight="1" />
 
         <TextView
+            android:id="@+id/ndiAttribution"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:autoLink="web"
+            android:text="Powered by NDI®  https://ndi.video\nNDI® is a registered trademark of Vizrt NDI AB"
+            android:textColor="#546E7A"
+            android:textSize="10sp" />
+
+        <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
