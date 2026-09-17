@@ -46,7 +46,7 @@ jobs:
         if: hashFiles('app/src/main/cpp/ndi/include/Processing.NDI.Lib.h') != ''
         run: |
           SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
-          "$SDKMANAGER" --install "ndk;26.1.10909125" "cmake;3.22.1"
+          "$SDKMANAGER" --install "ndk;27.0.12077973" "cmake;3.22.1"
 
       - uses: gradle/actions/setup-gradle@v4
         with:

@@ -14,6 +14,10 @@ android {
     namespace = "com.mantraproductions.ndi"
     compileSdk = 35
 
+    // Pinned so AGP stops reaching for whatever its default NDK happens to be;
+    // CI installs exactly this version.
+    ndkVersion = "27.0.12077973"
+
     defaultConfig {
         applicationId = "com.mantraproductions.ndi"
         minSdk = 26
