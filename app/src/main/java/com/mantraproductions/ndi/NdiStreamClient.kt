@@ -15,18 +15,16 @@ import com.pedro.library.util.streamclient.StreamBaseClient
  */
 class NdiStreamClient : StreamBaseClient() {
 
-    @Volatile var sentVideoFrames: Long = 0
-        private set
-    @Volatile var sentAudioFrames: Long = 0
-        private set
+    @Volatile private var videoFrameCount: Long = 0
+    @Volatile private var audioFrameCount: Long = 0
 
-    internal fun countVideoFrame() { sentVideoFrames++ }
-    internal fun countAudioFrame() { sentAudioFrames++ }
+    internal fun countVideoFrame() { videoFrameCount++ }
+    internal fun countAudioFrame() { audioFrameCount++ }
 
-    override fun getSentVideoFrames(): Long = sentVideoFrames
-    override fun getSentAudioFrames(): Long = sentAudioFrames
-    override fun resetSentVideoFrames() { sentVideoFrames = 0 }
-    override fun resetSentAudioFrames() { sentAudioFrames = 0 }
+    override fun getSentVideoFrames(): Long = videoFrameCount
+    override fun getSentAudioFrames(): Long = audioFrameCount
+    override fun resetSentVideoFrames() { videoFrameCount = 0 }
+    override fun resetSentAudioFrames() { audioFrameCount = 0 }
 
     // NDI does its own buffering/pacing — nothing meaningful to report.
     override fun getDroppedVideoFrames(): Long = 0
