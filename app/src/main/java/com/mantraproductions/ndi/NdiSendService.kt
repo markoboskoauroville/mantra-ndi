@@ -75,6 +75,8 @@ class NdiSendService : Service() {
 
         // Keep the encoder pinned to the profile's fps rather than adapting.
         ndiStream.forceFpsLimit(true)
+        // The NDI frame header carries resolution and rate on every frame.
+        ndiStream.setVideoFormat(profile.width, profile.height, profile.fps)
 
         stream = ndiStream
         val source = ndiStream.videoSource as? Camera2Source

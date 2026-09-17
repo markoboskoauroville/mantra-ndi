@@ -53,8 +53,17 @@ class NdiStream(
         // nothing to do here. G711/OPUS would need transcoding — don't.
     }
 
+    private var audioSampleRate: Int = 48000
+    private var aacConfig: ByteArray = ByteArray(0)
+
     override fun onAudioInfoImp(sampleRate: Int, isStereo: Boolean) {
+        audioSampleRate = sampleRate
         NdiSender.setAudioInfo(sampleRate, isStereo)
+    }
+
+    /** Resolution and frame rate for the NDI frame headers. */
+    fun setVideoFormat(width: Int, height: Int, fps: Int) {
+        NdiSender.setVideoFormat(width, height, fps, 1)
     }
 
     override fun onVideoInfoImp(sps: ByteBuffer, pps: ByteBuffer?, vps: ByteBuffer?) {
@@ -81,8 +90,19 @@ class NdiStream(
     }
 
     override fun getAudioDataImp(audioBuffer: ByteBuffer, info: MediaCodec.BufferInfo) {
-        NdiSender.sendAudio(audioBuffer.toByteArray(info), info.presentationTimeUs)
+        val bytes = audioBuffer.toByteArray(info)
+        if ((info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+            // AudioSpecificConfig, a couple of bytes; NDI wants it as extra data.
+            aacConfig = bytes
+            return
+        }
+        // AAC-LC is always 1024 samples per frame.
+        NdiSender.sendAudio(bytes, aacConfig, AAC_SAMPLES_PER_FRAME, info.presentationTimeUs)
         streamClient.countAudioFrame()
+    }
+
+    private companion object {
+        const val AAC_SAMPLES_PER_FRAME = 1024
     }
 
     private fun ByteBuffer.toByteArray(info: MediaCodec.BufferInfo? = null): ByteArray {

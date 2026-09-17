@@ -36,22 +36,40 @@ object NdiSender {
         if (available) nativeSetVideoInfo(sps, pps, vps)
     }
 
+    /** Resolution and frame rate go on every NDI video frame header. */
+    fun setVideoFormat(width: Int, height: Int, fpsNumerator: Int, fpsDenominator: Int = 1) {
+        if (available) nativeSetVideoFormat(width, height, fpsNumerator, fpsDenominator)
+    }
+
     fun setAudioInfo(sampleRate: Int, isStereo: Boolean) {
         if (available) nativeSetAudioInfo(sampleRate, isStereo)
     }
 
-    fun sendVideo(data: ByteArray, isKeyframe: Boolean, ptsUs: Long, isHevc: Boolean) {
-        if (available) nativeSendVideo(data, isKeyframe, ptsUs, isHevc)
+    /**
+     * @param isPreviewStream false for the full-bandwidth stream, true for the
+     *   low-res stream NDI expects alongside it on the compressed path.
+     */
+    fun sendVideo(
+        data: ByteArray,
+        isKeyframe: Boolean,
+        ptsUs: Long,
+        isHevc: Boolean,
+        isPreviewStream: Boolean = false
+    ) {
+        if (available) nativeSendVideo(data, isKeyframe, ptsUs, isHevc, isPreviewStream)
     }
 
-    fun sendAudio(data: ByteArray, ptsUs: Long) {
-        if (available) nativeSendAudio(data, ptsUs)
+    fun sendAudio(data: ByteArray, extraData: ByteArray, sampleCount: Int, ptsUs: Long) {
+        if (available) nativeSendAudio(data, extraData, sampleCount, ptsUs)
     }
 
     private external fun nativeCreate(sourceName: String): Boolean
     private external fun nativeDestroy()
     private external fun nativeSetVideoInfo(sps: ByteArray, pps: ByteArray?, vps: ByteArray?)
+    private external fun nativeSetVideoFormat(width: Int, height: Int, fpsNumerator: Int, fpsDenominator: Int)
     private external fun nativeSetAudioInfo(sampleRate: Int, isStereo: Boolean)
-    private external fun nativeSendVideo(data: ByteArray, isKeyframe: Boolean, ptsUs: Long, isHevc: Boolean)
-    private external fun nativeSendAudio(data: ByteArray, ptsUs: Long)
+    private external fun nativeSendVideo(
+        data: ByteArray, isKeyframe: Boolean, ptsUs: Long, isHevc: Boolean, isPreviewStream: Boolean
+    )
+    private external fun nativeSendAudio(data: ByteArray, extraData: ByteArray, sampleCount: Int, ptsUs: Long)
 }

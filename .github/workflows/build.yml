@@ -10,34 +10,60 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The NDI Advanced SDK is confidential under its licence, so it lives in
+      # a private repo rather than here. Without the secret the workflow still
+      # succeeds, just producing a camera-only APK with NDI disabled.
+      - name: Fetch NDI Advanced SDK
+        id: sdk
+        continue-on-error: true
+        env:
+          SDK_TOKEN: ${{ secrets.NDI_SDK_TOKEN }}
+        run: |
+          if [ -z "$SDK_TOKEN" ]; then
+            echo "No NDI_SDK_TOKEN set, building without NDI"
+            exit 0
+          fi
+          git clone --depth 1 \
+            "https://x-access-token:$SDK_TOKEN@github.com/markoboskoauroville/mantra-ndi-sdk.git" \
+            /tmp/ndi-sdk 2>/dev/null
+          mkdir -p app/src/main/cpp/ndi/include app/src/main/jniLibs/arm64-v8a
+          cp /tmp/ndi-sdk/include/*.h app/src/main/cpp/ndi/include/
+          cp /tmp/ndi-sdk/lib/arm64-v8a/libndi_advanced.so app/src/main/jniLibs/arm64-v8a/
+          rm -rf /tmp/ndi-sdk
+          echo "NDI SDK in place"
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # ubuntu-latest already ships the Android SDK, so no setup action here —
-      # android-actions/setup-android still reaches for the retired "tools"
-      # package and fails on current runners.
       - name: Accept SDK licences
         run: |
           SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
 
-      # Only needed once the NDI SDK is dropped into the tree; without it the
-      # native half is skipped entirely (see README).
       - name: Install NDK and CMake
         if: hashFiles('app/src/main/cpp/ndi/include/Processing.NDI.Lib.h') != ''
         run: |
           SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
           "$SDKMANAGER" --install "ndk;26.1.10909125" "cmake;3.22.1"
 
-      # No gradle-wrapper.jar committed, so let the action manage a pinned Gradle.
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
       - name: Assemble debug APK
         run: gradle assembleDebug --stacktrace
+
+      - name: Confirm NDI was linked in
+        run: |
+          if unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -q libndi_advanced.so; then
+            echo "NDI_BUILD=full" >> $GITHUB_ENV
+            echo "APK contains the NDI runtime"
+          else
+            echo "NDI_BUILD=camera-only" >> $GITHUB_ENV
+            echo "APK built without NDI"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
