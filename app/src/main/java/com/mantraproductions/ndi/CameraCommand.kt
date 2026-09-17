@@ -19,6 +19,9 @@ data class CameraCommand(
     val whiteBalanceLock: Boolean? = null,
     val stabilization: Boolean? = null,
     val zoom: Float? = null,
+    /** Manual colour temperature in Kelvin; use whiteBalanceAuto to go back. */
+    val whiteBalanceKelvin: Int? = null,
+    val whiteBalanceAuto: Boolean? = null,
     /** "start" or "stop" */
     val record: String? = null,
     /** Ask the camera to report its current state back. */
@@ -32,6 +35,8 @@ data class CameraCommand(
         whiteBalanceLock?.let { sb.append(" wb_lock=\"${if (it) 1 else 0}\"") }
         stabilization?.let { sb.append(" stab=\"${if (it) 1 else 0}\"") }
         zoom?.let { sb.append(" zoom=\"$it\"") }
+        whiteBalanceKelvin?.let { sb.append(" wb_kelvin=\"$it\"") }
+        whiteBalanceAuto?.let { sb.append(" wb_auto=\"${if (it) 1 else 0}\"") }
         record?.let { sb.append(" record=\"$it\"") }
         if (requestState) sb.append(" request_state=\"1\"")
         sb.append("/>")
@@ -50,6 +55,8 @@ data class CameraCommand(
                 whiteBalanceLock = attr(xml, "wb_lock")?.let { it == "1" },
                 stabilization = attr(xml, "stab")?.let { it == "1" },
                 zoom = attr(xml, "zoom")?.toFloatOrNull(),
+                whiteBalanceKelvin = attr(xml, "wb_kelvin")?.toIntOrNull(),
+                whiteBalanceAuto = attr(xml, "wb_auto")?.let { it == "1" },
                 record = attr(xml, "record"),
                 requestState = attr(xml, "request_state") == "1"
             )
@@ -81,13 +88,20 @@ data class CameraState(
     val iso: Int? = null,
     val shutterNs: Long? = null,
     val recording: Boolean = false,
-    val manualSupported: Boolean = false
+    val manualSupported: Boolean = false,
+    val whiteBalanceSupported: Boolean = false,
+    val whiteBalanceKelvin: Int? = null,
+    /** What this camera calls itself, so the operator knows which phone replied. */
+    val cameraName: String = ""
 ) {
     fun toXml(): String = "<$ROOT iso_min=\"$isoMin\" iso_max=\"$isoMax\"" +
             " shutter_min=\"$shutterMinNs\" shutter_max=\"$shutterMaxNs\"" +
             " iso=\"${iso ?: -1}\" shutter_ns=\"${shutterNs ?: -1}\"" +
             " recording=\"${if (recording) 1 else 0}\"" +
-            " manual=\"${if (manualSupported) 1 else 0}\"/>"
+            " manual=\"${if (manualSupported) 1 else 0}\"" +
+            " wb=\"${if (whiteBalanceSupported) 1 else 0}\"" +
+            " wb_kelvin=\"${whiteBalanceKelvin ?: -1}\"" +
+            " name=\"$cameraName\"/>"
 
     companion object {
         const val ROOT = "mantra_cam_state"
@@ -111,7 +125,10 @@ data class CameraState(
                 iso = a("iso")?.toIntOrNull()?.takeIf { it >= 0 },
                 shutterNs = a("shutter_ns")?.toLongOrNull()?.takeIf { it >= 0 },
                 recording = a("recording") == "1",
-                manualSupported = a("manual") == "1"
+                manualSupported = a("manual") == "1",
+                whiteBalanceSupported = a("wb") == "1",
+                whiteBalanceKelvin = a("wb_kelvin")?.toIntOrNull()?.takeIf { it >= 0 },
+                cameraName = a("name") ?: ""
             )
         }
     }

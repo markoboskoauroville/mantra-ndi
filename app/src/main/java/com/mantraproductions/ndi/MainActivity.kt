@@ -11,9 +11,11 @@ import android.os.IBinder
 import android.view.SurfaceHolder
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.AdapterView as AdapterViewAlias
 import android.widget.SeekBar
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import kotlin.concurrent.thread
 import com.mantraproductions.ndi.databinding.ActivityMainBinding
 import kotlin.math.roundToInt
 
@@ -21,6 +23,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var profileStore: ProfileStore
+    private lateinit var identity: SourceIdentity
 
     private var service: NdiSendService? = null
     private var bound = false
@@ -57,12 +60,16 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        identity = SourceIdentity(this)
+        binding.sourceNameInput.setText(identity.name)
+
         profileStore = ProfileStore(this)
         profiles = profileStore.load()
         activeProfile = profileStore.selected()
 
         setUpProfileSpinner()
         setUpControls()
+        setUpWhiteBalance()
 
         binding.preview.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
@@ -92,7 +99,10 @@ class MainActivity : AppCompatActivity() {
             if (svc.isStreaming) {
                 svc.stopStreaming()
             } else {
-                val name = binding.sourceNameInput.text?.toString()?.ifBlank { "Mantra NDI" } ?: "Mantra NDI"
+                val name = SourceIdentity.sanitize(binding.sourceNameInput.text?.toString().orEmpty())
+                binding.sourceNameInput.setText(name)
+                identity.name = name
+                warnIfNameTaken(name)
                 startForegroundService(Intent(this, NdiSendService::class.java))
                 svc.startStreaming(name) { error ->
                     runOnUiThread { binding.statusText.text = "Error: $error" }
@@ -273,6 +283,73 @@ class MainActivity : AppCompatActivity() {
                 binding.shutterLabel.text = "Shutter $shutter (auto)"
             }
         }
+    }
+
+    /**
+     * With several camera phones on one network, two sources answering to the
+     * same name is the kind of thing you only notice once the shoot is running.
+     * Checking costs nothing here, so it happens before going live.
+     */
+    private fun warnIfNameTaken(name: String) {
+        if (!NdiFinder.available) return
+        thread(name = "ndi-name-check") {
+            NdiFinder.start()
+            val existing = NdiFinder.sources(timeoutMs = 1200)
+            NdiFinder.stop()
+            if (SourceIdentity.clashesWith(name, existing)) {
+                runOnUiThread {
+                    binding.statusText.text =
+                        "Another source is already called \"$name\". Rename this one."
+                }
+            }
+        }
+    }
+
+    private fun setUpWhiteBalance() {
+        val options = mutableListOf("Auto", "Manual (Kelvin)")
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, options).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        binding.wbSpinner.adapter = adapter
+
+        binding.wbKelvinSeek.max = ProControls.KELVIN_MAX - ProControls.KELVIN_MIN
+        binding.wbKelvinSeek.progress = 5600 - ProControls.KELVIN_MIN
+
+        binding.wbSpinner.onItemSelectedListener = object : AdapterViewAlias.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterViewAlias<*>?, v: android.view.View?, pos: Int, id: Long) {
+                val controls = service?.controls
+                val manual = pos == 1
+                binding.wbKelvinSeek.isEnabled = manual && controls?.supportsManualWhiteBalance() == true
+                if (manual) {
+                    if (controls?.supportsManualWhiteBalance() != true) {
+                        binding.statusText.text = "This camera has no manual white balance"
+                        binding.wbSpinner.setSelection(0)
+                        return
+                    }
+                    applyWhiteBalance()
+                } else {
+                    controls.setAutoWhiteBalance()
+                }
+            }
+
+            override fun onNothingSelected(p: AdapterViewAlias<*>?) {}
+        }
+
+        binding.wbKelvinSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                binding.wbKelvinLabel.text = "${ProControls.KELVIN_MIN + progress} K"
+                if (fromUser) applyWhiteBalance()
+            }
+
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+    }
+
+    private fun applyWhiteBalance() {
+        val kelvin = ProControls.KELVIN_MIN + binding.wbKelvinSeek.progress
+        service?.controls?.setManualWhiteBalance(kelvin)
+        binding.wbKelvinLabel.text = "$kelvin K"
     }
 
     private fun refreshUi() {

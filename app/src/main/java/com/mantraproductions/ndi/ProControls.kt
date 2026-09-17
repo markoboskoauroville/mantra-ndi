@@ -1,6 +1,9 @@
 package com.mantraproductions.ndi
 
 import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.params.ColorSpaceTransform
+import android.hardware.camera2.params.RggbChannelVector
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.util.Range
@@ -80,6 +83,50 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
 
     fun unlockExposure() = source.disableExposureLock()
 
+    /**
+     * Manual white balance by colour temperature.
+     *
+     * Camera2 has no Kelvin control, so the temperature is converted to an
+     * illuminant colour and then inverted into per-channel gains: warm light
+     * means the sensor already sees plenty of red, so red gain drops and blue
+     * gain rises to bring white back to neutral.
+     *
+     * Needs MANUAL_POST_PROCESSING; returns false on a camera that lacks it
+     * rather than silently doing nothing.
+     */
+    fun setManualWhiteBalance(kelvin: Int): Boolean {
+        if (!supportsManualWhiteBalance()) return false
+        val gains = kelvinToGains(kelvin)
+        return source.setCustomRequest { builder ->
+            builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+            builder.set(
+                CaptureRequest.COLOR_CORRECTION_MODE,
+                CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
+            )
+            builder.set(CaptureRequest.COLOR_CORRECTION_GAINS, gains)
+            // With AWB off the transform is whatever was last set, which may be
+            // nothing. Identity keeps the gains doing the work on their own.
+            builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, IDENTITY_TRANSFORM)
+        }
+    }
+
+    fun supportsManualWhiteBalance(): Boolean {
+        val caps = characteristics()?.get(
+            CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES
+        ) ?: return false
+        return caps.contains(
+            CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING
+        )
+    }
+
+    /** The scene presets this camera offers (daylight, cloudy, incandescent and so on). */
+    fun whiteBalancePresets(): List<Int> = source.getAutoWhiteBalanceModesAvailable()
+
+    fun setWhiteBalancePreset(mode: Int): Boolean = source.enableAutoWhiteBalance(mode)
+
+    fun setAutoWhiteBalance(): Boolean =
+        source.enableAutoWhiteBalance(CaptureRequest.CONTROL_AWB_MODE_AUTO)
+
     fun lockWhiteBalance(): Boolean = source.enableWhiteBalanceLock()
 
     fun unlockWhiteBalance() = source.disableWhiteBalanceLock()
@@ -138,7 +185,12 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
         } else {
             setAutoExposure()
         }
-        if (profile.lockWhiteBalance) lockWhiteBalance() else unlockWhiteBalance()
+        val kelvin = profile.whiteBalanceKelvin
+        when {
+            kelvin != null -> setManualWhiteBalance(kelvin)
+            profile.lockWhiteBalance -> lockWhiteBalance()
+            else -> unlockWhiteBalance()
+        }
         setStabilization(profile.videoStabilization)
     }
 
@@ -159,9 +211,59 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
         }
     }
 
+    /**
+     * Approximates the colour of a black body at [kelvin], then inverts it into
+     * camera gains normalised so the smallest is 1.0, which is what
+     * COLOR_CORRECTION_GAINS expects.
+     */
+    private fun kelvinToGains(kelvin: Int): RggbChannelVector {
+        val t = kelvin.coerceIn(KELVIN_MIN, KELVIN_MAX) / 100.0
+
+        val red = if (t <= 66) 255.0
+        else (329.698727446 * Math.pow(t - 60, -0.1332047592)).coerceIn(0.0, 255.0)
+
+        val green = if (t <= 66) (99.4708025861 * Math.log(t) - 161.1195681661).coerceIn(0.0, 255.0)
+        else (288.1221695283 * Math.pow(t - 60, -0.0755148492)).coerceIn(0.0, 255.0)
+
+        val blue = when {
+            t >= 66 -> 255.0
+            t <= 19 -> 0.0
+            else -> (138.5177312231 * Math.log(t - 10) - 305.0447927307).coerceIn(0.0, 255.0)
+        }
+
+        // Guard against a zero channel before inverting.
+        val r = red.coerceAtLeast(1.0)
+        val g = green.coerceAtLeast(1.0)
+        val b = blue.coerceAtLeast(1.0)
+
+        var rGain = (255.0 / r).toFloat()
+        var gGain = (255.0 / g).toFloat()
+        var bGain = (255.0 / b).toFloat()
+
+        val smallest = minOf(rGain, gGain, bGain)
+        rGain /= smallest
+        gGain /= smallest
+        bGain /= smallest
+
+        return RggbChannelVector(rGain, gGain, gGain, bGain)
+    }
+
     private fun characteristics(): CameraCharacteristics? = try {
         cameraManager.getCameraCharacteristics(source.getCurrentCameraId())
     } catch (e: Exception) {
         null
+    }
+
+    companion object {
+        const val KELVIN_MIN = 2000
+        const val KELVIN_MAX = 10000
+
+        private val IDENTITY_TRANSFORM = ColorSpaceTransform(
+            intArrayOf(
+                1, 1, 0, 1, 0, 1,
+                0, 1, 1, 1, 0, 1,
+                0, 1, 0, 1, 1, 1
+            )
+        )
     }
 }

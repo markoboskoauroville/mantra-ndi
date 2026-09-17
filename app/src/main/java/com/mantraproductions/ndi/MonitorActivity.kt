@@ -174,6 +174,9 @@ class MonitorActivity : AppCompatActivity() {
 
         binding.recordButton.isEnabled = true
         binding.recordButton.text = if (state.recording) "Stop recording" else "Record on camera"
+        if (state.cameraName.isNotEmpty()) {
+            binding.statusText.text = "Controlling ${state.cameraName}"
+        }
 
         val manual = state.manualSupported
         binding.remoteAutoExposure.isEnabled = manual

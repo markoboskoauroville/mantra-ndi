@@ -22,6 +22,8 @@ data class CaptureProfile(
     val isoValue: Int? = null,
     val shutterNs: Long? = null,
     val lockWhiteBalance: Boolean = false,
+    /** Manual colour temperature; null leaves white balance automatic. */
+    val whiteBalanceKelvin: Int? = null,
     val videoStabilization: Boolean = false
 ) {
     /** 180-degree shutter for this profile's frame rate, the film-standard default. */
@@ -37,6 +39,7 @@ data class CaptureProfile(
         put("isoValue", isoValue ?: JSONObject.NULL)
         put("shutterNs", shutterNs ?: JSONObject.NULL)
         put("lockWhiteBalance", lockWhiteBalance)
+        put("whiteBalanceKelvin", whiteBalanceKelvin ?: JSONObject.NULL)
         put("videoStabilization", videoStabilization)
     }
 
@@ -51,6 +54,7 @@ data class CaptureProfile(
             isoValue = if (o.isNull("isoValue")) null else o.getInt("isoValue"),
             shutterNs = if (o.isNull("shutterNs")) null else o.getLong("shutterNs"),
             lockWhiteBalance = o.optBoolean("lockWhiteBalance", false),
+            whiteBalanceKelvin = if (o.isNull("whiteBalanceKelvin")) null else o.getInt("whiteBalanceKelvin"),
             videoStabilization = o.optBoolean("videoStabilization", false)
         )
 
@@ -59,8 +63,8 @@ data class CaptureProfile(
          * high enough to look good, low enough not to saturate the link.
          */
         val defaults: List<CaptureProfile> = listOf(
-            CaptureProfile("Cinema 24", 1920, 1080, 24, 12_000_000, lockWhiteBalance = true),
-            CaptureProfile("PAL 25", 1920, 1080, 25, 12_000_000, lockWhiteBalance = true),
+            CaptureProfile("Cinema 24", 1920, 1080, 24, 12_000_000, whiteBalanceKelvin = 5600),
+            CaptureProfile("PAL 25", 1920, 1080, 25, 12_000_000, whiteBalanceKelvin = 5600),
             CaptureProfile("Broadcast 50", 1920, 1080, 50, 18_000_000),
             CaptureProfile("Standard 30", 1920, 1080, 30, 10_000_000),
             CaptureProfile("4K 25", 3840, 2160, 25, 35_000_000, useHevc = true),

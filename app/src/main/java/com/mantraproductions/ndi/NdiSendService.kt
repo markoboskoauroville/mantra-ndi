@@ -263,6 +263,8 @@ class NdiSendService : Service() {
         command.whiteBalanceLock?.let { if (it) ctrl?.lockWhiteBalance() else ctrl?.unlockWhiteBalance() }
         command.stabilization?.let { ctrl?.setStabilization(it) }
         command.zoom?.let { ctrl?.setZoom(it) }
+        command.whiteBalanceKelvin?.let { ctrl?.setManualWhiteBalance(it) }
+        command.whiteBalanceAuto?.let { if (it) ctrl?.setAutoWhiteBalance() }
 
         when (command.record) {
             "start" -> startRecording()
@@ -318,7 +320,10 @@ class NdiSendService : Service() {
             shutterMinNs = shutterRange?.lower ?: 0,
             shutterMaxNs = shutterRange?.upper ?: 0,
             recording = isRecording,
-            manualSupported = ctrl.supportsManualSensor()
+            manualSupported = ctrl.supportsManualSensor(),
+            whiteBalanceSupported = ctrl.supportsManualWhiteBalance(),
+            whiteBalanceKelvin = activeProfile?.whiteBalanceKelvin,
+            cameraName = currentSourceName ?: SourceIdentity(applicationContext).name
         )
         // Metadata added to the connection reaches every attached receiver.
         NdiSender.addConnectionMetadata(state.toXml())

@@ -95,6 +95,33 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="White balance"
+            android:textColor="#78909C"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/wbSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/wbKelvinLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="5600 K"
+            android:textColor="#78909C"
+            android:textSize="11sp" />
+
+        <SeekBar
+            android:id="@+id/wbKelvinSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:enabled="false" />
+
         <CheckBox
             android:id="@+id/stabilizationCheck"
             android:layout_width="match_parent"
