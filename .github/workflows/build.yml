@@ -15,13 +15,23 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      # ubuntu-latest already ships the Android SDK, so no setup action here —
+      # android-actions/setup-android still reaches for the retired "tools"
+      # package and fails on current runners.
+      - name: Accept SDK licences
+        run: |
+          SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
 
-      - name: Install NDK + CMake
-        run: sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
+      # Only needed once the NDI SDK is dropped into the tree; without it the
+      # native half is skipped entirely (see README).
+      - name: Install NDK and CMake
+        if: hashFiles('app/src/main/cpp/ndi/include/Processing.NDI.Lib.h') != ''
+        run: |
+          SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
+          "$SDKMANAGER" --install "ndk;26.1.10909125" "cmake;3.22.1"
 
-      # No gradle-wrapper.jar committed (binary file, easier to let this
-      # action manage/cache a pinned Gradle install instead).
+      # No gradle-wrapper.jar committed, so let the action manage a pinned Gradle.
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -31,5 +41,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ndi-camera-debug-apk
+          name: mantra-ndi-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
