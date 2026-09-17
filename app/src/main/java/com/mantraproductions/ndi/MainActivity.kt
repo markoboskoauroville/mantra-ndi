@@ -328,7 +328,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     applyWhiteBalance()
                 } else {
-                    controls.setAutoWhiteBalance()
+                    controls?.setAutoWhiteBalance()
                 }
             }
 
