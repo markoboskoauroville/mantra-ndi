@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.MantraNdi" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#00B4B4</item>
+        <item name="colorPrimaryDark">#008080</item>
+        <item name="colorAccent">#00E0E0</item>
+        <item name="android:windowBackground">#101418</item>
+    </style>
+</resources>

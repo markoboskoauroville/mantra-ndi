@@ -1,0 +1,35 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK + CMake
+        run: sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
+
+      # No gradle-wrapper.jar committed (binary file, easier to let this
+      # action manage/cache a pinned Gradle install instead).
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Assemble debug APK
+        run: gradle assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ndi-camera-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
