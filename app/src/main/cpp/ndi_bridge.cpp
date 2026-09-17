@@ -18,7 +18,9 @@
 #include <vector>
 #include <android/log.h>
 
-#include "Processing.NDI.Lib.h"
+// Advanced.h pulls in Lib.h plus the compressed-send API (scatter lists,
+// NDIlib_compressed_packet_t, the H264/HEVC bandwidth stream variants).
+#include "Processing.NDI.Advanced.h"
 
 #define LOG_TAG "ndi_bridge"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
