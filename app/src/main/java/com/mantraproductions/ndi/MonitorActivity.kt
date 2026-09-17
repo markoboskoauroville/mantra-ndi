@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.SurfaceHolder
 import android.widget.ArrayAdapter
+import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
 import com.mantraproductions.ndi.databinding.ActivityMonitorBinding
 import kotlin.concurrent.thread
@@ -23,6 +24,10 @@ class MonitorActivity : AppCompatActivity() {
     private var sources: List<String> = emptyList()
     private var discovering = false
     private var surfaceReady = false
+
+    /** Capabilities reported by the camera, so sliders match that sensor. */
+    private var cameraState: CameraState? = null
+    private var recording = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +53,8 @@ class MonitorActivity : AppCompatActivity() {
         }
 
         binding.refreshButton.setOnClickListener { refreshSources() }
+
+        setUpRemoteControls()
 
         binding.connectButton.setOnClickListener {
             val position = binding.sourceList.checkedItemPosition
@@ -111,12 +118,100 @@ class MonitorActivity : AppCompatActivity() {
             binding.statusText.text = "Display not ready yet"
             return
         }
-        val monitor = MonitorEngine(binding.videoSurface.holder.surface) { message ->
-            runOnUiThread { binding.statusText.text = message }
-        }
+        val monitor = MonitorEngine(
+            surface = binding.videoSurface.holder.surface,
+            onStatus = { message -> runOnUiThread { binding.statusText.text = message } },
+            onCameraState = { state -> runOnUiThread { applyCameraState(state) } }
+        )
         monitor.start(sourceName)
         engine = monitor
         binding.connectButton.text = "Disconnect"
+        // Ask the camera what it can do, so the sliders map to its real ranges
+        // instead of guessed ones. Give the connection a moment to establish.
+        binding.root.postDelayed({
+            NdiReceiver.sendCommand(CameraCommand(requestState = true))
+        }, 1500)
+    }
+
+    private fun setUpRemoteControls() {
+        val listener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) updateRemoteLabels()
+            }
+
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+
+            // Only send on release: dragging would otherwise fire a command per pixel.
+            override fun onStopTrackingTouch(sb: SeekBar?) = sendExposure()
+        }
+        binding.remoteIsoSeek.setOnSeekBarChangeListener(listener)
+        binding.remoteShutterSeek.setOnSeekBarChangeListener(listener)
+
+        binding.remoteAutoExposure.setOnCheckedChangeListener { _, checked ->
+            binding.remoteIsoSeek.isEnabled = !checked && cameraState?.manualSupported == true
+            binding.remoteShutterSeek.isEnabled = !checked && cameraState?.manualSupported == true
+            if (checked) {
+                NdiReceiver.sendCommand(CameraCommand(exposureMode = "auto"))
+            } else {
+                sendExposure()
+            }
+        }
+
+        binding.recordButton.setOnClickListener {
+            val action = if (recording) "stop" else "start"
+            if (NdiReceiver.sendCommand(CameraCommand(record = action))) {
+                binding.statusText.text =
+                    if (recording) "Asked camera to stop recording" else "Asked camera to record"
+            } else {
+                binding.statusText.text = "Command failed, is the camera still connected?"
+            }
+        }
+    }
+
+    private fun applyCameraState(state: CameraState) {
+        cameraState = state
+        recording = state.recording
+
+        binding.recordButton.isEnabled = true
+        binding.recordButton.text = if (state.recording) "Stop recording" else "Record on camera"
+
+        val manual = state.manualSupported
+        binding.remoteAutoExposure.isEnabled = manual
+        if (!manual) {
+            binding.remoteIsoLabel.text = "ISO (camera has no manual sensor)"
+            return
+        }
+        binding.remoteIsoSeek.max = (state.isoMax - state.isoMin).coerceAtLeast(1)
+        binding.remoteShutterSeek.max = 200
+        state.iso?.let { binding.remoteIsoSeek.progress = (it - state.isoMin).coerceAtLeast(0) }
+        updateRemoteLabels()
+    }
+
+    private fun sendExposure() {
+        val state = cameraState ?: return
+        if (binding.remoteAutoExposure.isChecked || !state.manualSupported) return
+        NdiReceiver.sendCommand(
+            CameraCommand(
+                iso = state.isoMin + binding.remoteIsoSeek.progress,
+                shutterNs = progressToShutter(binding.remoteShutterSeek.progress, state),
+                exposureMode = "manual"
+            )
+        )
+    }
+
+    private fun updateRemoteLabels() {
+        val state = cameraState ?: return
+        binding.remoteIsoLabel.text = "ISO ${state.isoMin + binding.remoteIsoSeek.progress}"
+        val ns = progressToShutter(binding.remoteShutterSeek.progress, state)
+        if (ns > 0) {
+            binding.remoteShutterLabel.text = "Shutter 1/${(1_000_000_000.0 / ns).toInt()}"
+        }
+    }
+
+    private fun progressToShutter(progress: Int, state: CameraState): Long {
+        if (state.shutterMaxNs <= state.shutterMinNs) return 0
+        val fraction = (progress / 200.0).let { it * it }
+        return (state.shutterMinNs + fraction * (state.shutterMaxNs - state.shutterMinNs)).toLong()
     }
 
     private fun stopPlayback() {

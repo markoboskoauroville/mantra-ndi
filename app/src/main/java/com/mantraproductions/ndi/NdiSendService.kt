@@ -11,6 +11,7 @@ import android.net.wifi.WifiManager
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
+import android.os.Environment
 import android.os.HandlerThread
 import android.os.IBinder
 import android.util.Log
@@ -40,12 +41,24 @@ class NdiSendService : Service() {
     var isStreaming: Boolean = false
         private set
 
+    private var activeProfile: CaptureProfile? = null
+
     // See README: the Advanced SDK trial caps a sender at 30 minutes without a
     // vendor ID, so we cycle the sender before that hits.
     private var reconnectThread: HandlerThread? = null
     private var reconnectHandler: Handler? = null
     private var currentSourceName: String? = null
     private val reconnectRunnable = Runnable { performScheduledReconnect() }
+
+    // Remote control: a Monitor on another phone sends commands as NDI
+    // metadata over the connection that already carries the video.
+    private var commandThread: Thread? = null
+    @Volatile private var commandsRunning = false
+
+    var isRecording: Boolean = false
+        private set
+    var lastRecordingPath: String? = null
+        private set
 
     override fun onBind(intent: Intent?): IBinder = binder
 
@@ -79,6 +92,7 @@ class NdiSendService : Service() {
         ndiStream.setVideoFormat(profile.width, profile.height, profile.fps)
 
         stream = ndiStream
+        activeProfile = profile
         val source = ndiStream.videoSource as? Camera2Source
         if (source != null) {
             controls = ProControls(
@@ -133,10 +147,13 @@ class NdiSendService : Service() {
 
         currentSourceName = sourceName
         startReconnectScheduler()
+        startCommandListener()
         isStreaming = true
     }
 
     fun stopStreaming() {
+        stopCommandListener()
+        if (isRecording) stopRecording()
         stopReconnectScheduler()
         currentSourceName = null
 
@@ -206,6 +223,105 @@ class NdiSendService : Service() {
         stream?.requestKeyframe()
 
         reconnectHandler?.postDelayed(reconnectRunnable, RECONNECT_INTERVAL_MS)
+    }
+
+    private fun startCommandListener() {
+        commandsRunning = true
+        commandThread = kotlin.concurrent.thread(name = "ndi-commands") {
+            while (commandsRunning) {
+                val xml = NdiSender.captureMetadata(timeoutMs = 500) ?: continue
+                val command = CameraCommand.parse(xml) ?: continue
+                try {
+                    applyCommand(command)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to apply remote command", e)
+                }
+            }
+        }
+    }
+
+    private fun stopCommandListener() {
+        commandsRunning = false
+        commandThread?.join(1500)
+        commandThread = null
+    }
+
+    private fun applyCommand(command: CameraCommand) {
+        val ctrl = controls
+
+        command.exposureMode?.let { mode ->
+            if (mode == "auto") ctrl?.setAutoExposure()
+        }
+        // ISO and shutter only mean anything together, so apply them as a pair
+        // using whatever the command didn't specify from the current profile.
+        if (command.iso != null || command.shutterNs != null) {
+            val profile = activeProfile
+            val iso = command.iso ?: profile?.isoValue ?: 400
+            val shutter = command.shutterNs ?: profile?.shutter180Ns() ?: 20_000_000L
+            ctrl?.setManualExposure(iso, shutter)
+        }
+        command.whiteBalanceLock?.let { if (it) ctrl?.lockWhiteBalance() else ctrl?.unlockWhiteBalance() }
+        command.stabilization?.let { ctrl?.setStabilization(it) }
+        command.zoom?.let { ctrl?.setZoom(it) }
+
+        when (command.record) {
+            "start" -> startRecording()
+            "stop" -> stopRecording()
+        }
+
+        if (command.requestState || command.record != null) reportState()
+    }
+
+    /**
+     * Records locally on the camera phone rather than at the monitor, so the
+     * file is the full-quality encoder output with nothing lost to the network.
+     * RootEncoder muxes the same encoded frames it is already streaming, so
+     * this costs almost nothing on top.
+     */
+    fun startRecording(): Boolean {
+        val s = stream ?: return false
+        if (isRecording) return true
+        val dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: filesDir
+        if (!dir.exists()) dir.mkdirs()
+        val name = "mantra_ndi_" + System.currentTimeMillis() + ".mp4"
+        val path = java.io.File(dir, name).absolutePath
+        return try {
+            s.startRecord(path) { status -> Log.i(TAG, "Record status: " + status) }
+            lastRecordingPath = path
+            isRecording = true
+            Log.i(TAG, "Recording to " + path)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not start recording", e)
+            false
+        }
+    }
+
+    fun stopRecording() {
+        if (!isRecording) return
+        try {
+            stream?.stopRecord()
+        } catch (e: Exception) {
+            Log.w(TAG, "Record stop failed", e)
+        }
+        isRecording = false
+    }
+
+    /** Tells the monitor what this camera can actually do and where it is now. */
+    private fun reportState() {
+        val ctrl = controls ?: return
+        val isoRange = ctrl.isoRange()
+        val shutterRange = ctrl.exposureTimeRange()
+        val state = CameraState(
+            isoMin = isoRange?.lower ?: 0,
+            isoMax = isoRange?.upper ?: 0,
+            shutterMinNs = shutterRange?.lower ?: 0,
+            shutterMaxNs = shutterRange?.upper ?: 0,
+            recording = isRecording,
+            manualSupported = ctrl.supportsManualSensor()
+        )
+        // Metadata added to the connection reaches every attached receiver.
+        NdiSender.addConnectionMetadata(state.toXml())
     }
 
     private fun buildNotification(sourceName: String): Notification {

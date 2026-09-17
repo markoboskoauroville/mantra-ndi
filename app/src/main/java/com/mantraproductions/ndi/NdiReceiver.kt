@@ -16,6 +16,7 @@ object NdiReceiver {
     const val KIND_AUDIO = 2
     const val KIND_UNSUPPORTED = 3
     const val KIND_TOO_BIG = 4
+    const val KIND_METADATA = 5
 
     val available: Boolean get() = NdiSender.available
 
@@ -34,6 +35,11 @@ object NdiReceiver {
     fun capture(buffer: ByteBuffer, info: LongArray, timeoutMs: Int = 1000): Int =
         if (available) nativeCapture(buffer, info, timeoutMs) else KIND_NONE
 
+    /** Sends a control command upstream to the camera. */
+    fun sendCommand(command: CameraCommand): Boolean =
+        if (available) nativeSendMetadata(command.toXml()) else false
+
+    private external fun nativeSendMetadata(xml: String): Boolean
     private external fun nativeConnect(sourceName: String): Boolean
     private external fun nativeDisconnect()
     private external fun nativeCapture(buffer: ByteBuffer, info: LongArray, timeoutMs: Int): Int

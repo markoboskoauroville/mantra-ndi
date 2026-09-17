@@ -63,6 +63,17 @@ object NdiSender {
         if (available) nativeSendAudio(data, extraData, sampleCount, ptsUs)
     }
 
+    /** Commands sent upstream by a connected Monitor, or null if none waiting. */
+    fun captureMetadata(timeoutMs: Int = 500): String? =
+        if (available) nativeCaptureMetadata(timeoutMs) else null
+
+    /** Publishes camera state to every attached receiver. */
+    fun addConnectionMetadata(xml: String) {
+        if (available) nativeAddConnectionMetadata(xml)
+    }
+
+    private external fun nativeAddConnectionMetadata(xml: String)
+    private external fun nativeCaptureMetadata(timeoutMs: Int): String?
     private external fun nativeCreate(sourceName: String): Boolean
     private external fun nativeDestroy()
     private external fun nativeSetVideoInfo(sps: ByteArray, pps: ByteArray?, vps: ByteArray?)

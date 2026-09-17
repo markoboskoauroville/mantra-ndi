@@ -21,7 +21,8 @@ import kotlin.concurrent.thread
  */
 class MonitorEngine(
     private val surface: Surface,
-    private val onStatus: (String) -> Unit
+    private val onStatus: (String) -> Unit,
+    private val onCameraState: (CameraState) -> Unit = {}
 ) {
     private val running = AtomicBoolean(false)
     private var codec: MediaCodec? = null
@@ -93,6 +94,16 @@ class MonitorEngine(
                     if (!warnedUnsupported) {
                         warnedUnsupported = true
                         postStatus("This source sends NDI High Bandwidth (SpeedHQ), which Android can't decode. Use an HX source.")
+                    }
+                }
+
+                NdiReceiver.KIND_METADATA -> {
+                    val size = info[0].toInt()
+                    if (size > 0) {
+                        val bytes = ByteArray(size)
+                        buffer.position(0)
+                        buffer.get(bytes)
+                        CameraState.parse(String(bytes))?.let(onCameraState)
                     }
                 }
 

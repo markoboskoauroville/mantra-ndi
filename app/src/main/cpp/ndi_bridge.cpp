@@ -284,3 +284,55 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendAudio(
 
     env->ReleaseByteArrayElements(data, data_ptr, JNI_ABORT);
 }
+
+/**
+ * Polls for metadata sent by a connected receiver (the Monitor app).
+ * Returns the XML string, or null if nothing arrived within the timeout.
+ * This is how remote camera control reaches the camera phone: NDI carries it
+ * on the connection that already exists, so there is no second socket and no
+ * extra discovery.
+ */
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_mantraproductions_ndi_NdiSender_nativeCaptureMetadata(
+        JNIEnv* env, jobject, jint timeoutMs) {
+
+    NDIlib_send_instance_t send;
+    {
+        std::lock_guard<std::mutex> lock(g_send_mutex);
+        send = g_send_instance;
+        if (!send) return nullptr;
+    }
+
+    NDIlib_metadata_frame_t metadata = {};
+    NDIlib_frame_type_e type = NDIlib_send_capture(send, &metadata, (uint32_t) timeoutMs);
+    if (type != NDIlib_frame_type_metadata || !metadata.p_data) return nullptr;
+
+    jstring result = env->NewStringUTF(metadata.p_data);
+    NDIlib_send_free_metadata(send, &metadata);
+    return result;
+}
+
+/**
+ * Attaches metadata to the sender's connection, which reaches every attached
+ * receiver. Used to report camera capabilities and state back to the Monitor.
+ */
+extern "C" JNIEXPORT void JNICALL
+Java_com_mantraproductions_ndi_NdiSender_nativeAddConnectionMetadata(
+        JNIEnv* env, jobject, jstring xml) {
+
+    NDIlib_send_instance_t send;
+    {
+        std::lock_guard<std::mutex> lock(g_send_mutex);
+        send = g_send_instance;
+        if (!send) return;
+    }
+
+    const char* data = env->GetStringUTFChars(xml, nullptr);
+    NDIlib_metadata_frame_t metadata = {};
+    metadata.length = (int) strlen(data) + 1;
+    metadata.timecode = NDIlib_send_timecode_synthesize;
+    metadata.p_data = const_cast<char*>(data);
+
+    NDIlib_send_add_connection_metadata(send, &metadata);
+    env->ReleaseStringUTFChars(xml, data);
+}

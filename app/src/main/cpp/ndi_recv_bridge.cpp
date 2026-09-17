@@ -37,6 +37,7 @@ constexpr int KIND_VIDEO = 1;
 constexpr int KIND_AUDIO = 2;
 constexpr int KIND_UNSUPPORTED = 3;  // SpeedHQ, nothing on the phone can decode it
 constexpr int KIND_TOO_BIG = 4;
+constexpr int KIND_METADATA = 5;   // camera state reported back by the sender
 
 } // namespace
 
@@ -161,8 +162,26 @@ Java_com_mantraproductions_ndi_NdiReceiver_nativeCapture(
 
     NDIlib_video_frame_v2_t video = {};
     NDIlib_audio_frame_v3_t audio = {};
+    NDIlib_metadata_frame_t metadata = {};
 
-    NDIlib_frame_type_e type = NDIlib_recv_capture_v3(recv, &video, &audio, nullptr, (uint32_t) timeoutMs);
+    NDIlib_frame_type_e type = NDIlib_recv_capture_v3(recv, &video, &audio, &metadata, (uint32_t) timeoutMs);
+
+    if (type == NDIlib_frame_type_metadata) {
+        int kind = KIND_METADATA;
+        jlong values[6] = {0, 0, 0, 0, 0, 0};
+        if (metadata.p_data) {
+            size_t len = strlen(metadata.p_data);
+            if ((jlong) len <= capacity) {
+                memcpy(out, metadata.p_data, len);
+                values[0] = (jlong) len;
+            } else {
+                kind = KIND_TOO_BIG;
+            }
+        }
+        env->SetLongArrayRegion(info, 0, 6, values);
+        NDIlib_recv_free_metadata(recv, &metadata);
+        return kind;
+    }
 
     if (type == NDIlib_frame_type_video) {
         int kind = KIND_VIDEO;
@@ -219,4 +238,27 @@ Java_com_mantraproductions_ndi_NdiReceiver_nativeCapture(
     }
 
     return KIND_NONE;
+}
+
+/** Sends an XML command upstream to the connected sender. */
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_mantraproductions_ndi_NdiReceiver_nativeSendMetadata(
+        JNIEnv* env, jobject, jstring xml) {
+
+    NDIlib_recv_instance_t recv;
+    {
+        std::lock_guard<std::mutex> lock(g_recv_mutex);
+        recv = g_recv;
+        if (!recv) return JNI_FALSE;
+    }
+
+    const char* data = env->GetStringUTFChars(xml, nullptr);
+    NDIlib_metadata_frame_t metadata = {};
+    metadata.length = (int) strlen(data) + 1;
+    metadata.timecode = NDIlib_send_timecode_synthesize;
+    metadata.p_data = const_cast<char*>(data);
+
+    bool ok = NDIlib_recv_send_metadata(recv, &metadata);
+    env->ReleaseStringUTFChars(xml, data);
+    return ok ? JNI_TRUE : JNI_FALSE;
 }

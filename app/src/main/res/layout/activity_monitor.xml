@@ -56,6 +56,64 @@
             android:text="Refresh"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="#263238" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Remote camera"
+            android:textColor="#78909C"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/remoteIsoLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ISO"
+            android:textColor="#78909C"
+            android:textSize="11sp" />
+
+        <SeekBar
+            android:id="@+id/remoteIsoSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:enabled="false" />
+
+        <TextView
+            android:id="@+id/remoteShutterLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Shutter"
+            android:textColor="#78909C"
+            android:textSize="11sp" />
+
+        <SeekBar
+            android:id="@+id/remoteShutterSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:enabled="false" />
+
+        <CheckBox
+            android:id="@+id/remoteAutoExposure"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="Auto exposure"
+            android:textColor="#CFD8DC" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/recordButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Record on camera"
+            android:enabled="false" />
+
         <TextView
             android:id="@+id/ndiAttribution"
             android:layout_width="match_parent"
