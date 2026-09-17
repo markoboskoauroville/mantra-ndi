@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("ndi_bridge")
 
-add_library(ndi_bridge SHARED ndi_bridge.cpp)
+add_library(ndi_bridge SHARED
+        ndi_bridge.cpp
+        ndi_recv_bridge.cpp)
 
 # NDI Advanced SDK for Android. The headers live in cpp/ndi/include and the
 # runtime in jniLibs/<abi>/libndi_advanced.so — note the name, the Android

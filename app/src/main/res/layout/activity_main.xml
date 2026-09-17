@@ -26,6 +26,14 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/modeButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="Switch to Monitor"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

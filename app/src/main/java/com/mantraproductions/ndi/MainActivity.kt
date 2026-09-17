@@ -79,6 +79,14 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        binding.modeButton.setOnClickListener {
+            // Camera and monitor both want the NDI library and the screen, so
+            // don't leave a stream running behind the monitor.
+            service?.let { svc -> if (svc.isStreaming) svc.stopStreaming() }
+            startActivity(Intent(this, MonitorActivity::class.java))
+            finish()
+        }
+
         binding.startStopButton.setOnClickListener {
             val svc = service ?: return@setOnClickListener
             if (svc.isStreaming) {
