@@ -352,7 +352,7 @@ object Mechanism {
             val cb = candidate[2] / candidate[1]
             // Angular-ish error in the two ratios, in log space so a factor of
             // two costs the same whichever direction it goes.
-            val error = sq(ln(cr / targetR)) + sq(ln(cb / targetB))
+            val error = sq(ln((cr / targetR).toDouble())) + sq(ln((cb / targetB).toDouble()))
             if (error < bestError) {
                 bestError = error
                 best = k
