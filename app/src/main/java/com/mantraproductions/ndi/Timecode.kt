@@ -43,6 +43,28 @@ data class Timecode(
         }
     }
 
+    /**
+     * The shape the Tentacle parser and the log already speak.
+     *
+     * They work in a raw frame rate and a drop frame flag, because that is
+     * what a device reports over the air; this model works in a named rate,
+     * because that is what the arithmetic needs. Both are the same fact, so
+     * the model answers to either rather than the two being kept in step by
+     * hand.
+     */
+    constructor(hours: Int, minutes: Int, seconds: Int, frames: Int, fps: Double, dropFrame: Boolean)
+        : this(hours, minutes, seconds, frames, rateOf(fps, dropFrame))
+
+    val fps: Double get() = rate.fps
+    val dropFrame: Boolean get() = rate.dropFrame
+
+    /**
+     * The same timecode, some milliseconds later. Used by the source to count
+     * forward between broadcasts, which is most of the time.
+     */
+    fun advancedBy(millis: Long): Timecode =
+        fromFrames(toFrames(this) + Math.round(millis / 1000.0 * rate.fps), rate)
+
     /** The separator says which kind it is, as it does on every professional display. */
     override fun toString(): String {
         val separator = if (rate.dropFrame) ';' else ':'
@@ -118,6 +140,16 @@ data class Timecode(
          * formats. Kept as a function because the parser walking a byte buffer
          * has an fps in hand rather than a Rate.
          */
+        /** The named rate nearest a reported frame rate and its flag. */
+        fun rateOf(fps: Double, dropFrame: Boolean): Rate = when {
+            fps < 23.99 -> Rate.FPS_23_976
+            fps < 24.5 -> Rate.FPS_24
+            fps < 27.0 -> Rate.FPS_25
+            dropFrame -> Rate.FPS_29_97_DF
+            fps < 29.99 -> Rate.FPS_29_97
+            else -> Rate.FPS_30
+        }
+
         fun nominal(fps: Double): Int = Math.round(fps).toInt()
 
         fun nominal(rate: Rate): Int = rate.nominal
