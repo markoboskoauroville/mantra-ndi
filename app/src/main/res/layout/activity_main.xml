@@ -131,33 +131,69 @@
         app:layout_constraintEnd_toStartOf="@id/controlRow">
 
         <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/rIso" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vIso" style="@style/MantraFader" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/plusIso" style="@style/MantraStep" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/minusIso" style="@style/MantraStep" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/rShutter" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vShutter" style="@style/MantraFader" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/plusShutter" style="@style/MantraStep" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/minusShutter" style="@style/MantraStep" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/rWhiteBalance" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vWhiteBalance" style="@style/MantraFader" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/plusWhiteBalance" style="@style/MantraStep" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/minusWhiteBalance" style="@style/MantraStep" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/rFocus" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vFocus" style="@style/MantraFader" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/plusFocus" style="@style/MantraStep" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/minusFocus" style="@style/MantraStep" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/rZoom" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vZoom" style="@style/MantraFader" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/plusZoom" style="@style/MantraStep" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/minusZoom" style="@style/MantraStep" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/rGain" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vGain" style="@style/MantraFader" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/plusGain" style="@style/MantraStep" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/minusGain" style="@style/MantraStep" />
         </LinearLayout>
 
         <!-- Video Auto, last in the row so it sits nearest the hand. -->

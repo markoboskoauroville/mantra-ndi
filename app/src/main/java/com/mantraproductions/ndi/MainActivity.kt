@@ -529,6 +529,58 @@ class MainActivity : AppCompatActivity() {
 
     // --- every control at once, in columns ---------------------------------
 
+    /**
+     * A column is a reset, a track, and two steppers.
+     *
+     * R rather than A, because the panel is already a row of A's and one more
+     * would say nothing. It puts that one control back to what the camera
+     * itself decided, which is the only reset worth having on a camera: not a
+     * factory default, but this scene, measured now.
+     *
+     * The steppers sit under the track rather than at its ends. A thumb rests
+     * at the bottom of a phone, and asking it to travel to the top of a column
+     * for finer control is asking it to leave the frame.
+     */
+    private fun wireColumn(
+        reset: CircleButtonView,
+        plus: CircleButtonView,
+        minus: CircleButtonView,
+        fader: VerticalFaderView,
+        onReset: () -> Unit
+    ) {
+        reset.centerText = "R"
+        reset.ringColor = CircleButtonView.IDLE
+        reset.setOnClickListener {
+            reset.busy = true
+            onReset()
+            ui.postDelayed({ reset.busy = false }, 900)
+        }
+
+        plus.centerText = "+"
+        minus.centerText = "\u2212"
+        for ((button, direction) in listOf(plus to 1, minus to -1)) {
+            button.ringColor = CircleButtonView.ACTIVE
+            button.setOnClickListener { fader.step(direction) }
+            // Held down it repeats, because a stop of correction is many steps
+            // and nobody should tap forty times for it.
+            button.setOnLongClickListener {
+                repeatStep(button, fader, direction)
+                true
+            }
+        }
+    }
+
+    private fun repeatStep(button: CircleButtonView, fader: VerticalFaderView, direction: Int) {
+        val runnable = object : Runnable {
+            override fun run() {
+                if (!button.isPressed) return
+                fader.step(direction)
+                ui.postDelayed(this, 55)
+            }
+        }
+        ui.post(runnable)
+    }
+
     private fun setUpVerticalPanel() {
         val faders = listOf(
             binding.vIso to Mechanism.Param.ISO,
@@ -573,6 +625,28 @@ class MainActivity : AppCompatActivity() {
             binding.vZoom to Mechanism.Param.ZOOM
         ).forEach { (fader, which) -> fader.onSnapToAuto = { snapToAuto(which) } }
         binding.vFocus.onSnapToAuto = { focusOnSquare() }
+
+        wireColumn(binding.rIso, binding.plusIso, binding.minusIso, binding.vIso) {
+            snapToAuto(Mechanism.Param.ISO)
+        }
+        wireColumn(
+            binding.rShutter, binding.plusShutter, binding.minusShutter, binding.vShutter
+        ) { snapToAuto(Mechanism.Param.SHUTTER) }
+        wireColumn(
+            binding.rWhiteBalance, binding.plusWhiteBalance,
+            binding.minusWhiteBalance, binding.vWhiteBalance
+        ) { snapToAuto(Mechanism.Param.WHITE_BALANCE) }
+        wireColumn(binding.rFocus, binding.plusFocus, binding.minusFocus, binding.vFocus) {
+            focusOnSquare()
+        }
+        wireColumn(binding.rZoom, binding.plusZoom, binding.minusZoom, binding.vZoom) {
+            snapToAuto(Mechanism.Param.ZOOM)
+        }
+        wireColumn(binding.rGain, binding.plusGain, binding.minusGain, binding.vGain) {
+            gainProgress = 50
+            applyGain()
+            refreshVerticalPanel()
+        }
         binding.vGain.onSnapToAuto = {
             gainProgress = 50
             applyGain()

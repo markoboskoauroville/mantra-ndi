@@ -96,10 +96,6 @@ class VerticalFaderView @JvmOverloads constructor(
     private val centrePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#88FFFFFF")
     }
-    private val signPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textAlign = Paint.Align.CENTER
-        textSize = 20f * density
-    }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#7C8894")
         textAlign = Paint.Align.CENTER
@@ -117,12 +113,15 @@ class VerticalFaderView @JvmOverloads constructor(
      * more than they drag, so they are sized like the auto circles that used
      * to sit above the column rather than like a typographic plus.
      */
-    private val endZone get() = 62f * density
+    // No end zones any more. The steppers are proper buttons in the column
+    // below, where a thumb already is, rather than hit areas inside the track
+    // that had to be aimed at and drawn small enough to fit.
+    private val endZone get() = 10f * density
 
     /** Long press anywhere on the track to snap back to the detected value. */
     var onSnapToAuto: (() -> Unit)? = null
-    private val trackTop get() = endZone + 18f * density
-    private val trackBottom get() = height - endZone - 22f * density
+    private val trackTop get() = endZone + 6f * density
+    private val trackBottom get() = height - endZone - 24f * density
 
     private var pressStart = 0L
     private var dragStartY = 0f
@@ -161,24 +160,6 @@ class VerticalFaderView @JvmOverloads constructor(
             label.uppercase(), cx, (top + bottom) / 2f - 13f * density, labelPaint
         )
         canvas.restore()
-
-        // Drawn as rings, the same shape and weight as every other control in
-        // this app, so a thumb finds them without the eye leaving the frame.
-        val ringRadius = 21f * density
-        val plusY = endZone / 2f + 4f * density
-        val minusY = height - endZone / 2f - 2f * density
-        val signColour = withAlpha(if (automatic) Color.parseColor("#7C8894") else accent, 255)
-
-        signPaint.color = signColour
-        signPaint.style = Paint.Style.STROKE
-        signPaint.strokeWidth = 2.2f * density
-        canvas.drawCircle(cx, plusY, ringRadius, signPaint)
-        canvas.drawCircle(cx, minusY, ringRadius, signPaint)
-
-        signPaint.style = Paint.Style.FILL
-        signPaint.textSize = 26f * density
-        canvas.drawText("+", cx, plusY + 9f * density, signPaint)
-        canvas.drawText("\u2212", cx, minusY + 9f * density, signPaint)
 
         trackPaint.strokeWidth = 3f * density
         canvas.drawLine(cx, top, cx, bottom, trackPaint)
@@ -240,10 +221,7 @@ class VerticalFaderView @JvmOverloads constructor(
                 // checkbox first.
                 if (automatic) onTouchedWhileAutomatic?.invoke()
 
-                when {
-                    event.y < endZone -> startRepeating(+1)
-                    event.y > height - endZone -> startRepeating(-1)
-                    else -> {
+                run {
                         dragging = true
                         dragStartY = event.y
                         dragStartProgress = progress
@@ -252,7 +230,6 @@ class VerticalFaderView @JvmOverloads constructor(
                         // back where the camera had it", which is the reset
                         // that needs no button anywhere on screen.
                         postDelayed(snapRunnable, 2000)
-                    }
                 }
                 parent?.requestDisallowInterceptTouchEvent(true)
                 return true
@@ -275,7 +252,6 @@ class VerticalFaderView @JvmOverloads constructor(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(snapRunnable)
-                stopRepeating()
                 if (dragging) {
                     dragging = false
                     onRelease?.invoke(progress)
