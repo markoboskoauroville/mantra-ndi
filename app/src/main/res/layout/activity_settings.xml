@@ -39,6 +39,9 @@
             <TextView android:id="@+id/modeMonitor" style="@style/MantraModeTab"
                 android:text="Monitor" />
 
+            <TextView android:id="@+id/modeSystem" style="@style/MantraModeTab"
+                android:text="System" />
+
         </LinearLayout>
 
         <TextView
@@ -51,12 +54,7 @@
             android:textSize="12sp" />
 
         <!-- Capture -->
-        <LinearLayout style="@style/MantraSettingsGroup">
-
-            <LinearLayout android:id="@+id/rowSource" style="@style/MantraSettingsRow">
-                <TextView style="@style/MantraSettingsTitle" android:text="Camera" />
-                <TextView android:id="@+id/valueSource" style="@style/MantraSettingsValue" />
-            </LinearLayout>
+        <LinearLayout android:id="@+id/groupCapture" style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowProfile" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Capture profile" />
@@ -76,7 +74,7 @@
         </LinearLayout>
 
         <!-- Colour -->
-        <LinearLayout style="@style/MantraSettingsGroup">
+        <LinearLayout android:id="@+id/groupColour" style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowLogCurve" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Log curve" />
@@ -98,7 +96,7 @@
         </LinearLayout>
 
         <!-- Display -->
-        <LinearLayout style="@style/MantraSettingsGroup">
+        <LinearLayout android:id="@+id/groupDisplay" style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowFocusBox" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Focus box size" />
@@ -139,7 +137,7 @@
         </LinearLayout>
 
         <!-- This device -->
-        <LinearLayout style="@style/MantraSettingsGroup">
+        <LinearLayout android:id="@+id/groupDevice" style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowCamera" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Camera" />

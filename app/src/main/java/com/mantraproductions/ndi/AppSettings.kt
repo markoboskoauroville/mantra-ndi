@@ -14,7 +14,17 @@ import android.content.Context
 enum class AppMode(val label: String, val detail: String) {
     LOCAL("Local", "This phone is the camera"),
     REMOTE("Remote", "Drive a camera over NDI"),
-    MONITOR("Monitor", "Watch a source, no camera")
+    MONITOR("Monitor", "Watch a source, no camera"),
+
+    /**
+     * Not a way of working, a place for the things that belong to the phone
+     * rather than to a job: what the hardware can do, whether the network
+     * carries NDI, which keys the system gives us, what version this is.
+     *
+     * They were scattered through the other three and read as common to all
+     * of them, which they are not. Testing a camera is not a camera setting.
+     */
+    SYSTEM("System", "The phone, the network, the build")
 }
 
 class AppSettings(context: Context) {

@@ -102,16 +102,16 @@ class SettingsActivity : AppCompatActivity() {
         profileStore = ProfileStore(this)
         identity = SourceIdentity(this)
 
-        listOf(
-            binding.modeLocal to AppMode.LOCAL,
-            binding.modeRemote to AppMode.REMOTE,
-            binding.modeMonitor to AppMode.MONITOR
-        ).forEach { (tab, mode) ->
+        modeTabs().forEach { (tab, mode) ->
             tab.setOnClickListener {
-                prefs.appMode = mode
-                // Remote and local are two settings that used to disagree; the
-                // mode is now the single place either is decided.
-                prefs.remoteMode = mode == AppMode.REMOTE
+                // System is a place to look at things, not a way of working,
+                // so choosing it does not change what the camera screen does.
+                if (mode != AppMode.SYSTEM) {
+                    prefs.appMode = mode
+                    prefs.remoteMode = mode == AppMode.REMOTE
+                }
+                shownMode = mode
+                if (mode == AppMode.REMOTE && prefs.remoteSource == null) pickRemoteSource()
                 refresh()
             }
         }
@@ -119,7 +119,6 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
         binding.rowWaveform.setOnClickListener { pickWaveform() }
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
-        binding.rowSource.setOnClickListener { pickCameraSource() }
         binding.rowProfile.setOnClickListener { pickProfile() }
         binding.rowSourceName.setOnClickListener { editSourceName() }
         binding.rowBitDepth.setOnClickListener { pickBitDepth() }
@@ -143,27 +142,102 @@ class SettingsActivity : AppCompatActivity() {
         refresh()
     }
 
+    /**
+     * Which tab is being looked at. Usually the working mode, but System can
+     * be opened without changing how the camera behaves.
+     */
+    private var shownMode: AppMode? = null
+
+    private fun modeTabs() = listOf(
+        binding.modeLocal to AppMode.LOCAL,
+        binding.modeRemote to AppMode.REMOTE,
+        binding.modeMonitor to AppMode.MONITOR,
+        binding.modeSystem to AppMode.SYSTEM
+    )
+
+    /**
+     * Every row, and the modes it means anything in.
+     *
+     * Written out rather than inferred, because the question is not what a row
+     * touches but whether the answer changes anything in that mode. A capture
+     * profile is meaningless when this phone is not the camera. A focus rack
+     * is meaningless when the lens is in another building, since the rack is
+     * driven here and there is no command for it. The scopes apply wherever
+     * there is a picture, which is all three working modes.
+     *
+     * Anything about the phone itself lives in System, including testing the
+     * camera: what the hardware can do is not a camera setting, it is a fact
+     * about the device that happens to mention a camera.
+     */
+    private fun rowsFor(mode: AppMode): Map<android.view.View, Boolean> {
+        val local = mode == AppMode.LOCAL
+        val remote = mode == AppMode.REMOTE
+        val monitor = mode == AppMode.MONITOR
+        val system = mode == AppMode.SYSTEM
+        val hasPicture = local || remote || monitor
+        val hasLens = local || remote
+
+        return mapOf(
+            // This phone's own camera and what it announces itself as.
+            binding.rowProfile to local,
+            binding.rowSourceName to local,
+            binding.rowBitDepth to local,
+            binding.rowStabilisation to hasLens,
+
+            // Colour. The curve reaches a remote camera too, since it is sent
+            // as a command, but exporting a LUT is about what is being shot.
+            binding.rowLogCurve to hasLens,
+            binding.rowExportLut to hasLens,
+            // A monitor LUT corrects a picture, and every working mode has one.
+            binding.rowLoadLut to hasPicture,
+
+            // Focus. The box and the AI keys work at either end; the rack does
+            // not, because it is driven here and there is no command for it.
+            binding.rowFocusBox to hasLens,
+            binding.rowAiFocus to hasLens,
+            binding.rowFocusTiming to local,
+
+            // Scopes read pixels, so anywhere there are pixels.
+            binding.rowWaveform to hasPicture,
+            binding.rowHistogram to hasPicture,
+
+            // The phone, not the job.
+            binding.rowCamera to system,
+            binding.rowDetect to system,
+            binding.rowNetwork to system,
+            binding.rowKeys to system,
+            binding.rowAbout to system
+        )
+    }
+
     private fun refresh() {
-        val mode = prefs.appMode
-        listOf(
-            binding.modeLocal to AppMode.LOCAL,
-            binding.modeRemote to AppMode.REMOTE,
-            binding.modeMonitor to AppMode.MONITOR
-        ).forEach { (tab, which) ->
+        val mode = shownMode ?: prefs.appMode.also { shownMode = it }
+        modeTabs().forEach { (tab, which) ->
             val selected = which == mode
             tab.setTextColor(
                 android.graphics.Color.parseColor(if (selected) "#E7A44C" else "#7C8894")
             )
             tab.alpha = if (selected) 1f else 0.7f
         }
-        binding.modeDetail.text = mode.detail
+        binding.modeDetail.text = mode.detail +
+            if (mode == AppMode.REMOTE) ": ${prefs.remoteSource ?: "no camera picked"}" else ""
 
-        // Rows that mean nothing in this mode are hidden rather than left to
-        // be pressed and do nothing.
-        binding.rowProfile.visibility =
-            if (mode == AppMode.MONITOR) android.view.View.GONE else android.view.View.VISIBLE
-        binding.rowBitDepth.visibility = binding.rowProfile.visibility
-        binding.rowSourceName.visibility = binding.rowProfile.visibility
+        // Nothing that does nothing. A row that cannot change anything in this
+        // mode is not dimmed or left to be pressed, it is not there.
+        for ((row, wanted) in rowsFor(mode)) {
+            row.visibility = if (wanted) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
+        // And a card with nothing left in it is not a card.
+        listOf(
+            binding.groupCapture, binding.groupColour,
+            binding.groupDisplay, binding.groupDevice
+        ).forEach { group ->
+            val anyVisible = (0 until group.childCount).any {
+                group.getChildAt(it).visibility == android.view.View.VISIBLE
+            }
+            group.visibility = if (anyVisible) android.view.View.VISIBLE else android.view.View.GONE
+        }
 
         binding.valueFocusTiming.text = buildString {
             append("Hold ").append(prefs.focusHoldMs / 1000.0).append("s, rack ")
@@ -173,11 +247,6 @@ class SettingsActivity : AppCompatActivity() {
             if (set.isEmpty()) "Off" else set.joinToString(", ") { it.label }
         }
 
-        binding.valueSource.text = if (prefs.remoteMode) {
-            "Remote: ${prefs.remoteSource ?: "none picked"}"
-        } else {
-            "Local, this phone"
-        }
         binding.valueProfile.text = profileStore.selected().let {
             "${it.name}, ${it.width}x${it.height} at ${it.fps}"
         }
@@ -221,16 +290,11 @@ class SettingsActivity : AppCompatActivity() {
      * making the operator type a name, because the whole point of NDI is that
      * the sources announce themselves.
      */
-    private fun pickCameraSource() {
-        choose("Camera", listOf("Local, this phone", "Remote, over NDI")) { index ->
-            if (index == 0) {
-                prefs.remoteMode = false
-                refresh()
-                return@choose
-            }
+    private fun pickRemoteSource() {
+        run {
             if (!NdiFinder.available) {
                 toast("This build has no NDI SDK, so there is nothing to find")
-                return@choose
+                return
             }
             toast("Looking for cameras")
             kotlin.concurrent.thread(name = "remote-scan") {
@@ -243,7 +307,6 @@ class SettingsActivity : AppCompatActivity() {
                     } else {
                         choose("Which camera", found) { pick ->
                             prefs.remoteSource = found[pick]
-                            prefs.remoteMode = true
                             refresh()
                         }
                     }
