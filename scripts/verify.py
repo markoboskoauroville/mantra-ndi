@@ -54,11 +54,19 @@ def main():
     check("G4 no NDI SDK in the tree", not sdk, f"{len(sdk)} files")
 
     # G5 — Test 1 exists and is not a token gesture
-    test = ROOT / "app/src/test/java/com/mantraproductions/ndi/MechanismTest.kt"
-    check("G5 Test 1 exists", test.exists())
-    if test.exists():
-        cases = len(re.findall(r"@Test", test.read_text()))
-        check("G5 Test 1 has a floor of cases", cases >= 20, f"{cases} cases")
+    test_dir = ROOT / "app/src/test/java/com/mantraproductions/ndi"
+    test_files = list(test_dir.glob("*Test.kt"))
+    check("G5 Test 1 exists", bool(test_files))
+    cases = sum(len(re.findall(r"@Test", f.read_text())) for f in test_files)
+    check("G5 Test 1 has a floor of cases", cases >= 20, f"{cases} cases")
+
+    # G12 — the colour maths must import nothing from Android either, or the
+    # curves can only be checked on a phone, which means they are not checked.
+    for pure in ("LogCurves.kt", "CubeLut.kt", "Histogram.kt"):
+        path = ROOT / "app/src/main/java/com/mantraproductions/ndi" / pure
+        if path.exists():
+            bad = re.findall(r"^\s*import android\.", path.read_text(), re.M)
+            check(f"G12 {pure} is pure", not bad, f"{len(bad)} android imports")
 
     # G6 — every native method declared in Kotlin has a JNI symbol in C++
     cpp = "\n".join(p.read_text() for p in (ROOT / "app/src/main/cpp").glob("*.cpp"))
