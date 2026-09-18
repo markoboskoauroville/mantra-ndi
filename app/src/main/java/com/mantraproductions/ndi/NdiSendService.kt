@@ -57,6 +57,22 @@ class NdiSendService : Service() {
 
     var isRecording: Boolean = false
         private set
+    private var recordStartedAt: Long = 0L
+
+    /** Seconds since recording started, for the counter in the record button. */
+    val recordingElapsedSeconds: Long
+        get() = if (isRecording) (System.currentTimeMillis() - recordStartedAt) / 1000 else 0
+
+    /** Live mic level, 0..1 linear RMS, tapped on the way to the encoder. */
+    @Volatile var audioLevel: Float = 0f
+        private set
+
+    /** Tally from the receiving mixer: bit 0 program, bit 1 preview, -1 none. */
+    @Volatile var tally: Int = -1
+        private set
+
+    private var tallyThread: Thread? = null
+    @Volatile private var tallyRunning = false
     var lastRecordingPath: String? = null
         private set
 
@@ -93,6 +109,8 @@ class NdiSendService : Service() {
 
         stream = ndiStream
         activeProfile = profile
+        (ndiStream.audioSource as? com.pedro.encoder.input.sources.audio.MicrophoneSource)
+            ?.setAudioEffect(VuTap { level -> audioLevel = level })
         val source = ndiStream.videoSource as? Camera2Source
         if (source != null) {
             controls = ProControls(
@@ -148,10 +166,12 @@ class NdiSendService : Service() {
         currentSourceName = sourceName
         startReconnectScheduler()
         startCommandListener()
+        startTallyListener()
         isStreaming = true
     }
 
     fun stopStreaming() {
+        stopTallyListener()
         stopCommandListener()
         if (isRecording) stopRecording()
         stopReconnectScheduler()
@@ -225,6 +245,24 @@ class NdiSendService : Service() {
         reconnectHandler?.postDelayed(reconnectRunnable, RECONNECT_INTERVAL_MS)
     }
 
+    private fun startTallyListener() {
+        tallyRunning = true
+        tallyThread = kotlin.concurrent.thread(name = "ndi-tally") {
+            while (tallyRunning) {
+                // Blocks until tally changes or the timeout expires, so this
+                // costs nothing while nothing is happening.
+                tally = NdiSender.getTally(timeoutMs = 1000)
+            }
+        }
+    }
+
+    private fun stopTallyListener() {
+        tallyRunning = false
+        tallyThread?.join(1500)
+        tallyThread = null
+        tally = -1
+    }
+
     private fun startCommandListener() {
         commandsRunning = true
         commandThread = kotlin.concurrent.thread(name = "ndi-commands") {
@@ -290,6 +328,7 @@ class NdiSendService : Service() {
         return try {
             s.startRecord(path) { status -> Log.i(TAG, "Record status: " + status) }
             lastRecordingPath = path
+            recordStartedAt = System.currentTimeMillis()
             isRecording = true
             Log.i(TAG, "Recording to " + path)
             true

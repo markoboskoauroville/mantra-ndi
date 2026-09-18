@@ -2,10 +2,12 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0B0E11">
+    android:background="#000000">
 
+    <!-- Image fills the screen; everything else floats over it -->
     <SurfaceView
         android:id="@+id/preview"
         android:layout_width="0dp"
@@ -13,152 +15,219 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/panel" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <LinearLayout
-        android:id="@+id/panel"
-        android:layout_width="280dp"
+    <!-- Tally border, drawn over the image, never takes touches -->
+    <com.mantraproductions.ndi.TallyBorderView
+        android:id="@+id/tallyBorder"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:background="#12171C"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.mantraproductions.ndi.VuMeterView
+        android:id="@+id/vuMeter"
+        android:layout_width="6dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="18dp"
+        android:layout_marginTop="48dp"
+        android:layout_marginBottom="48dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="20dp"
+        android:background="#66000000"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="5dp"
+        android:text="Idle"
+        android:textColor="#ECEFF1"
+        android:textSize="13sp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="@id/vuMeter"
+        app:layout_constraintStart_toEndOf="@id/vuMeter" />
+
+    <com.mantraproductions.ndi.RecordButtonView
+        android:id="@+id/recordButton"
+        android:layout_width="76dp"
+        android:layout_height="76dp"
+        android:layout_marginBottom="20dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Stream on/off sits beside record, so the two live actions are together -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/startStopButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="28dp"
+        android:text="Go live"
+        app:layout_constraintTop_toTopOf="@id/recordButton"
+        app:layout_constraintBottom_toBottomOf="@id/recordButton"
+        app:layout_constraintEnd_toStartOf="@id/recordButton" />
+
+    <!-- Opens the settings drawer -->
+    <View
+        android:id="@+id/settingsFab"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_margin="20dp"
+        android:background="@drawable/circle_outline"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Tap anywhere outside the drawer to close it -->
+    <View
+        android:id="@+id/scrim"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#66000000"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <ScrollView
+        android:id="@+id/settingsPanel"
+        android:layout_width="320dp"
+        android:layout_height="0dp"
+        android:background="#F0101418"
+        android:visibility="gone"
+        android:scrollbars="vertical"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/modeButton"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:text="Switch to Monitor"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+            android:orientation="vertical"
+            android:padding="18dp">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Profile"
-            android:textColor="#78909C"
-            android:textSize="12sp" />
-
-        <Spinner
-            android:id="@+id/profileSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp" />
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="NDI source name">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/sourceNameInput"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/modeButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Mantra NDI"
-                android:inputType="text" />
+                android:text="Switch to Monitor"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
-        </com.google.android.material.textfield.TextInputLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Profile"
+                android:textColor="#78909C"
+                android:textSize="12sp" />
 
-        <CheckBox
-            android:id="@+id/manualExposureCheck"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Manual exposure"
-            android:textColor="#CFD8DC" />
+            <Spinner
+                android:id="@+id/profileSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-        <TextView
-            android:id="@+id/isoLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="ISO"
-            android:textColor="#78909C"
-            android:textSize="12sp" />
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:hint="NDI source name">
 
-        <SeekBar
-            android:id="@+id/isoSeek"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/sourceNameInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
 
-        <TextView
-            android:id="@+id/shutterLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Shutter"
-            android:textColor="#78909C"
-            android:textSize="12sp" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <SeekBar
-            android:id="@+id/shutterSeek"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            <CheckBox
+                android:id="@+id/manualExposureCheck"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Manual exposure"
+                android:textColor="#CFD8DC" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="White balance"
-            android:textColor="#78909C"
-            android:textSize="12sp" />
+            <!-- Dials, two per row, thumb sized -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
 
-        <Spinner
-            android:id="@+id/wbSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+                <com.mantraproductions.ndi.DialView
+                    android:id="@+id/isoDial"
+                    android:layout_width="0dp"
+                    android:layout_height="132dp"
+                    android:layout_weight="1" />
 
-        <TextView
-            android:id="@+id/wbKelvinLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="5600 K"
-            android:textColor="#78909C"
-            android:textSize="11sp" />
+                <com.mantraproductions.ndi.DialView
+                    android:id="@+id/shutterDial"
+                    android:layout_width="0dp"
+                    android:layout_height="132dp"
+                    android:layout_weight="1" />
 
-        <SeekBar
-            android:id="@+id/wbKelvinSeek"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:enabled="false" />
+            </LinearLayout>
 
-        <CheckBox
-            android:id="@+id/stabilizationCheck"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Stabilization"
-            android:textColor="#CFD8DC" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="White balance"
+                android:textColor="#78909C"
+                android:textSize="12sp" />
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+            <Spinner
+                android:id="@+id/wbSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-        <TextView
-            android:id="@+id/ndiAttribution"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:autoLink="web"
-            android:text="Powered by NDI®  https://ndi.video\nNDI® is a registered trademark of Vizrt NDI AB"
-            android:textColor="#546E7A"
-            android:textSize="10sp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:text="Idle"
-            android:textColor="#B0BEC5"
-            android:textSize="13sp" />
+                <com.mantraproductions.ndi.DialView
+                    android:id="@+id/wbDial"
+                    android:layout_width="0dp"
+                    android:layout_height="132dp"
+                    android:layout_weight="1" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/startStopButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Start streaming" />
+                <com.mantraproductions.ndi.DialView
+                    android:id="@+id/zoomDial"
+                    android:layout_width="0dp"
+                    android:layout_height="132dp"
+                    android:layout_weight="1" />
 
-    </LinearLayout>
+            </LinearLayout>
+
+            <CheckBox
+                android:id="@+id/stabilizationCheck"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Stabilization"
+                android:textColor="#CFD8DC" />
+
+            <TextView
+                android:id="@+id/ndiAttribution"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:autoLink="web"
+                android:text="Powered by NDI®  https://ndi.video\nNDI® is a registered trademark of Vizrt NDI AB"
+                android:textColor="#546E7A"
+                android:textSize="10sp" />
+
+        </LinearLayout>
+
+    </ScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -336,3 +336,25 @@ Java_com_mantraproductions_ndi_NdiSender_nativeAddConnectionMetadata(
     NDIlib_send_add_connection_metadata(send, &metadata);
     env->ReleaseStringUTFChars(xml, data);
 }
+
+/**
+ * Tally from whatever mixer is receiving this source. vMix, OBS and the rest
+ * set this themselves over NDI, so the phone shows a real tally light rather
+ * than something this app invented.
+ * Returns: bit 0 = on program, bit 1 = on preview, -1 = no sender.
+ */
+extern "C" JNIEXPORT jint JNICALL
+Java_com_mantraproductions_ndi_NdiSender_nativeGetTally(JNIEnv*, jobject, jint timeoutMs) {
+    NDIlib_send_instance_t send;
+    {
+        std::lock_guard<std::mutex> lock(g_send_mutex);
+        send = g_send_instance;
+        if (!send) return -1;
+    }
+    NDIlib_tally_t tally = {};
+    NDIlib_send_get_tally(send, &tally, (uint32_t) timeoutMs);
+    int result = 0;
+    if (tally.on_program) result |= 1;
+    if (tally.on_preview) result |= 2;
+    return result;
+}

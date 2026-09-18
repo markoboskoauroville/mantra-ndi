@@ -72,6 +72,11 @@ object NdiSender {
         if (available) nativeAddConnectionMetadata(xml)
     }
 
+    /** Tally from the receiving mixer: bit 0 program, bit 1 preview, -1 none. */
+    fun getTally(timeoutMs: Int = 1000): Int =
+        if (available) nativeGetTally(timeoutMs) else -1
+
+    private external fun nativeGetTally(timeoutMs: Int): Int
     private external fun nativeAddConnectionMetadata(xml: String)
     private external fun nativeCaptureMetadata(timeoutMs: Int): String?
     private external fun nativeCreate(sourceName: String): Boolean
