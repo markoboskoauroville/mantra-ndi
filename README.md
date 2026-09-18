@@ -1,3 +1,5 @@
+### [Download the latest build](https://github.com/markoboskoauroville/mantra-ndi/releases/latest)
+
 # Mantra NDI
 
 Turns the phone into an NDI camera: hardware H.264/H.265 straight from
