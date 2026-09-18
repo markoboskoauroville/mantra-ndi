@@ -111,8 +111,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         binding.valueSourceName.text = identity.name
         binding.valueBitDepth.text = when {
-            !prefs.tenBitWanted -> "8-bit"
-            else -> "10-bit HDR where the camera allows it"
+            !prefs.tenBitWanted -> "8-bit, proven pipeline"
+            !HdrVideoEncoder.supportsTenBit() -> "10-bit asked for, no HEVC Main10 encoder here"
+            else -> "10-bit HLG, camera straight into the encoder"
         }
         binding.valueLogCurve.text = prefs.logCurve.let {
             if (it == LogCurves.Curve.REC709) "None, straight Rec.709"
@@ -176,9 +177,23 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun pickBitDepth() {
-        choose("Bit depth", listOf("8-bit", "10-bit HDR where available")) { index ->
+        val tenBitPossible = HdrVideoEncoder.supportsTenBit()
+        choose(
+            "Bit depth",
+            listOf(
+                "8-bit, the proven pipeline",
+                if (tenBitPossible) "10-bit HLG, direct pipeline" else "10-bit, not supported here"
+            )
+        ) { index ->
+            if (index == 1 && !tenBitPossible) {
+                toast("This phone has no 10-bit HEVC encoder")
+                return@choose
+            }
             prefs.tenBitWanted = index == 1
             refresh()
+            if (index == 1) {
+                toast("Camera writes straight into the encoder. Restart the camera screen.")
+            }
         }
     }
 

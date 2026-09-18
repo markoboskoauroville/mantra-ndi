@@ -38,6 +38,19 @@ class NdiSendService : Service() {
     var controls: ProControls? = null
         private set
 
+    /**
+     * The direct pipeline, used when ten bit is asked for.
+     *
+     * Kept alongside the proven one rather than replacing it. Ten bit needs the
+     * camera to write straight into the encoder, and that is a different
+     * pipeline with different failure modes on every phone model; making it
+     * opt in means a bad surprise costs a setting rather than the whole app.
+     */
+    private var hdr: HdrPipeline? = null
+
+    val isDirectPipeline: Boolean get() = hdr?.isRunning == true
+    val isTenBitActive: Boolean get() = hdr?.isTenBit == true
+
     var isStreaming: Boolean = false
         private set
 
@@ -79,6 +92,7 @@ class NdiSendService : Service() {
     /** Digital gain on the recorded audio, 1.0 being untouched. */
     fun setAudioGain(factor: Float) {
         vuTap.gain = factor
+        hdr?.audioGain = factor
     }
 
     /** Tally from the receiving mixer: bit 0 program, bit 1 preview, -1 none. */
@@ -94,6 +108,9 @@ class NdiSendService : Service() {
 
     /** Prepare the pipeline without streaming, so preview works on its own. */
     fun prepare(profile: CaptureProfile, onError: (String) -> Unit): Boolean {
+        // Ten bit takes the direct route; everything else stays on the pipeline
+        // that is already known to work on this phone.
+        if (AppSettings(applicationContext).tenBitWanted) return prepareDirect(profile, onError)
         if (stream != null) return true
 
         val ndiStream = NdiStream(applicationContext)
@@ -140,7 +157,42 @@ class NdiSendService : Service() {
         return true
     }
 
+    /**
+     * Camera straight into the encoder, no GL stage, so a ten bit dynamic
+     * range profile is legal on the session.
+     */
+    private fun prepareDirect(profile: CaptureProfile, onError: (String) -> Unit): Boolean {
+        if (hdr?.isRunning == true) return true
+        activeProfile = profile
+        val pipeline = HdrPipeline(applicationContext)
+        pipeline.listener = object : HdrPipeline.Listener {
+            override fun onReady(tenBit: Boolean, codec: String) {
+                Log.i(TAG, "Direct pipeline: ${if (tenBit) "10-bit HLG" else "8-bit"} $codec")
+            }
+
+            override fun onError(message: String) = onError(message)
+
+            override fun onLevel(rms: Float) { audioLevel = rms }
+        }
+        hdr = pipeline
+        return true
+    }
+
     fun attachPreview(surfaceView: SurfaceView) {
+        hdr?.let { pipeline ->
+            if (!pipeline.isRunning) {
+                val profile = activeProfile ?: return
+                val settings = AppSettings(applicationContext)
+                pipeline.start(
+                    profile = profile,
+                    sourceName = SourceIdentity(applicationContext).name,
+                    previewSurface = surfaceView.holder.surface,
+                    wantTenBit = settings.tenBitWanted,
+                    logCurve = settings.logCurve
+                )
+            }
+            return
+        }
         val s = stream ?: return
         if (!s.isOnPreview) s.startPreview(surfaceView)
     }
@@ -150,11 +202,23 @@ class NdiSendService : Service() {
     }
 
     fun startStreaming(sourceName: String, onError: (String) -> Unit) {
+        if (isStreaming) return
+        // The direct pipeline is already sending the moment it opens, because
+        // the encoder is the camera's target rather than something downstream
+        // of it. Going live is then only the foreground service and the tally.
+        if (hdr?.isRunning == true) {
+            startForeground(NOTIFICATION_ID, buildNotification(sourceName))
+            currentSourceName = sourceName
+            startReconnectScheduler()
+            startCommandListener()
+            startTallyListener()
+            isStreaming = true
+            return
+        }
         val s = stream ?: run {
             onError("Pipeline not prepared")
             return
         }
-        if (isStreaming) return
 
         startForeground(NOTIFICATION_ID, buildNotification(sourceName))
 
@@ -219,6 +283,8 @@ class NdiSendService : Service() {
 
     /** Tear down the pipeline but keep the service alive (profile switches). */
     fun releasePipeline() {
+        hdr?.stop()
+        hdr = null
         stopStreaming()
         controls?.observeSensorValues(null)
         controls = null
@@ -388,6 +454,14 @@ class NdiSendService : Service() {
         )
         if (!dir.exists()) dir.mkdirs()
         val path = java.io.File(dir, name).absolutePath
+        hdr?.let { pipeline ->
+            return if (pipeline.startRecording(path)) {
+                lastRecordingPath = path
+                recordStartedAt = System.currentTimeMillis()
+                isRecording = true
+                true
+            } else false
+        }
         return try {
             s.startRecord(path) { status -> Log.i(TAG, "Record status: " + status) }
             lastRecordingPath = path
@@ -403,6 +477,11 @@ class NdiSendService : Service() {
 
     fun stopRecording() {
         if (!isRecording) return
+        hdr?.let {
+            it.stopRecording()
+            isRecording = false
+            return
+        }
         try {
             stream?.stopRecord()
         } catch (e: Exception) {
