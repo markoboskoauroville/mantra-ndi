@@ -196,6 +196,105 @@ object Mechanism {
         }
     }
 
+    // --- controls that correct rather than set --------------------------------
+
+    /**
+     * A fader whose centre is whatever the camera decided.
+     *
+     * Setting an absolute ISO from one end of a range that runs 50 to 6400
+     * means the useful positions are crowded into a few millimetres. What an
+     * operator actually does is take the camera's reading and push it a little
+     * either way, so the fader is a correction: centre is the detected value
+     * and the ends are a fixed number of stops around it.
+     *
+     * @param progress fader position
+     * @param steps fader length, centre at steps/2
+     * @param detected what the camera chose
+     * @param stopsEachWay how far the ends reach
+     */
+    fun correctedFromAuto(
+        progress: Int,
+        steps: Int,
+        detected: Double,
+        stopsEachWay: Double
+    ): Double {
+        if (steps <= 0 || detected <= 0.0) return detected
+        val centre = steps / 2.0
+        val offset = (progress.coerceIn(0, steps) - centre) / centre
+        return detected * 2.0.pow(offset * stopsEachWay)
+    }
+
+    /** The fader position that corresponds to no correction at all. */
+    fun centreOf(steps: Int): Int = steps / 2
+
+    /** How the correction reads on the label: -1.3, 0, +0.7 and so on. */
+    fun correctionLabel(progress: Int, steps: Int, stopsEachWay: Double): String {
+        if (steps <= 0) return "0"
+        val centre = steps / 2.0
+        val stops = (progress.coerceIn(0, steps) - centre) / centre * stopsEachWay
+        return when {
+            Math.abs(stops) < 0.05 -> "0"
+            stops > 0 -> "+%.1f".format(stops)
+            else -> "%.1f".format(stops)
+        }
+    }
+
+    // --- white balance around a working centre --------------------------------
+
+    /**
+     * A narrower Kelvin range than the sensor will accept.
+     *
+     * 2000 to 10000 puts tungsten and shade at opposite ends of a fader and
+     * everything anybody shoots in the middle centimetre. Almost all work sits
+     * between warm interior and daylight, so the fader covers that and the
+     * ends are still reachable by holding the stepper.
+     */
+    const val KELVIN_WORKING_MIN = 3200
+    const val KELVIN_WORKING_MAX = 5600
+    const val KELVIN_WORKING_CENTRE = 4400
+
+    fun kelvinFromProgress(progress: Int, steps: Int): Int {
+        if (steps <= 0) return KELVIN_WORKING_CENTRE
+        val fraction = progress.coerceIn(0, steps).toDouble() / steps
+        return (KELVIN_WORKING_MIN + fraction * (KELVIN_WORKING_MAX - KELVIN_WORKING_MIN))
+            .toInt()
+    }
+
+    fun progressForKelvin(kelvin: Int, steps: Int): Int {
+        val clamped = kelvin.coerceIn(KELVIN_WORKING_MIN, KELVIN_WORKING_MAX)
+        val fraction = (clamped - KELVIN_WORKING_MIN).toDouble() /
+                (KELVIN_WORKING_MAX - KELVIN_WORKING_MIN)
+        return (fraction * steps).toInt().coerceIn(0, steps)
+    }
+
+    // --- audio gain -----------------------------------------------------------
+
+    /** Gain in dB from a fader, centred on unity so the middle changes nothing. */
+    fun gainDbFromProgress(progress: Int, steps: Int, rangeDb: Double = 18.0): Double {
+        if (steps <= 0) return 0.0
+        val centre = steps / 2.0
+        return (progress.coerceIn(0, steps) - centre) / centre * rangeDb
+    }
+
+    fun gainFactor(db: Double): Float = 10.0.pow(db / 20.0).toFloat()
+
+    /**
+     * Applies gain to 16 bit PCM in place, clamping rather than wrapping.
+     * Wrapping a sample turns a loud moment into a burst of noise, which is
+     * far worse than the clipping it came from.
+     */
+    fun applyGainPcm16(pcm: ByteArray, factor: Float) {
+        if (factor == 1f) return
+        var i = 0
+        while (i + 1 < pcm.size) {
+            val sample = ((pcm[i + 1].toInt() shl 8) or (pcm[i].toInt() and 0xFF)).toShort()
+            val scaled = (sample * factor).toInt().coerceIn(-32768, 32767)
+            pcm[i] = (scaled and 0xFF).toByte()
+            pcm[i + 1] = ((scaled shr 8) and 0xFF).toByte()
+            i += 2
+        }
+    }
+
     // --- the tone curve handed to the camera ---------------------------------
 
     /**

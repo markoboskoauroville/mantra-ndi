@@ -62,20 +62,20 @@
     <!-- Tap the image: every manual control at once, in columns -->
     <LinearLayout
         android:id="@+id/verticalPanel"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="0dp"
         android:orientation="horizontal"
-        android:background="#7A05070A"
         android:visibility="gone"
+        android:layout_marginTop="18dp"
+        android:layout_marginBottom="14dp"
+        android:layout_marginEnd="16dp"
         app:layout_constraintTop_toBottomOf="@id/vuHairline"
         app:layout_constraintBottom_toTopOf="@id/controlRow"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="58dp"
             android:layout_height="match_parent"
-            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_horizontal">
 
@@ -94,9 +94,8 @@
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="58dp"
             android:layout_height="match_parent"
-            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_horizontal">
 
@@ -115,9 +114,8 @@
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="58dp"
             android:layout_height="match_parent"
-            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_horizontal">
 
@@ -136,9 +134,8 @@
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="58dp"
             android:layout_height="match_parent"
-            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_horizontal">
 
@@ -157,9 +154,8 @@
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="58dp"
             android:layout_height="match_parent"
-            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_horizontal">
 
@@ -171,6 +167,26 @@
 
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vZoom"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="58dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aGain"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="6dp" />
+
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vGain"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1" />

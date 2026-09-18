@@ -317,6 +317,90 @@ class MechanismTest {
         assertEquals(Mechanism.Param.SHUTTER, Mechanism.Param.fromName("SHUTTER"))
     }
 
+    // --- faders that correct rather than set --------------------------------
+
+    @Test fun theCentreOfACorrectionFaderChangesNothing() {
+        val detected = 800.0
+        assertEquals(detected, Mechanism.correctedFromAuto(50, 100, detected, 2.0), 0.001)
+    }
+
+    @Test fun eachEndIsExactlyTheStopsItPromises() {
+        val detected = 800.0
+        // Two stops up is four times the light, two down is a quarter.
+        assertEquals(3200.0, Mechanism.correctedFromAuto(100, 100, detected, 2.0), 1.0)
+        assertEquals(200.0, Mechanism.correctedFromAuto(0, 100, detected, 2.0), 1.0)
+    }
+
+    @Test fun correctionIsSymmetricAroundTheCentre() {
+        val up = Mechanism.correctedFromAuto(75, 100, 400.0, 2.0)
+        val down = Mechanism.correctedFromAuto(25, 100, 400.0, 2.0)
+        assertEquals(400.0 * 400.0, up * down, 400.0)
+    }
+
+    @Test fun aDetectedValueOfNothingIsNotMultipliedIntoNonsense() {
+        assertEquals(0.0, Mechanism.correctedFromAuto(90, 100, 0.0, 2.0), 0.0001)
+    }
+
+    @Test fun theCorrectionLabelReadsAsStops() {
+        assertEquals("0", Mechanism.correctionLabel(50, 100, 2.0))
+        assertEquals("+2.0", Mechanism.correctionLabel(100, 100, 2.0))
+        assertEquals("-2.0", Mechanism.correctionLabel(0, 100, 2.0))
+    }
+
+    // --- a white balance range somebody would actually use -------------------
+
+    @Test fun kelvinSpansTheWorkingRangeNotTheSensorRange() {
+        assertEquals(Mechanism.KELVIN_WORKING_MIN, Mechanism.kelvinFromProgress(0, 100))
+        assertEquals(Mechanism.KELVIN_WORKING_MAX, Mechanism.kelvinFromProgress(100, 100))
+    }
+
+    @Test fun kelvinRoundTripsThroughItsInverse() {
+        for (k in Mechanism.KELVIN_WORKING_MIN..Mechanism.KELVIN_WORKING_MAX step 100) {
+            val p = Mechanism.progressForKelvin(k, 100)
+            assertTrue("at $k", Math.abs(Mechanism.kelvinFromProgress(p, 100) - k) <= 30)
+        }
+    }
+
+    @Test fun kelvinOutsideTheWorkingRangeClampsToTheEnds() {
+        assertEquals(0, Mechanism.progressForKelvin(1000, 100))
+        assertEquals(100, Mechanism.progressForKelvin(20000, 100))
+    }
+
+    // --- audio gain ----------------------------------------------------------
+
+    @Test fun theMiddleOfTheGainFaderIsUnity() {
+        assertEquals(0.0, Mechanism.gainDbFromProgress(50, 100), 0.001)
+        assertEquals(1f, Mechanism.gainFactor(0.0), 0.0001f)
+    }
+
+    @Test fun sixDbIsDoubleAndMinusSixIsHalf() {
+        assertEquals(2f, Mechanism.gainFactor(6.02), 0.01f)
+        assertEquals(0.5f, Mechanism.gainFactor(-6.02), 0.01f)
+    }
+
+    @Test fun gainClampsRatherThanWrapping() {
+        // A wrapped sample turns a loud moment into a burst of noise, which is
+        // far worse than the clipping it came from.
+        val pcm = byteArrayOf(0x00, 0x40, 0x00, 0xC0.toByte())  // +16384, -16384
+        Mechanism.applyGainPcm16(pcm, 4f)
+        val first = ((pcm[1].toInt() shl 8) or (pcm[0].toInt() and 0xFF)).toShort()
+        val second = ((pcm[3].toInt() shl 8) or (pcm[2].toInt() and 0xFF)).toShort()
+        assertEquals(32767, first.toInt())
+        assertEquals(-32768, second.toInt())
+    }
+
+    @Test fun unityGainLeavesEverySampleUntouched() {
+        val original = byteArrayOf(0x11, 0x22, 0x33, 0x44)
+        val copy = original.copyOf()
+        Mechanism.applyGainPcm16(copy, 1f)
+        assertTrue(original.contentEquals(copy))
+    }
+
+    @Test fun gainOnAnEmptyOrOddBufferDoesNotCrash() {
+        Mechanism.applyGainPcm16(ByteArray(0), 2f)
+        Mechanism.applyGainPcm16(ByteArray(1), 2f)
+    }
+
     // --- remote control protocol -------------------------------------------
 
     @Test fun commandSurvivesTheRoundTrip() {

@@ -74,6 +74,13 @@ class NdiSendService : Service() {
      */
     private val standaloneMeter = AudioMeter { level -> audioLevel = level }
 
+    private val vuTap = VuTap { level -> audioLevel = level }
+
+    /** Digital gain on the recorded audio, 1.0 being untouched. */
+    fun setAudioGain(factor: Float) {
+        vuTap.gain = factor
+    }
+
     /** Tally from the receiving mixer: bit 0 program, bit 1 preview, -1 none. */
     @Volatile var tally: Int = -1
         private set
@@ -117,7 +124,7 @@ class NdiSendService : Service() {
         stream = ndiStream
         activeProfile = profile
         (ndiStream.audioSource as? com.pedro.encoder.input.sources.audio.MicrophoneSource)
-            ?.setAudioEffect(VuTap { level -> audioLevel = level })
+            ?.setAudioEffect(vuTap)
         val source = ndiStream.videoSource as? Camera2Source
         if (source != null) {
             controls = ProControls(

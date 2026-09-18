@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.View
 import android.content.pm.PackageManager
@@ -55,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private var manualExposure = false
     private var manualWhiteBalance = false
     private var manualFocus = false
+    private var gainProgress = 50
 
     private val pump = ControlPump()
     private val ui = Handler(Looper.getMainLooper())
@@ -163,6 +165,81 @@ class MainActivity : AppCompatActivity() {
         if (bound) {
             unbindService(connection)
             bound = false
+        }
+    }
+
+    /**
+     * The volume rocker, given a job worth having.
+     *
+     * An editor works by keyboard and a camera operator works without looking,
+     * so the two hardware keys this app is allowed to take are worth more than
+     * another thing to tap. What they do depends on what is on screen, which
+     * is the same rule a mixer follows: the keys act on whatever is in front
+     * of you.
+     *
+     * Nothing here touches the power button. Android does not let an ordinary
+     * app consume KEYCODE_POWER; the system takes it for the screen and the
+     * power menu before any app sees it. There is no permission for it and no
+     * flag that changes it, so the record shortcut lives on a long press of
+     * the volume rocker instead, which is the closest key the platform allows.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val direction = when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> +1
+            KeyEvent.KEYCODE_VOLUME_DOWN -> -1
+            else -> return super.onKeyDown(keyCode, event)
+        }
+
+        // Held down: record, so a take can start without looking at the screen.
+        if (event.repeatCount == 3) {
+            toggleRecording()
+            return true
+        }
+        if (event.repeatCount > 0) return true
+
+        when {
+            binding.verticalPanel.visibility == View.VISIBLE -> nudgeFocusedColumn(direction)
+            binding.paramBar.visibility == View.VISIBLE -> binding.paramFader.let { fader ->
+                fader.progress += direction * maxOf(1, fader.max / 100)
+                onFaderMoved(fader.progress)
+            }
+            // Nothing open: the rocker is a zoom rocker, which is what it is
+            // on every camcorder that ever had one.
+            else -> {
+                zoomProgress = (zoomProgress + direction * 2).coerceIn(0, 100)
+                pushZoom(zoomProgress)
+                say("Zoom ${binding.vZoom.valueText}")
+            }
+        }
+        return true
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) true
+        else super.onKeyUp(keyCode, event)
+
+    /** The rocker drives whichever column was touched last. */
+    private var focusedColumn: Mechanism.Param = Mechanism.Param.ISO
+
+    private fun nudgeFocusedColumn(direction: Int) {
+        val fader = when (focusedColumn) {
+            Mechanism.Param.ISO -> binding.vIso
+            Mechanism.Param.SHUTTER -> binding.vShutter
+            Mechanism.Param.WHITE_BALANCE -> binding.vWhiteBalance
+            Mechanism.Param.ZOOM -> binding.vZoom
+        }
+        fader.step(direction)
+    }
+
+    private fun toggleRecording() {
+        val svc = service ?: return
+        if (svc.isRecording) {
+            svc.stopRecording()
+            say("Saved to DCIM/${MediaStoreOutput.FOLDER}")
+        } else if (svc.startRecording()) {
+            say("Recording", transient = false)
+        } else {
+            say("Go live first")
         }
     }
 
@@ -359,6 +436,21 @@ class MainActivity : AppCompatActivity() {
             fader.onChange = { onVerticalMoved(which, it) }
             fader.onRelease = { pump.flush() }
             fader.onTouchedWhileAutomatic = { leaveAuto(which) }
+            fader.setOnTouchListener { _, _ -> focusedColumn = which; false }
+        }
+
+        binding.vGain.label = "Gain"
+        binding.vGain.max = 100
+        binding.vGain.showsCentre = true
+        binding.vGain.progress = gainProgress
+        binding.vGain.onChange = { gainProgress = it; applyGain() }
+        binding.aGain.symbol = "A"
+        binding.aGain.ringColor = CircleButtonView.IDLE
+        binding.aGain.setOnClickListener {
+            gainProgress = 50
+            applyGain()
+            refreshVerticalPanel()
+            say("Gain back to unity")
         }
 
         binding.vFocus.label = "Focus"
@@ -480,9 +572,16 @@ class MainActivity : AppCompatActivity() {
                 Mechanism.shutterFromProgress(shutterProgress, 200, range.first, range.second)
             )
         }
-        binding.vWhiteBalance.max = ProControls.KELVIN_MAX - ProControls.KELVIN_MIN
+        // A working range rather than the sensor's, so the useful part of the
+        // fader is the whole fader.
+        binding.vWhiteBalance.max = 100
+        binding.vWhiteBalance.showsCentre = true
         binding.vWhiteBalance.progress = kelvinProgress
-        binding.vWhiteBalance.valueText = "${ProControls.KELVIN_MIN + kelvinProgress} K"
+        binding.vWhiteBalance.valueText = "${Mechanism.kelvinFromProgress(kelvinProgress, 100)} K"
+
+        binding.vGain.progress = gainProgress
+        binding.vGain.meterLevel = service?.let { Mechanism.rmsToMeterFraction(it.audioLevel) }
+        binding.vGain.valueText = "%+.0f dB".format(Mechanism.gainDbFromProgress(gainProgress, 100))
 
         binding.vFocus.progress = focusProgress
         binding.vFocus.valueText = if (focusProgress == 0) "\u221E" else "$focusProgress%"
@@ -502,7 +601,9 @@ class MainActivity : AppCompatActivity() {
             Mechanism.Param.SHUTTER -> { shutterProgress = progress; pushExposure() }
             Mechanism.Param.WHITE_BALANCE -> {
                 kelvinProgress = progress
-                if (manualWhiteBalance) pump.setKelvin(ProControls.KELVIN_MIN + progress)
+                if (manualWhiteBalance) {
+                    pump.setKelvin(Mechanism.kelvinFromProgress(progress, 100))
+                }
             }
             Mechanism.Param.ZOOM -> { zoomProgress = progress; pushZoom(progress) }
         }
@@ -534,11 +635,15 @@ class MainActivity : AppCompatActivity() {
                 ui.postDelayed({
                     // Auto white balance reports no Kelvin, so the daylight
                     // anchor is the honest starting point to hand back.
-                    kelvinProgress = 5600 - ProControls.KELVIN_MIN
+                    kelvinProgress = Mechanism.progressForKelvin(
+                        Mechanism.KELVIN_WORKING_CENTRE, 100
+                    )
                     manualWhiteBalance = true
-                    controls.setManualWhiteBalance(ProControls.KELVIN_MIN + kelvinProgress)
+                    controls.setManualWhiteBalance(
+                        Mechanism.kelvinFromProgress(kelvinProgress, 100)
+                    )
                     refreshVerticalPanel()
-                    say("Set to 5600K, still manual")
+                    say("Set to ${Mechanism.KELVIN_WORKING_CENTRE}K, still manual")
                 }, 700)
             }
 
@@ -584,6 +689,12 @@ class MainActivity : AppCompatActivity() {
             binding.focusSquare.state = FocusSquareView.State.FAILED
             say("This camera has no focus control")
         }
+    }
+
+    private fun applyGain() {
+        val db = Mechanism.gainDbFromProgress(gainProgress, 100)
+        service?.setAudioGain(Mechanism.gainFactor(db))
+        binding.vGain.valueText = "%+.0f dB".format(db)
     }
 
     private fun pushFocus() {

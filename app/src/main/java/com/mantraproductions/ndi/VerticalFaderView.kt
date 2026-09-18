@@ -59,6 +59,22 @@ class VerticalFaderView @JvmOverloads constructor(
     /** Fired when a dimmed control is touched, so the caller can leave auto. */
     var onTouchedWhileAutomatic: (() -> Unit)? = null
 
+    /**
+     * Draws a centre mark, for faders that correct a detected value rather
+     * than set an absolute one. The mark is where the camera's own reading
+     * sits, so the operator can always find their way back to it.
+     */
+    var showsCentre: Boolean = false
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    /**
+     * Replaces the track with a live audio meter. The gain fader is the one
+     * control where the thing being adjusted can be shown underneath the
+     * finger doing the adjusting, so it is.
+     */
+    var meterLevel: Float? = null
+        set(value) { field = value; postInvalidateOnAnimation() }
+
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#2A2E35")
         strokeCap = Paint.Cap.ROUND
@@ -66,6 +82,12 @@ class VerticalFaderView @JvmOverloads constructor(
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val meterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val centrePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#88FFFFFF")
+    }
     private val signPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         textSize = 20f * density
@@ -114,6 +136,24 @@ class VerticalFaderView @JvmOverloads constructor(
 
         trackPaint.strokeWidth = 3f * density
         canvas.drawLine(cx, top, cx, bottom, trackPaint)
+
+        // The gain fader shows the level it is adjusting, in the track itself.
+        meterLevel?.let { meter ->
+            meterPaint.strokeWidth = 9f * density
+            meterPaint.color = when {
+                meter >= 0.945f -> Color.parseColor("#FF2D1F")
+                meter >= 0.86f -> Color.parseColor("#FFD400")
+                else -> Color.parseColor("#12C46A")
+            }
+            meterPaint.alpha = 150
+            canvas.drawLine(cx, bottom, cx, bottom - span * meter, meterPaint)
+        }
+
+        if (showsCentre) {
+            centrePaint.strokeWidth = 1.5f * density
+            val centreY = bottom - span * 0.5f
+            canvas.drawLine(cx - 9f * density, centreY, cx + 9f * density, centreY, centrePaint)
+        }
 
         // Grows upward: more of anything is up, which is how every fader reads.
         val fraction = progress.toFloat() / max
@@ -201,7 +241,7 @@ class VerticalFaderView @JvmOverloads constructor(
     }
 
     /** One step is a hundredth of the travel, or one unit on a short range. */
-    private fun step(direction: Int) {
+    fun step(direction: Int) {
         val amount = maxOf(1, max / 100)
         progress += direction * amount
         onChange?.invoke(progress)

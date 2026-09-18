@@ -3,6 +3,7 @@ package com.mantraproductions.ndi
 import android.content.Context
 import android.content.Intent
 import android.hardware.camera2.CameraManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Toast
@@ -92,6 +93,7 @@ class SettingsActivity : AppCompatActivity() {
             refresh()
         }
         binding.rowCamera.setOnClickListener { showCameraCapabilities() }
+        binding.rowDetect.setOnClickListener { showFullReport() }
 
         refresh()
     }
@@ -190,6 +192,34 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * The whole picture in one scrollable block, and offered as a file as
+     * well, because this is the thing worth keeping beside footage when a
+     * shot turns out to have been impossible on that phone.
+     */
+    private fun showFullReport() {
+        val report = DeviceReport.build(this)
+        val view = android.widget.ScrollView(this).apply {
+            addView(android.widget.TextView(this@SettingsActivity).apply {
+                text = report
+                typeface = android.graphics.Typeface.MONOSPACE
+                textSize = 11f
+                setTextColor(android.graphics.Color.parseColor("#CFD8DC"))
+                setPadding(40, 30, 40, 30)
+            })
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Camera features")
+            .setView(view)
+            .setPositiveButton("Close", null)
+            .setNeutralButton("Save") { _, _ ->
+                val name = "MantraNDI_device_${Build.MODEL.replace(' ', '_')}.txt"
+                val target = MediaStoreOutput.writeText(this, name, report)
+                toast(if (target == null) "Could not write it" else "Saved to ${target.shortLocation}")
+            }
+            .show()
     }
 
     private fun showCameraCapabilities() {
