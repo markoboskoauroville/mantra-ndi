@@ -22,6 +22,14 @@ data class CameraCommand(
     /** Manual colour temperature in Kelvin; use whiteBalanceAuto to go back. */
     val whiteBalanceKelvin: Int? = null,
     val whiteBalanceAuto: Boolean? = null,
+    /** Focus as a fraction of lens travel, 0 at infinity. */
+    val focus: Float? = null,
+    /** Focus on a point, as fractions of the frame. Both or neither. */
+    val focusX: Float? = null,
+    val focusY: Float? = null,
+    val focusAuto: Boolean? = null,
+    /** A log curve by name, so the far camera records flat too. */
+    val logCurve: String? = null,
     /** "start" or "stop" */
     val record: String? = null,
     /** Ask the camera to report its current state back. */
@@ -37,6 +45,11 @@ data class CameraCommand(
         zoom?.let { sb.append(" zoom=\"$it\"") }
         whiteBalanceKelvin?.let { sb.append(" wb_kelvin=\"$it\"") }
         whiteBalanceAuto?.let { sb.append(" wb_auto=\"${if (it) 1 else 0}\"") }
+        focus?.let { sb.append(" focus=\"$it\"") }
+        focusX?.let { sb.append(" focus_x=\"$it\"") }
+        focusY?.let { sb.append(" focus_y=\"$it\"") }
+        focusAuto?.let { sb.append(" focus_auto=\"${if (it) 1 else 0}\"") }
+        logCurve?.let { sb.append(" log=\"$it\"") }
         record?.let { sb.append(" record=\"$it\"") }
         if (requestState) sb.append(" request_state=\"1\"")
         sb.append("/>")
@@ -57,6 +70,11 @@ data class CameraCommand(
                 zoom = attr(xml, "zoom")?.toFloatOrNull(),
                 whiteBalanceKelvin = attr(xml, "wb_kelvin")?.toIntOrNull(),
                 whiteBalanceAuto = attr(xml, "wb_auto")?.let { it == "1" },
+                focus = attr(xml, "focus")?.toFloatOrNull(),
+                focusX = attr(xml, "focus_x")?.toFloatOrNull(),
+                focusY = attr(xml, "focus_y")?.toFloatOrNull(),
+                focusAuto = attr(xml, "focus_auto")?.let { it == "1" },
+                logCurve = attr(xml, "log"),
                 record = attr(xml, "record"),
                 requestState = attr(xml, "request_state") == "1"
             )

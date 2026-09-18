@@ -756,6 +756,20 @@ class MainActivity : AppCompatActivity() {
      * number: nobody thinks in dioptres, everybody can point at a face.
      */
     private fun focusOnSquare() {
+        // Remote focuses through the same gesture: the box is a place, and a
+        // place travels over the wire as two numbers.
+        (link as? RemoteLink)?.let { remote ->
+            binding.focusSquare.visibility = View.VISIBLE
+            binding.focusSquare.state = FocusSquareView.State.SEEKING
+            binding.aFocus.busy = true
+            remote.focusAtPoint(binding.focusSquare.centreX, binding.focusSquare.centreY)
+            ui.postDelayed({
+                binding.aFocus.busy = false
+                binding.focusSquare.state = FocusSquareView.State.LOCKED
+                say("Asked ${remote.label} to focus there")
+            }, 1200)
+            return
+        }
         val controls = service?.controls ?: return
         if (binding.focusSquare.visibility != View.VISIBLE) {
             binding.focusSquare.visibility = View.VISIBLE
@@ -797,7 +811,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun pushFocus() {
         if (!manualFocus) return
-        service?.controls?.setFocusFraction(focusProgress / 100f)
+        val fraction = focusProgress / 100f
+        val remote = link as? RemoteLink
+        if (remote != null) remote.setFocusFraction(fraction)
+        else service?.controls?.setFocusFraction(fraction)
     }
 
     // --- live actions -------------------------------------------------------
@@ -903,9 +920,11 @@ class MainActivity : AppCompatActivity() {
         )
         engine.start(source)
         remoteEngine = engine
-        // Ask the camera to describe itself so the faders map to its ranges.
+        // Ask the camera to describe itself, and put it on the same curve, or
+        // the two cameras will not cut together.
         binding.root.postDelayed({
             NdiReceiver.sendCommand(CameraCommand(requestState = true))
+            remote.setLogCurve(appSettings.logCurve)
         }, 1500)
     }
 

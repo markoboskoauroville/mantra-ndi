@@ -164,6 +164,66 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
         return if (applied) gains else null
     }
 
+    /**
+     * Log, applied inside the camera.
+     *
+     * This needed no new capture layer. A tone curve is a capture request key
+     * like any other, so it goes through the same builder as ISO and shutter,
+     * and the camera was already tone mapping every frame: it simply uses this
+     * curve instead of its own. No GPU pass, no shader, no copy of any frame,
+     * and the curve reaches the preview, the NDI stream and the recording at
+     * once because all three come from the same sensor output.
+     *
+     * Returns false where the camera will not accept an arbitrary curve, which
+     * is the honest answer on a device without MANUAL_POST_PROCESSING.
+     */
+    fun setLogCurve(curve: LogCurves.Curve): Boolean {
+        val points = maxCurvePoints()
+        if (curve != LogCurves.Curve.REC709 && points < 2) return false
+
+        return source.setCustomRequest { builder ->
+            if (curve == LogCurves.Curve.REC709) {
+                builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_FAST)
+            } else {
+                val samples = Mechanism.toneCurvePoints(curve, points)
+                builder.set(
+                    CaptureRequest.TONEMAP_MODE,
+                    CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE
+                )
+                builder.set(
+                    CaptureRequest.TONEMAP_CURVE,
+                    android.hardware.camera2.params.TonemapCurve(samples, samples, samples)
+                )
+            }
+        }
+    }
+
+    /** How many points this camera accepts in a tone curve; 0 means none. */
+    fun maxCurvePoints(): Int {
+        val caps = characteristics()?.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+        val manualPost = caps?.contains(
+            CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING
+        ) ?: false
+        val modes = characteristics()?.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES)
+        val supportsCurve = modes?.contains(
+            android.hardware.camera2.CameraMetadata.TONEMAP_MODE_CONTRAST_CURVE
+        ) ?: false
+        if (!manualPost || !supportsCurve) return 0
+        return characteristics()?.get(CameraCharacteristics.TONEMAP_MAX_CURVE_POINTS) ?: 0
+    }
+
+    /** Focus as a region, for a remote camera that can only send a fraction. */
+    fun focusAtNormalisedPoint(x: Float, y: Float, onResult: (Boolean) -> Unit): Boolean {
+        val half = 0.08f
+        return focusOnRegion(
+            floatArrayOf(
+                (x - half).coerceIn(0f, 1f), (y - half).coerceIn(0f, 1f),
+                (x + half).coerceIn(0f, 1f), (y + half).coerceIn(0f, 1f)
+            ),
+            onResult
+        )
+    }
+
     fun setAutoWhiteBalance(): Boolean =
         source.enableAutoWhiteBalance(CaptureRequest.CONTROL_AWB_MODE_AUTO)
 

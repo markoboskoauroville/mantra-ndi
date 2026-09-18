@@ -118,8 +118,13 @@ class RemoteLink(private val sourceName: String) : CameraLink {
     override fun setAutoExposure() = send(CameraCommand(exposureMode = "auto"))
     override fun setManualWhiteBalance(kelvin: Int) = send(CameraCommand(whiteBalanceKelvin = kelvin))
     override fun setAutoWhiteBalance() = send(CameraCommand(whiteBalanceAuto = true))
-    override fun setFocusFraction(fraction: Float) = Unit // no remote focus command yet
-    override fun setAutoFocus() = Unit
+    override fun setFocusFraction(fraction: Float) = send(CameraCommand(focus = fraction))
+    override fun setAutoFocus() = send(CameraCommand(focusAuto = true))
+
+    /** Focus the far camera where the box is, the same gesture as local. */
+    fun focusAtPoint(x: Float, y: Float) = send(CameraCommand(focusX = x, focusY = y))
+
+    fun setLogCurve(curve: LogCurves.Curve) = send(CameraCommand(logCurve = curve.name))
     override fun setZoom(ratio: Float) = send(CameraCommand(zoom = ratio))
     override fun setStabilisation(enabled: Boolean) = send(CameraCommand(stabilization = enabled))
 

@@ -191,6 +191,9 @@ class SettingsActivity : AppCompatActivity() {
         choose("Log curve", labels) { index ->
             prefs.logCurve = curves[index]
             refresh()
+            // Applied when the camera screen comes back up, since the curve
+            // lives on the capture request rather than in a file.
+            toast("Applied to the image when you return to the camera")
         }
     }
 

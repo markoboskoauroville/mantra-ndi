@@ -465,6 +465,42 @@ class MechanismTest {
         assertEquals(null, CameraCommand.parse(""))
     }
 
+    @Test fun focusTravelsOverTheWireBothWays() {
+        val sent = CameraCommand(focus = 0.42f)
+        assertEquals(0.42f, CameraCommand.parse(sent.toXml())!!.focus!!, 0.001f)
+    }
+
+    @Test fun aFocusPointTravelsAsAPlace() {
+        val sent = CameraCommand(focusX = 0.31f, focusY = 0.77f)
+        val got = CameraCommand.parse(sent.toXml())!!
+        assertEquals(0.31f, got.focusX!!, 0.001f)
+        assertEquals(0.77f, got.focusY!!, 0.001f)
+    }
+
+    @Test fun autoFocusAndLogCurveSurviveTheRoundTrip() {
+        val sent = CameraCommand(focusAuto = true, logCurve = "SLOG3")
+        val got = CameraCommand.parse(sent.toXml())!!
+        assertEquals(true, got.focusAuto)
+        assertEquals("SLOG3", got.logCurve)
+    }
+
+    @Test fun aCurveNameThatTravelsCanBeResolvedBack() {
+        // The far camera looks the name up in the same enum, so every curve
+        // this app offers has to survive being written as a name.
+        for (curve in LogCurves.Curve.values()) {
+            val xml = CameraCommand(logCurve = curve.name).toXml()
+            val name = CameraCommand.parse(xml)!!.logCurve
+            assertEquals(curve, LogCurves.Curve.values().first { it.name == name })
+        }
+    }
+
+    @Test fun aFocusCommandCarriesNothingItWasNotGiven() {
+        val got = CameraCommand.parse(CameraCommand(focus = 0.5f).toXml())!!
+        assertEquals(null, got.focusX)
+        assertEquals(null, got.focusAuto)
+        assertEquals(null, got.logCurve)
+    }
+
     @Test fun cameraStateRoundTripsIncludingItsName() {
         val sent = CameraState(
             isoMin = 50, isoMax = 3200, shutterMinNs = 1_000, shutterMaxNs = 100_000_000,

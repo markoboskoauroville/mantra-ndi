@@ -130,7 +130,12 @@ class NdiSendService : Service() {
             controls = ProControls(
                 source,
                 applicationContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            ).also { it.apply(profile) }
+            ).also { controls ->
+                controls.apply(profile)
+                // The curve the operator chose, applied to the sensor itself so
+                // it reaches preview, stream and recording at once.
+                controls.setLogCurve(AppSettings(applicationContext).logCurve)
+            }
         }
         return true
     }
@@ -332,6 +337,23 @@ class NdiSendService : Service() {
         command.zoom?.let { ctrl?.setZoom(it) }
         command.whiteBalanceKelvin?.let { ctrl?.setManualWhiteBalance(it) }
         command.whiteBalanceAuto?.let { if (it) ctrl?.setAutoWhiteBalance() }
+
+        // Focus by distance, by point, or handed back to the camera.
+        command.focus?.let { ctrl?.setFocusFraction(it) }
+        if (command.focusX != null && command.focusY != null) {
+            ctrl?.focusAtNormalisedPoint(command.focusX, command.focusY) { focused ->
+                Log.i(TAG, "Remote focus " + if (focused) "locked" else "failed")
+                reportState()
+            }
+        }
+        command.focusAuto?.let { if (it) ctrl?.setAutoFocus() }
+
+        // A far camera should record flat too, or the two will not cut together.
+        command.logCurve?.let { name ->
+            LogCurves.Curve.values().firstOrNull { it.name == name }?.let { curve ->
+                ctrl?.setLogCurve(curve)
+            }
+        }
 
         when (command.record) {
             "start" -> startRecording()
