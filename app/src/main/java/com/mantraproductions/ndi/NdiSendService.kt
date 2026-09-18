@@ -90,6 +90,13 @@ class NdiSendService : Service() {
     private val vuTap = VuTap { level -> audioLevel = level }
 
     /** Digital gain on the recorded audio, 1.0 being untouched. */
+    /**
+     * The chroma planes of the most recent frame, for the vectorscope.
+     * Only the direct pipeline can supply these; the GL path never exposes a
+     * frame the app can read.
+     */
+    fun latestChroma(): Pair<ByteArray, ByteArray>? = hdr?.latestChroma()
+
     fun setAudioGain(factor: Float) {
         vuTap.gain = factor
         hdr?.audioGain = factor

@@ -25,6 +25,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_TEN_BIT, false)
         set(value) = prefs.edit().putBoolean(KEY_TEN_BIT, value).apply()
 
+    /** A vectorscope, not a histogram: brightness the eye can judge, cast it cannot. */
+    var vectorscopeVisible: Boolean
+        get() = prefs.getBoolean(KEY_VECTORSCOPE, false)
+        set(value) = prefs.edit().putBoolean(KEY_VECTORSCOPE, value).apply()
+
     var histogramVisible: Boolean
         get() = prefs.getBoolean(KEY_HISTOGRAM, false)
         set(value) = prefs.edit().putBoolean(KEY_HISTOGRAM, value).apply()
@@ -52,6 +57,7 @@ class AppSettings(context: Context) {
         const val KEY_CURVE = "log_curve"
         const val KEY_TEN_BIT = "ten_bit"
         const val KEY_HISTOGRAM = "histogram"
+        const val KEY_VECTORSCOPE = "vectorscope"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
         const val KEY_REMOTE = "remote_mode"

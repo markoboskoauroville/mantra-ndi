@@ -432,6 +432,109 @@ object Mechanism {
         return (current + (measured - current) * step).toInt()
     }
 
+    // --- white balance presets that snap ------------------------------------
+
+    /**
+     * The two references anybody actually works between, and the reason they
+     * are marked rather than remembered: tungsten and daylight are where most
+     * lighting sits, and hitting them exactly matters because a shot lit by a
+     * practical and a shot lit by the sun have to cut together.
+     */
+    val WHITE_BALANCE_PRESETS = listOf(3200 to "Tungsten", 5500 to "Daylight")
+
+    /**
+     * Magnetic: within [pullKelvin] of a preset the fader lands on it exactly.
+     * A fader that can reach 5487K when the operator meant 5500K is a fader
+     * that produces two shots which do not match, so near enough is snapped to
+     * exact. Finer positions are still reachable by the steppers, which do not
+     * snap.
+     */
+    fun snapKelvin(kelvin: Int, pullKelvin: Int = 180): Int {
+        val nearest = WHITE_BALANCE_PRESETS.minByOrNull { Math.abs(it.first - kelvin) }
+            ?: return kelvin
+        return if (Math.abs(nearest.first - kelvin) <= pullKelvin) nearest.first else kelvin
+    }
+
+    /** Where the preset marks belong on a fader of [steps]. */
+    fun presetPositions(steps: Int): List<Pair<Float, String>> =
+        WHITE_BALANCE_PRESETS.map { (kelvin, label) ->
+            (progressForKelvin(kelvin, steps).toFloat() / steps) to label
+        }
+
+    // --- the vectorscope ------------------------------------------------------
+
+    /**
+     * Chroma scatter, the way a vectorscope shows it.
+     *
+     * A histogram tells you how bright things are, which anybody can see by
+     * looking. A vectorscope tells you which way the colour is leaning, which
+     * nobody can see reliably, because the eye adapts to a cast within seconds
+     * of looking at it. That is the whole reason it exists on a desk.
+     *
+     * U and V come straight from the frame, so this costs one pass over a
+     * downsampled chroma plane and no conversion.
+     *
+     * @return counts on a [size] by [size] grid, U across and V down, centred
+     */
+    fun vectorscope(u: ByteArray, v: ByteArray, stride: Int = 2, size: Int = 64): IntArray {
+        val grid = IntArray(size * size)
+        val count = minOf(u.size, v.size)
+        var i = 0
+        while (i < count) {
+            // 8 bit chroma is offset by 128; centre is neutral.
+            val cu = ((u[i].toInt() and 0xFF) - 128) / 128.0
+            val cv = ((v[i].toInt() and 0xFF) - 128) / 128.0
+            val x = ((cu * 0.5 + 0.5) * (size - 1)).toInt().coerceIn(0, size - 1)
+            val y = ((0.5 - cv * 0.5) * (size - 1)).toInt().coerceIn(0, size - 1)
+            grid[y * size + x]++
+            i += stride
+        }
+        return grid
+    }
+
+    /**
+     * Where the cloud sits, as a fraction from the centre.
+     *
+     * The average chroma of a frame is the cast: a neutral scene sits on the
+     * centre and a warm one sits towards red. This is the number the operator
+     * is trying to zero, and the number a drag on the scope moves.
+     */
+    fun chromaCentroid(u: ByteArray, v: ByteArray, stride: Int = 2): FloatArray {
+        var su = 0.0
+        var sv = 0.0
+        var n = 0
+        val count = minOf(u.size, v.size)
+        var i = 0
+        while (i < count) {
+            su += (u[i].toInt() and 0xFF) - 128
+            sv += (v[i].toInt() and 0xFF) - 128
+            n++
+            i += stride
+        }
+        if (n == 0) return floatArrayOf(0f, 0f)
+        return floatArrayOf((su / n / 128.0).toFloat(), (sv / n / 128.0).toFloat())
+    }
+
+    /**
+     * Turns a move on the vectorscope into a change in camera gains.
+     *
+     * U is blue against luma and V is red against luma, so pulling the dot
+     * towards blue means the image needs less blue, and the gain moves the
+     * other way. Green is the reference and is left alone, which is what keeps
+     * a colour move from also being an exposure move.
+     */
+    fun gainsFromChromaOffset(base: FloatArray, du: Float, dv: Float, strength: Float = 0.6f): FloatArray {
+        if (base.size < 3) return base
+        val out = floatArrayOf(
+            (base[0] * (1f - dv * strength)).coerceAtLeast(0.05f),
+            base[1],
+            (base[2] * (1f - du * strength)).coerceAtLeast(0.05f)
+        )
+        val smallest = minOf(out[0], out[1], out[2])
+        if (smallest > 0f) for (i in 0..2) out[i] /= smallest
+        return out
+    }
+
     // --- audio gain -----------------------------------------------------------
 
     /** Gain in dB from a fader, centred on unity so the middle changes nothing. */

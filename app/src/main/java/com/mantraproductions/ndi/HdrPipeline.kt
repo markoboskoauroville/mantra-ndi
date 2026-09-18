@@ -184,6 +184,15 @@ class HdrPipeline(private val context: Context) {
 
     fun requestKeyframe() = video?.requestKeyframe()
 
+    /**
+     * Chroma for the scope. Filled by the analysis stream when one is running;
+     * null otherwise, which the caller shows as an empty scope rather than
+     * inventing a reading.
+     */
+    fun latestChroma(): Pair<ByteArray, ByteArray>? = chroma
+
+    @Volatile private var chroma: Pair<ByteArray, ByteArray>? = null
+
     private companion object {
         const val TAG = "HdrPipeline"
     }

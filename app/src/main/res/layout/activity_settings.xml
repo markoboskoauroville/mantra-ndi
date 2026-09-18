@@ -73,7 +73,7 @@
         <LinearLayout style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowHistogram" style="@style/MantraSettingsRow">
-                <TextView style="@style/MantraSettingsTitle" android:text="Histogram" />
+                <TextView style="@style/MantraSettingsTitle" android:text="Vectorscope" />
                 <TextView android:id="@+id/valueHistogram" style="@style/MantraSettingsValue" />
             </LinearLayout>
 

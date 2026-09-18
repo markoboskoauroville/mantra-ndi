@@ -59,6 +59,12 @@ class MainActivity : AppCompatActivity() {
     private var manualExposure = false
     private var manualWhiteBalance = false
     private var manualFocus = false
+    private val focusDirector by lazy {
+        FocusDirector(
+            controls = { service?.controls },
+            onState = { state -> runOnUiThread { binding.focusSquare.state = state } }
+        )
+    }
     private var gainProgress = 50
 
     private val pump = ControlPump()
@@ -75,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     private val tick = object : Runnable {
         override fun run() {
             refreshLiveIndicators()
+            refreshVectorscope()
             ui.postDelayed(this, 100)
         }
     }
@@ -133,6 +140,7 @@ class MainActivity : AppCompatActivity() {
 
         setUpControlBar()
         setUpVerticalPanel()
+        setUpVectorscope()
         setUpActions()
 
         binding.preview.setOnClickListener { toggleVerticalPanel() }
@@ -226,6 +234,7 @@ class MainActivity : AppCompatActivity() {
         } catch (e: IllegalArgumentException) {
             // Never registered, which happens if onStart bailed early.
         }
+        focusDirector.stop()
         orientationWatcher.disable()
         pump.stop()
         ui.removeCallbacks(tick)
@@ -557,8 +566,16 @@ class MainActivity : AppCompatActivity() {
             say("Gain back to unity")
         }
 
-        binding.focusSquare.onMoved = { _, _ ->
+        binding.focusSquare.onMoved = { x, y ->
+            focusDirector.target = x to y
             binding.focusSquare.state = FocusSquareView.State.IDLE
+        }
+        // A tap on the box means focus here. Dragging moves it, tapping fires
+        // it, and a long press cycles its size, so the box is the whole focus
+        // interface and the circle only says which mode it is in.
+        binding.focusSquare.onTapped = {
+            if (focusDirector.mode == FocusDirector.Mode.MANUAL) focusDirector.focusHereAndHold()
+            else binding.focusSquare.cycleSize()
         }
 
         // One press puts every control back on automatic at once.
@@ -570,23 +587,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The panel and the focus box are never both up.
+     *
+     * They were fighting: the box covers the image so it can be dragged
+     * anywhere, and the columns want the right of the same image, so a touch
+     * belonged to whichever happened to be on top. Now a tap swaps them. The
+     * box is the resting state, because focus is the thing being judged
+     * continuously and exposure is the thing being set occasionally.
+     */
     private fun toggleVerticalPanel() {
-        if (binding.verticalPanel.visibility == View.VISIBLE) {
-            binding.verticalPanel.visibility = View.GONE
-            binding.autoAllButton.visibility = View.GONE
-            binding.focusSquare.visibility = View.GONE
-            return
+        val opening = binding.verticalPanel.visibility != View.VISIBLE
+        binding.verticalPanel.visibility = if (opening) View.VISIBLE else View.GONE
+        binding.autoAllButton.visibility = if (opening) View.VISIBLE else View.GONE
+        binding.focusSquare.visibility = if (opening) View.GONE else View.VISIBLE
+        if (opening) {
+            if (binding.paramBar.visibility == View.VISIBLE) closeControlBar()
+            seedFromCamera()
+            refreshVerticalPanel()
         }
-        // The single fader and the full panel are two answers to the same
-        // question, so never both.
-        if (binding.paramBar.visibility == View.VISIBLE) closeControlBar()
-        seedFromCamera()
-        binding.verticalPanel.visibility = View.VISIBLE
-        binding.autoAllButton.visibility = View.VISIBLE
-        if (service?.controls?.supportsManualFocus() == true) {
-            binding.focusSquare.visibility = View.VISIBLE
-        }
-        refreshVerticalPanel()
     }
 
     /**
@@ -670,6 +689,7 @@ class MainActivity : AppCompatActivity() {
         // fader is the whole fader.
         binding.vWhiteBalance.max = 100
         binding.vWhiteBalance.showsCentre = true
+        binding.vWhiteBalance.marks = Mechanism.presetPositions(100)
         binding.vWhiteBalance.progress = kelvinProgress
         binding.vWhiteBalance.valueText = "${Mechanism.kelvinFromProgress(kelvinProgress, 100)} K"
 
@@ -694,12 +714,17 @@ class MainActivity : AppCompatActivity() {
             Mechanism.Param.ISO -> { isoProgress = progress; pushExposure() }
             Mechanism.Param.SHUTTER -> { shutterProgress = progress; pushExposure() }
             Mechanism.Param.WHITE_BALANCE -> {
-                kelvinProgress = progress
+                // Magnetic: near tungsten or daylight the fader lands exactly,
+                // because two shots that nearly match do not match.
+                val asked = Mechanism.kelvinFromProgress(progress, 100)
+                val snapped = Mechanism.snapKelvin(asked)
+                kelvinProgress =
+                    if (snapped != asked) Mechanism.progressForKelvin(snapped, 100) else progress
                 if (manualWhiteBalance) {
                     // Shifts the camera's own measurement warmer or cooler
                     // rather than substituting a textbook answer for it.
                     service?.controls?.nudgeWhiteBalanceTo(
-                        Mechanism.kelvinFromProgress(progress, 100)
+                        Mechanism.kelvinFromProgress(kelvinProgress, 100)
                     )
                 }
             }
@@ -876,6 +901,22 @@ class MainActivity : AppCompatActivity() {
         // The menu is the controls, and pressing it again puts them away. The
         // focus box used to swallow the tap that did this, which left no way
         // out at all.
+        binding.focusModeButton.setOnClickListener {
+            val next = if (focusDirector.mode == FocusDirector.Mode.MANUAL) {
+                FocusDirector.Mode.AUTO
+            } else {
+                FocusDirector.Mode.MANUAL
+            }
+            focusDirector.setMode(next)
+            refreshFocusButton()
+            say(if (next == FocusDirector.Mode.AUTO) "Focus checking every 2s" else "Focus locked")
+        }
+        binding.focusModeButton.setOnLongClickListener {
+            binding.focusSquare.cycleSize()
+            true
+        }
+        refreshFocusButton()
+
         binding.settingsButton.setOnClickListener { toggleVerticalPanel() }
         binding.settingsButton.setOnLongClickListener { openControlBar(); true }
         binding.gearButton.setOnClickListener { startActivity(SettingsActivity.intent(this)) }
@@ -910,6 +951,11 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
+    }
+
+    private fun refreshFocusButton() {
+        binding.focusModeButton.centerText =
+            if (focusDirector.mode == FocusDirector.Mode.AUTO) "A" else "M"
     }
 
     private fun refreshLiveIndicators() {
@@ -973,6 +1019,37 @@ class MainActivity : AppCompatActivity() {
             NdiReceiver.sendCommand(CameraCommand(requestState = true))
             remote.setLogCurve(appSettings.logCurve)
         }, 1500)
+    }
+
+    /**
+     * Balance by eye, on the scope, the way it is done at a desk. The marker
+     * is dragged until the cloud sits on the centre, and what that produces is
+     * a change in camera gains rather than a filter on the picture: the
+     * correction lives in the sensor, so it is in the stream and the recording
+     * as well as on screen.
+     */
+    private fun setUpVectorscope() {
+        binding.vectorscope.onBalanceMoved = { du, dv ->
+            val controls = service?.controls ?: return@onBalanceMoved
+            val base = controls.heldGains ?: controls.lastAwbGains ?: return@onBalanceMoved
+            controls.applyBalanceGains(Mechanism.gainsFromChromaOffset(base, du, dv))
+        }
+        binding.vectorscope.onBalanceReleased = {
+            manualWhiteBalance = true
+            say("Balance held")
+        }
+    }
+
+    private fun refreshVectorscope() {
+        val wanted = appSettings.vectorscopeVisible
+        binding.vectorscope.visibility = if (wanted) View.VISIBLE else View.GONE
+        if (!wanted) return
+        service?.latestChroma()?.let { (u, v) ->
+            val centroid = Mechanism.chromaCentroid(u, v)
+            binding.vectorscope.setFrame(
+                Mechanism.vectorscope(u, v), 64, centroid[0], centroid[1]
+            )
+        }
     }
 
     // --- plumbing -----------------------------------------------------------

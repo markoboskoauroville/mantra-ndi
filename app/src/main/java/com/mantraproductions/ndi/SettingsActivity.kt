@@ -86,7 +86,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowExportLut.setOnClickListener { exportLut() }
         binding.rowLoadLut.setOnClickListener { loadLut() }
         binding.rowHistogram.setOnClickListener {
-            prefs.histogramVisible = !prefs.histogramVisible
+            prefs.vectorscopeVisible = !prefs.vectorscopeVisible
             refresh()
         }
         binding.rowStabilisation.setOnClickListener {
@@ -119,7 +119,11 @@ class SettingsActivity : AppCompatActivity() {
             if (it == LogCurves.Curve.REC709) "None, straight Rec.709"
             else "${it.vendor} ${it.displayName}, grey at ${"%.3f".format(LogCurves.middleGrey(it))}"
         }
-        binding.valueHistogram.text = if (prefs.histogramVisible) "Shown" else "Hidden"
+        binding.valueHistogram.text = if (prefs.vectorscopeVisible) {
+            "Shown. Drag the marker to balance"
+        } else {
+            "Hidden"
+        }
         binding.valueStabilisation.text = if (prefs.stabilisation) "On" else "Off"
         binding.valueCamera.text = capabilitySummary()
         binding.valueKeys.text = if (KeyService.isEnabled(this)) {

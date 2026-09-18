@@ -178,7 +178,7 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
 
     /** The measurement this camera is currently holding, and its temperature. */
     @Volatile var heldGains: FloatArray? = null
-        private set
+        internal set
     @Volatile var heldKelvin: Int = Mechanism.KELVIN_WORKING_CENTRE
         private set
 
@@ -187,6 +187,12 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
      * it, so the camera keeps its own reading of the room and the operator
      * only moves it warmer or cooler.
      */
+    /** Gains straight from the scope, keeping the camera's own colour matrix. */
+    fun applyBalanceGains(gains: FloatArray): Boolean {
+        heldGains = gains
+        return applyGains(gains)
+    }
+
     fun nudgeWhiteBalanceTo(kelvin: Int): Boolean {
         val base = heldGains ?: lastAwbGains ?: return setManualWhiteBalance(kelvin)
         val shifted = Mechanism.shiftGains(base, heldKelvin, kelvin)

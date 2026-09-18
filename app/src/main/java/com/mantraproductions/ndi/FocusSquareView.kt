@@ -43,11 +43,26 @@ class FocusSquareView @JvmOverloads constructor(
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val rect = RectF()
-    private val half get() = 46f * density
+    /** Small, middle, large. Tapping the box steps through them. */
+    enum class Size(val halfDp: Float) { SMALL(30f), MEDIUM(50f), LARGE(78f) }
+
+    var boxSize: Size = Size.MEDIUM
+        set(value) { field = value; invalidate() }
+
+    private val half get() = boxSize.halfDp * density
 
     init {
         // Not clickable: an unclaimed touch has to fall through to the image.
         isClickable = false
+    }
+
+    /** Steps the box through its three sizes. */
+    fun cycleSize() {
+        boxSize = when (boxSize) {
+            Size.SMALL -> Size.MEDIUM
+            Size.MEDIUM -> Size.LARGE
+            Size.LARGE -> Size.SMALL
+        }
     }
 
     fun moveTo(x: Float, y: Float) {
@@ -83,7 +98,9 @@ class FocusSquareView @JvmOverloads constructor(
             State.LOCKED -> Color.parseColor("#12C46A")
             State.FAILED -> Color.parseColor("#FF2D1F")
         }
-        paint.strokeWidth = 2f * density
+        // Half the weight it was. A focus box is a reference, not a graphic,
+        // and a heavy one hides the very detail being judged.
+        paint.strokeWidth = 1f * density
 
         // Corners rather than a full box, so it covers as little of the
         // subject as possible while still reading as a target.
@@ -101,6 +118,11 @@ class FocusSquareView @JvmOverloads constructor(
     }
 
     private var grabbed = false
+    private var pressStart = 0L
+    private var moved = false
+
+    /** Fired on a tap that was not a drag: the caller decides what focus means. */
+    var onTapped: (() -> Unit)? = null
 
     /**
      * Only touches on the box itself belong to the box.
@@ -118,14 +140,19 @@ class FocusSquareView @JvmOverloads constructor(
                 val reach = half + 20f * density
                 grabbed = Math.abs(event.x - cx) <= reach && Math.abs(event.y - cy) <= reach
                 if (!grabbed) return false
+                pressStart = System.currentTimeMillis()
+                moved = false
                 parent?.requestDisallowInterceptTouchEvent(true)
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
                 if (!grabbed) return false
+                val travelled = Math.abs(event.x - width * centreX) > 6f * density ||
+                        Math.abs(event.y - height * centreY) > 6f * density
+                if (travelled) moved = true
                 moveTo(event.x / width, event.y / height)
-                state = State.IDLE
+                if (moved) state = State.IDLE
                 onMoved?.invoke(centreX, centreY)
                 return true
             }
@@ -134,6 +161,9 @@ class FocusSquareView @JvmOverloads constructor(
                 parent?.requestDisallowInterceptTouchEvent(false)
                 val wasGrabbed = grabbed
                 grabbed = false
+                if (wasGrabbed && !moved && System.currentTimeMillis() - pressStart < 400) {
+                    onTapped?.invoke()
+                }
                 return wasGrabbed
             }
         }

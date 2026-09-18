@@ -64,6 +64,14 @@ class VerticalFaderView @JvmOverloads constructor(
      * than set an absolute one. The mark is where the camera's own reading
      * sits, so the operator can always find their way back to it.
      */
+    /**
+     * Marks at known values, drawn across the track. Used for the white
+     * balance references, where landing exactly on tungsten or daylight is
+     * what makes two shots cut together.
+     */
+    var marks: List<Pair<Float, String>> = emptyList()
+        set(value) { field = value; invalidate() }
+
     var showsCentre: Boolean = false
         set(value) { if (field != value) { field = value; invalidate() } }
 
@@ -175,6 +183,12 @@ class VerticalFaderView @JvmOverloads constructor(
             }
             meterPaint.alpha = 150
             canvas.drawLine(cx, bottom, cx, bottom - span * meter, meterPaint)
+        }
+
+        for ((fraction, _) in marks) {
+            val markY = bottom - span * fraction
+            centrePaint.strokeWidth = 1.5f * density
+            canvas.drawLine(cx - 11f * density, markY, cx + 11f * density, markY, centrePaint)
         }
 
         if (showsCentre) {

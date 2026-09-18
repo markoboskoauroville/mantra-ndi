@@ -85,6 +85,14 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- Focus first, at the top, clear of the system gesture area at the
+             bottom of the screen. M or A, and nothing else. -->
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/focusModeButton"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:layout_marginBottom="14dp" />
+
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/recordButton"
             android:layout_width="58dp"
@@ -159,6 +167,15 @@
         </LinearLayout>
 
     </LinearLayout>
+
+    <com.mantraproductions.ndi.VectorscopeView
+        android:id="@+id/vectorscope"
+        android:layout_width="190dp"
+        android:layout_height="190dp"
+        android:layout_margin="14dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview" />
 
     <!-- One fader at a time, reached by holding the menu button. -->
     <androidx.constraintlayout.widget.ConstraintLayout
