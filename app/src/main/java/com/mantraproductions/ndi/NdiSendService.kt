@@ -118,7 +118,17 @@ class NdiSendService : Service() {
     fun prepare(profile: CaptureProfile, onError: (String) -> Unit): Boolean {
         // Ten bit takes the direct route; everything else stays on the pipeline
         // that is already known to work on this phone.
-        if (AppSettings(applicationContext).tenBitWanted) return prepareDirect(profile, onError)
+        // Ten bit only where the phone actually has it. A setting left on from
+        // another device, or turned on before the detection ran, must not send
+        // an eight bit phone down a pipeline it cannot complete.
+        val settings = AppSettings(applicationContext)
+        if (settings.tenBitWanted && !DeviceProfile.tenBitCapable) {
+            settings.tenBitWanted = false
+            onError("This camera is 8-bit, staying on the standard pipeline")
+        }
+        if (settings.tenBitWanted && DeviceProfile.tenBitCapable) {
+            return prepareDirect(profile, onError)
+        }
         if (stream != null) return true
 
         val ndiStream = NdiStream(applicationContext)
@@ -159,7 +169,9 @@ class NdiSendService : Service() {
                 controls.apply(profile)
                 // The curve the operator chose, applied to the sensor itself so
                 // it reaches preview, stream and recording at once.
-                controls.setLogCurve(AppSettings(applicationContext).logCurve)
+                if (DeviceProfile.logCapable) {
+                    controls.setLogCurve(AppSettings(applicationContext).logCurve)
+                }
             }
         }
         return true

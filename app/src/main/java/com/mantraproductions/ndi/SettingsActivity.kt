@@ -112,7 +112,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.valueSourceName.text = identity.name
         binding.valueBitDepth.text = when {
             !prefs.tenBitWanted -> "8-bit, proven pipeline"
-            !HdrVideoEncoder.supportsTenBit() -> "10-bit asked for, no HEVC Main10 encoder here"
+            !DeviceProfile.tenBitCapable -> "10-bit asked for, this phone is 8-bit"
             else -> "10-bit HLG, camera straight into the encoder"
         }
         binding.valueLogCurve.text = prefs.logCurve.let {
@@ -181,7 +181,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun pickBitDepth() {
-        val tenBitPossible = HdrVideoEncoder.supportsTenBit()
+        val tenBitPossible = DeviceProfile.tenBitCapable
         choose(
             "Bit depth",
             listOf(
@@ -190,7 +190,7 @@ class SettingsActivity : AppCompatActivity() {
             )
         ) { index ->
             if (index == 1 && !tenBitPossible) {
-                toast("This phone has no 10-bit HEVC encoder")
+                toast("This phone's camera is 8-bit")
                 return@choose
             }
             prefs.tenBitWanted = index == 1
@@ -206,6 +206,10 @@ class SettingsActivity : AppCompatActivity() {
         val labels = curves.map {
             if (it == LogCurves.Curve.REC709) "None, straight Rec.709"
             else "${it.vendor} ${it.displayName}"
+        }
+        if (!DeviceProfile.logCapable) {
+            toast("This camera will not take a custom tone curve, so log is unavailable")
+            return
         }
         choose("Log curve", labels) { index ->
             prefs.logCurve = curves[index]
@@ -324,7 +328,9 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun capabilitySummary(): String = try {
+    private fun capabilitySummary(): String = DeviceProfile.summary.ifEmpty { legacySummary() }
+
+    private fun legacySummary(): String = try {
         val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val id = manager.cameraIdList.firstOrNull() ?: return "No camera"
         HdrCapabilities(manager.getCameraCharacteristics(id)).summary()

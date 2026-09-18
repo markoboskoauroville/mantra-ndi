@@ -83,8 +83,12 @@ class MainActivity : AppCompatActivity() {
     private val clearStatus = Runnable { binding.statusText.text = defaultStatus() }
     private val tick = object : Runnable {
         override fun run() {
-            refreshLiveIndicators()
-            refreshVectorscope()
+            try {
+                refreshLiveIndicators()
+                refreshVectorscope()
+            } catch (e: Throwable) {
+                android.util.Log.w("MainActivity", "indicator refresh", e)
+            }
             ui.postDelayed(this, 100)
         }
     }
@@ -141,10 +145,13 @@ class MainActivity : AppCompatActivity() {
         activeProfile = profileStore.selected()
         param = appSettings.lastParam
 
-        setUpControlBar()
-        setUpVerticalPanel()
-        setUpVectorscope()
-        setUpActions()
+        // Each block is independent, and one refusing must not take the screen
+        // with it. A camera app that will not open is worth less than a camera
+        // app with one control missing.
+        safely("control bar") { setUpControlBar() }
+        safely("panel") { setUpVerticalPanel() }
+        safely("vectorscope") { setUpVectorscope() }
+        safely("actions") { setUpActions() }
 
         binding.preview.setOnClickListener { toggleVerticalPanel() }
 
@@ -956,6 +963,15 @@ class MainActivity : AppCompatActivity() {
                 say("Live as $name", transient = false)
             }
             true
+        }
+    }
+
+    private fun safely(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "Could not set up $what", e)
+            say("$what unavailable")
         }
     }
 
