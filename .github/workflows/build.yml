@@ -84,6 +84,8 @@ jobs:
 
       # Gates over the artefact the person will actually receive.
       - name: Gates over the artefact
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           V=${{ steps.version.outputs.v }}
@@ -99,8 +101,28 @@ jobs:
           "$APKSIGNER" verify --print-certs "$APK" > /tmp/certs.txt \
             || { echo "::error::APK is not signed"; exit 1; }
           FINGERPRINT=$(grep -m1 -oP 'SHA-256 digest: \K[0-9a-f]+' /tmp/certs.txt)
-          echo "PASS  signed, certificate $FINGERPRINT"
+
+          # updatable.md §5: pin it, do not merely print it. A printed
+          # fingerprint nobody compares is how a swapped key gets through, and
+          # a swapped key means no build can ever replace an installed one.
+          EXPECTED=$(tr -d ' \n\r' < SIGNING_FINGERPRINT.txt)
+          if [ "$FINGERPRINT" != "$EXPECTED" ]; then
+            echo "::error::Signing key changed. Expected $EXPECTED, got $FINGERPRINT."
+            echo "::error::Every installed copy would have to be uninstalled by hand. Refusing."
+            exit 1
+          fi
+          echo "PASS  signed with the app's own key, $FINGERPRINT"
           echo "$FINGERPRINT" > fingerprint.txt
+
+          # The number must be greater than the last release, or the phone
+          # refuses the install.
+          LAST=$(gh release list --limit 100 --json tagName --jq '.[].tagName' 2>/dev/null \
+            | grep -E '^v[0-9]+$' | sed 's/^v//' | sort -n | tail -1)
+          if [ -n "$LAST" ] && [ "$V" -le "$LAST" ]; then
+            echo "::error::appVersion is $V but v$LAST is already released. The number must rise."
+            exit 1
+          fi
+          echo "PASS  version $V is ahead of ${LAST:-nothing}"
 
           # The three numbers must agree: gradle.properties, the manifest, the filename.
           AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)

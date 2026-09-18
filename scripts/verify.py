@@ -89,6 +89,18 @@ def main():
             missing_views.append(view)
     check("G9 custom views exist", not missing_views, ", ".join(missing_views))
 
+    # G11 — updatable.md: the expected certificate is recorded, so CI can
+    # compare rather than merely print. Without this the app silently becomes
+    # un-updatable and nobody finds out until an install is refused.
+    pin = ROOT / "SIGNING_FINGERPRINT.txt"
+    digest = pin.read_text().strip() if pin.exists() else ""
+    check("G11 signing fingerprint pinned", len(digest) == 64 and
+          all(c in "0123456789abcdef" for c in digest), digest[:16])
+
+    workflow = (ROOT / ".github/workflows/build.yml").read_text()
+    check("G11 CI compares the fingerprint", "SIGNING_FINGERPRINT.txt" in workflow)
+    check("G11 CI fails without a key", "No signing key" in workflow)
+
     # G10 — every layout is well formed. A duplicate attribute is valid enough
     # for a text editor and fatal to the resource merger.
     import xml.dom.minidom
