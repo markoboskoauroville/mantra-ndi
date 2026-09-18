@@ -81,7 +81,10 @@ class ColourWheelView @JvmOverloads constructor(
     private var lastTapAt = 0L
     private var moved = false
 
-    private val wheelRadius: Float get() = (minOf(width, height - barSpace) / 2f) - 4f * density
+    // width is an Int and height minus the bar is a Float, so both are floated
+    // before they are compared rather than letting the comparison pick one.
+    private val wheelRadius: Float
+        get() = (minOf(width.toFloat(), height - barSpace) / 2f) - 4f * density
     private val barSpace: Float get() = 44f * density
     private val centreX: Float get() = width / 2f
     private val centreY: Float get() = (height - barSpace) / 2f
