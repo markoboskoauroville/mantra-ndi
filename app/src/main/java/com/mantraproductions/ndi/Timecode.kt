@@ -134,6 +134,10 @@ data class Timecode(
             return fromFrames(count, rate)
         }
 
+        /**
+         * The names the Tentacle parser already calls, kept as the one public
+         * spelling rather than two doing the same thing.
+         */
         /** Parses what a device or a person writes, in either separator. */
         fun parse(text: String, rate: Rate): Timecode? {
             val parts = text.trim().split(':', ';', '.')
