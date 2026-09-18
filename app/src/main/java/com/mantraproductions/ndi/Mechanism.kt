@@ -196,6 +196,42 @@ object Mechanism {
         }
     }
 
+    // --- the tone curve handed to the camera ---------------------------------
+
+    /**
+     * A log curve sampled into the flat pair array Camera2 wants: input, output,
+     * input, output. The camera is already tone mapping every frame, so
+     * replacing its curve with this one costs nothing per frame. That is the
+     * whole trick behind recording log without a GPU pass.
+     *
+     * @param points how many pairs, from the camera's own maximum
+     */
+    fun toneCurvePoints(curve: LogCurves.Curve, points: Int): FloatArray {
+        val n = points.coerceIn(2, 128)
+        val out = FloatArray(n * 2)
+        for (i in 0 until n) {
+            val input = i.toFloat() / (n - 1)
+            // The camera hands the curve a display-referred value, so undo
+            // Rec.709 to reach scene light before re-encoding in the target.
+            val linear = LogCurves.decode(LogCurves.Curve.REC709, input.toDouble())
+                .coerceAtLeast(0.0)
+            val output = LogCurves.encode(curve, linear).coerceIn(0.0, 1.0)
+            out[i * 2] = input
+            out[i * 2 + 1] = output.toFloat()
+        }
+        return out
+    }
+
+    /**
+     * Focus as a fraction of the lens travel, stepped by a fixed amount.
+     * The plus and minus at the ends of the fader exist because focus is the
+     * one control where a finger is never precise enough.
+     */
+    fun stepFocus(fraction: Float, steps: Int): Float =
+        (fraction + steps * FOCUS_STEP).coerceIn(0f, 1f)
+
+    const val FOCUS_STEP = 0.01f
+
     // --- metering -----------------------------------------------------------
 
     const val METER_FLOOR_DB = -54f

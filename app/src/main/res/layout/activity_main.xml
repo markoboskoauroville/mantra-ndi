@@ -48,6 +48,66 @@
         app:layout_constraintTop_toBottomOf="@id/vuHairline"
         app:layout_constraintStart_toStartOf="parent" />
 
+
+    <!-- Tap the image: every manual control at once, in columns -->
+    <LinearLayout
+        android:id="@+id/verticalPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        android:background="#7A05070A"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/vuHairline"
+        app:layout_constraintBottom_toTopOf="@id/controlRow"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.mantraproductions.ndi.VerticalFaderView
+            android:id="@+id/vIso"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <com.mantraproductions.ndi.VerticalFaderView
+            android:id="@+id/vShutter"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <com.mantraproductions.ndi.VerticalFaderView
+            android:id="@+id/vWhiteBalance"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <com.mantraproductions.ndi.VerticalFaderView
+            android:id="@+id/vFocus"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <com.mantraproductions.ndi.VerticalFaderView
+            android:id="@+id/vZoom"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+    </LinearLayout>
+
+    <CheckBox
+        android:id="@+id/autoModeCheck"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="18dp"
+        android:layout_marginTop="10dp"
+        android:buttonTint="#E7A44C"
+        android:text="Auto"
+        android:textColor="#B6C0CA"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/vuHairline"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- Normal state: two rings and the gear -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/controlRow"

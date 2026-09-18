@@ -156,6 +156,35 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
 
     fun setAutoFocus(): Boolean = source.enableAutoFocus()
 
+    /**
+     * Focus as a fraction of the lens travel, 0 at infinity and 1 at the
+     * closest the lens reaches. The travel differs per phone, so the UI works
+     * in a fraction and the dioptres are computed here.
+     */
+    fun setManualFocus(fraction: Float): Boolean {
+        val closest = characteristics()
+            ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+        if (closest <= 0f) return false
+        return setManualFocus(closest * fraction.coerceIn(0f, 1f))
+    }
+
+    fun supportsManualFocus(): Boolean =
+        (characteristics()?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
+
+    // What the camera last reported, so leaving auto can start from the values
+    // the auto routine had already settled on.
+    @Volatile var lastIso: Int? = null
+        private set
+    @Volatile var lastExposureNs: Long? = null
+        private set
+
+    init {
+        source.setCustomOnCaptureCompletedCallback { _, _, result ->
+            lastIso = result.get(CaptureResult.SENSOR_SENSITIVITY)
+            lastExposureNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+        }
+    }
+
     fun setStabilization(enabled: Boolean) {
         if (enabled) {
             // Optical first where it exists, it doesn't crop or add latency.

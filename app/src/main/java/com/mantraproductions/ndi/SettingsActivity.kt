@@ -115,11 +115,12 @@ class SettingsActivity : AppCompatActivity() {
         choose("LUT size", listOf("17, small and fast", "33, the usual", "65, finest")) { index ->
             val size = listOf(17, 33, 65)[index]
             try {
-                val dir = getExternalFilesDir("LUTs") ?: filesDir
-                if (!dir.exists()) dir.mkdirs()
-                val file = File(dir, CubeLut.fileName(from, LogCurves.Curve.REC709, size))
-                file.writeText(CubeLut.generate(from, LogCurves.Curve.REC709, size))
-                toast("Written to ${file.name}, ${file.length() / 1024} kB")
+                val name = CubeLut.fileName(from, LogCurves.Curve.REC709, size)
+                val target = MediaStoreOutput.writeText(
+                    this, name, CubeLut.generate(from, LogCurves.Curve.REC709, size)
+                )
+                if (target == null) toast("Could not write the LUT")
+                else toast("Written to ${target.shortLocation}")
             } catch (e: Exception) {
                 toast("Could not write the LUT: ${e.message}")
             }
@@ -129,10 +130,15 @@ class SettingsActivity : AppCompatActivity() {
     private fun loadLut() {
         // A picker belongs here; until then the app reads whatever the operator
         // has dropped into its own LUTs folder, which needs no permission.
-        val dir = getExternalFilesDir("LUTs")
-        val cubes = dir?.listFiles { f -> f.name.endsWith(".cube", ignoreCase = true) }
+        val dir = File(
+            android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DCIM
+            ),
+            MediaStoreOutput.FOLDER
+        )
+        val cubes = dir.listFiles { f -> f.name.endsWith(".cube", ignoreCase = true) }
         if (cubes.isNullOrEmpty()) {
-            toast("Put a .cube file in Android/data/${packageName}/files/LUTs")
+            toast("Put a .cube file in DCIM/${MediaStoreOutput.FOLDER}")
             return
         }
         choose("Monitor LUT", listOf("None") + cubes.map { it.name }) { index ->

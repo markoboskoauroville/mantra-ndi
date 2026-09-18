@@ -321,9 +321,17 @@ class NdiSendService : Service() {
     fun startRecording(): Boolean {
         val s = stream ?: return false
         if (isRecording) return true
-        val dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: filesDir
+        // DCIM/Mantra NDI, so the footage lands in the gallery beside
+        // everything else the phone shot rather than inside the app where an
+        // uninstall would take it along.
+        val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+            .format(java.util.Date())
+        val name = "MantraNDI_$stamp.mp4"
+        val dir = java.io.File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+            MediaStoreOutput.FOLDER
+        )
         if (!dir.exists()) dir.mkdirs()
-        val name = "mantra_ndi_" + System.currentTimeMillis() + ".mp4"
         val path = java.io.File(dir, name).absolutePath
         return try {
             s.startRecord(path) { status -> Log.i(TAG, "Record status: " + status) }

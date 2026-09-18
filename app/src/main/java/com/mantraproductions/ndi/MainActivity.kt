@@ -49,10 +49,14 @@ class MainActivity : AppCompatActivity() {
     private var shutterProgress = 100
     private var kelvinProgress = 5600 - ProControls.KELVIN_MIN
     private var zoomProgress = 0
+    private var focusProgress = 0
     private var manualExposure = false
+    private var manualWhiteBalance = false
+    private var manualFocus = false
 
     private val pump = ControlPump()
     private val ui = Handler(Looper.getMainLooper())
+    private val clearStatus = Runnable { binding.statusText.text = defaultStatus() }
     private val tick = object : Runnable {
         override fun run() {
             refreshLiveIndicators()
@@ -80,6 +84,26 @@ class MainActivity : AppCompatActivity() {
         else binding.statusText.text = "Camera and microphone access are required"
     }
 
+    /**
+     * Transient messages go away on their own. A camera that still says
+     * "recording saved" four minutes later is a camera lying about its state,
+     * and the operator stops reading the line at all.
+     */
+    private fun say(message: String, transient: Boolean = true) {
+        binding.statusText.text = message.uppercase()
+        ui.removeCallbacks(clearStatus)
+        if (transient) ui.postDelayed(clearStatus, 3000)
+    }
+
+    private fun defaultStatus(): String {
+        val svc = service
+        return when {
+            svc?.isRecording == true -> "RECORDING"
+            svc?.isStreaming == true -> "LIVE AS ${identity.name.uppercase()}"
+            else -> "IDLE"
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -93,7 +117,10 @@ class MainActivity : AppCompatActivity() {
         param = appSettings.lastParam
 
         setUpControlBar()
+        setUpVerticalPanel()
         setUpActions()
+
+        binding.preview.setOnClickListener { toggleVerticalPanel() }
 
         binding.preview.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
@@ -138,8 +165,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
-        if (binding.paramBar.visibility == View.VISIBLE) closeControlBar()
-        else super.onBackPressed()
+        when {
+            binding.verticalPanel.visibility == View.VISIBLE -> toggleVerticalPanel()
+            binding.paramBar.visibility == View.VISIBLE -> closeControlBar()
+            else -> super.onBackPressed()
+        }
     }
 
     private fun setUpFullScreen() {
@@ -313,6 +343,149 @@ class MainActivity : AppCompatActivity() {
         controls.setStabilization(appSettings.stabilisation)
     }
 
+    // --- every control at once, in columns ---------------------------------
+
+    private fun setUpVerticalPanel() {
+        val faders = listOf(
+            binding.vIso to Mechanism.Param.ISO,
+            binding.vShutter to Mechanism.Param.SHUTTER,
+            binding.vWhiteBalance to Mechanism.Param.WHITE_BALANCE,
+            binding.vZoom to Mechanism.Param.ZOOM
+        )
+        faders.forEach { (fader, which) ->
+            fader.label = which.label
+            fader.onChange = { onVerticalMoved(which, it) }
+            fader.onRelease = { pump.flush() }
+            fader.onTouchedWhileAutomatic = { leaveAuto(which) }
+        }
+
+        binding.vFocus.label = "Focus"
+        binding.vFocus.max = 100
+        binding.vFocus.onChange = { focusProgress = it; pushFocus() }
+        binding.vFocus.onRelease = { pump.flush() }
+        binding.vFocus.onTouchedWhileAutomatic = { leaveAuto(null) }
+
+        binding.autoModeCheck.setOnCheckedChangeListener { _, checked ->
+            if (checked) returnToAuto() else leaveAuto(null)
+        }
+    }
+
+    private fun toggleVerticalPanel() {
+        if (binding.verticalPanel.visibility == View.VISIBLE) {
+            binding.verticalPanel.visibility = View.GONE
+            binding.autoModeCheck.visibility = View.GONE
+            return
+        }
+        // The single fader and the full panel are two answers to the same
+        // question, so never both.
+        if (binding.paramBar.visibility == View.VISIBLE) closeControlBar()
+        seedFromCamera()
+        binding.verticalPanel.visibility = View.VISIBLE
+        binding.autoModeCheck.visibility = View.VISIBLE
+        refreshVerticalPanel()
+    }
+
+    /**
+     * Going back to automatic and letting the camera find an exposure is the
+     * fastest way to a good starting point, which is exactly what the operator
+     * wants before taking manual control again. So auto is not just a mode, it
+     * is the seed: whatever it settles on becomes the manual position.
+     */
+    private fun returnToAuto() {
+        val controls = service?.controls ?: return
+        controls.setAutoExposure()
+        controls.setAutoWhiteBalance()
+        controls.setAutoFocus()
+        manualExposure = false
+        manualWhiteBalance = false
+        manualFocus = false
+        say("Auto, finding exposure")
+        // Give the routine a moment to settle, then take its answer.
+        ui.postDelayed({ seedFromCamera(); refreshVerticalPanel() }, 900)
+    }
+
+    private fun leaveAuto(which: Mechanism.Param?) {
+        val controls = service?.controls ?: return
+        binding.autoModeCheck.isChecked = false
+        when (which) {
+            Mechanism.Param.WHITE_BALANCE -> manualWhiteBalance = true
+            Mechanism.Param.ISO, Mechanism.Param.SHUTTER ->
+                if (controls.supportsManualSensor()) manualExposure = true
+            else -> manualFocus = true
+        }
+        refreshVerticalPanel()
+    }
+
+    /** Takes the camera's own current readings as the manual starting point. */
+    private fun seedFromCamera() {
+        val controls = service?.controls ?: return
+        val iso = controls.lastIso
+        val exposure = controls.lastExposureNs
+        controls.isoRange()?.let { range ->
+            if (iso != null) isoProgress = (iso - range.lower).coerceIn(0, range.upper - range.lower)
+        }
+        shutterRange()?.let { range ->
+            if (exposure != null) {
+                shutterProgress =
+                    Mechanism.progressForShutter(exposure, 200, range.first, range.second)
+            }
+        }
+    }
+
+    private fun refreshVerticalPanel() {
+        val controls = service?.controls
+        binding.vIso.automatic = !manualExposure
+        binding.vShutter.automatic = !manualExposure
+        binding.vWhiteBalance.automatic = !manualWhiteBalance
+        binding.vFocus.automatic = !manualFocus
+        binding.vZoom.automatic = false
+
+        controls?.isoRange()?.let {
+            binding.vIso.max = (it.upper - it.lower).coerceAtLeast(1)
+            binding.vIso.progress = isoProgress
+            binding.vIso.valueText = "${it.lower + isoProgress}"
+        }
+        binding.vShutter.max = 200
+        binding.vShutter.progress = shutterProgress
+        shutterRange()?.let { range ->
+            binding.vShutter.valueText = Mechanism.formatShutter(
+                Mechanism.shutterFromProgress(shutterProgress, 200, range.first, range.second)
+            )
+        }
+        binding.vWhiteBalance.max = ProControls.KELVIN_MAX - ProControls.KELVIN_MIN
+        binding.vWhiteBalance.progress = kelvinProgress
+        binding.vWhiteBalance.valueText = "${ProControls.KELVIN_MIN + kelvinProgress} K"
+
+        binding.vFocus.progress = focusProgress
+        binding.vFocus.valueText = if (focusProgress == 0) "\u221E" else "$focusProgress%"
+
+        binding.vZoom.max = 100
+        binding.vZoom.progress = zoomProgress
+        controls?.zoomRange()?.let {
+            binding.vZoom.valueText = String.format(
+                "%.1fx", it.lower + (zoomProgress / 100f) * (it.upper - it.lower)
+            )
+        }
+    }
+
+    private fun onVerticalMoved(which: Mechanism.Param, progress: Int) {
+        when (which) {
+            Mechanism.Param.ISO -> { isoProgress = progress; pushExposure() }
+            Mechanism.Param.SHUTTER -> { shutterProgress = progress; pushExposure() }
+            Mechanism.Param.WHITE_BALANCE -> {
+                kelvinProgress = progress
+                if (manualWhiteBalance) pump.setKelvin(ProControls.KELVIN_MIN + progress)
+            }
+            Mechanism.Param.ZOOM -> { zoomProgress = progress; pushZoom(progress) }
+        }
+        refreshVerticalPanel()
+    }
+
+    private fun pushFocus() {
+        if (!manualFocus) return
+        service?.controls?.setManualFocus(focusProgress / 100f)
+    }
+
     // --- live actions -------------------------------------------------------
 
     private fun setUpActions() {
@@ -326,11 +499,11 @@ class MainActivity : AppCompatActivity() {
             val svc = service ?: return@setOnClickListener
             if (svc.isRecording) {
                 svc.stopRecording()
-                binding.statusText.text = "RECORDING SAVED"
+                say("Saved to DCIM/${MediaStoreOutput.FOLDER}")
             } else if (svc.startRecording()) {
-                binding.statusText.text = "RECORDING"
+                say("Recording", transient = false)
             } else {
-                binding.statusText.text = "GO LIVE FIRST"
+                say("Go live first")
             }
         }
 
@@ -340,15 +513,15 @@ class MainActivity : AppCompatActivity() {
             val svc = service ?: return@setOnLongClickListener true
             if (svc.isStreaming) {
                 svc.stopStreaming()
-                binding.statusText.text = "IDLE"
+                say("Idle", transient = false)
             } else {
                 val name = SourceIdentity.sanitize(identity.name)
                 warnIfNameTaken(name)
                 startForegroundService(Intent(this, NdiSendService::class.java))
                 svc.startStreaming(name) { error ->
-                    runOnUiThread { binding.statusText.text = error.uppercase() }
+                    runOnUiThread { say(error) }
                 }
-                binding.statusText.text = "LIVE AS ${name.uppercase()}"
+                say("Live as $name", transient = false)
             }
             true
         }
@@ -391,7 +564,7 @@ class MainActivity : AppCompatActivity() {
         val svc = service ?: return
         val profile = activeProfile ?: return
         val ok = svc.prepare(profile) { error ->
-            runOnUiThread { binding.statusText.text = error.uppercase() }
+            runOnUiThread { say(error) }
         }
         if (ok) {
             if (surfaceReady) svc.attachPreview(binding.preview)
@@ -407,7 +580,7 @@ class MainActivity : AppCompatActivity() {
             val existing = NdiFinder.sources(timeoutMs = 1200)
             NdiFinder.stop()
             if (SourceIdentity.clashesWith(name, existing)) {
-                runOnUiThread { binding.statusText.text = "NAME ALREADY IN USE" }
+                runOnUiThread { say("Name already in use") }
             }
         }
     }

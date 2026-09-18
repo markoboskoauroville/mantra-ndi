@@ -274,6 +274,66 @@ class ColourTest {
         assertNull(CubeLut.parse(truncated))
     }
 
+    // --- the tone curve handed to the camera --------------------------------
+
+    @Test fun toneCurveIsPairsAndSpansTheWholeInput() {
+        val points = Mechanism.toneCurvePoints(LogCurves.Curve.SLOG3, 32)
+        assertEquals(64, points.size)
+        assertEquals(0f, points[0], 0.0001f)
+        assertEquals(1f, points[points.size - 2], 0.0001f)
+    }
+
+    @Test fun toneCurveNeverGoesBackwards() {
+        // A curve that dips makes two brightnesses swap places, which shows up
+        // as banding no grade can remove.
+        for (curve in allCurves) {
+            val points = Mechanism.toneCurvePoints(curve, 64)
+            var previous = -1f
+            var i = 1
+            while (i < points.size) {
+                assertTrue("$curve dipped", points[i] >= previous - 1e-5f)
+                previous = points[i]
+                i += 2
+            }
+        }
+    }
+
+    @Test fun toneCurveStaysInsideTheLegalRange() {
+        for (curve in allCurves) {
+            for (v in Mechanism.toneCurvePoints(curve, 64)) {
+                assertTrue("$curve produced $v", v in 0f..1f && v.isFinite())
+            }
+        }
+    }
+
+    @Test fun toneCurveHonoursWhateverTheCameraAllows() {
+        // Cameras report anything from 2 points upward, and asking for more
+        // than they accept is a rejected request rather than a clamped one.
+        assertEquals(4, Mechanism.toneCurvePoints(LogCurves.Curve.VLOG, 2).size)
+        assertEquals(256, Mechanism.toneCurvePoints(LogCurves.Curve.VLOG, 128).size)
+        assertEquals(256, Mechanism.toneCurvePoints(LogCurves.Curve.VLOG, 999).size)
+    }
+
+    @Test fun aLogToneCurveLiftsShadowsAgainstRec709() {
+        // The visible effect of log: a dark input comes out brighter, which is
+        // where the extra code values for the shadows come from.
+        val rec = Mechanism.toneCurvePoints(LogCurves.Curve.REC709, 32)
+        val log = Mechanism.toneCurvePoints(LogCurves.Curve.LOGC3, 32)
+        assertTrue("log did not lift the shadows", log[5] > rec[5])
+    }
+
+    // --- focus stepping ------------------------------------------------------
+
+    @Test fun focusStepsAreSmallEnoughToBeUseful() {
+        assertEquals(0.51f, Mechanism.stepFocus(0.5f, 1), 0.0001f)
+        assertEquals(0.49f, Mechanism.stepFocus(0.5f, -1), 0.0001f)
+    }
+
+    @Test fun focusCannotBeSteppedPastItsEnds() {
+        assertEquals(1f, Mechanism.stepFocus(1f, 5), 0.0001f)
+        assertEquals(0f, Mechanism.stepFocus(0f, -5), 0.0001f)
+    }
+
     // --- histogram -----------------------------------------------------------
 
     @Test fun flatBlackLandsEntirelyInTheFirstBucket() {
