@@ -233,16 +233,13 @@ class SettingsActivity : AppCompatActivity() {
             entries.mapIndexed { index, entry ->
                 KeyRing.displayLabel(index, entry.key) + "   " +
                     entry.state.name.lowercase().replace('_', ' ')
-            }.joinToString("
-")
+            }.joinToString("\n")
         }
 
         AlertDialog.Builder(this)
             .setTitle("AI focus keys")
             .setMessage(
-                "Tried in order. A real request decides whether one is spent.
-
-" + detail
+                "Tried in order. A real request decides whether one is spent.\n\n" + detail
             )
             .setPositiveButton("Test all") { _, _ -> testAllKeys(store) }
             .setNeutralButton("Import a file") { _, _ ->
