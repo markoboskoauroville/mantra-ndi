@@ -405,86 +405,65 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     /**
-     * Timecode, and the one honest thing to do about a format nobody publishes.
+     * Timecode, and the honest thing to do about a format nobody publishes.
      *
      * Everything above the radio is built and checked: the SMPTE arithmetic,
-     * drop frame, the clock that keeps running between broadcasts, the display,
-     * and the ALE an edit imports. The byte layout inside the advertisement is
-     * licensed rather than documented, so rather than guess it, the app
-     * captures what a real device actually sends. Send that capture over and
-     * the parser is a short function.
+     * drop frame, the clock that keeps running between broadcasts, the display
+     * and the sidecar an edit imports. The byte layout inside the
+     * advertisement is licensed rather than documented, so instead of guessing
+     * it the app records what a real device actually sends.
      */
     private fun manageTimecode() {
-        val sync = TentacleSync(this)
-        val lines = StringBuilder()
-
-        val dialog = AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Timecode")
             .setMessage(
-                if (prefs.timecodeEnabled) "Listening. Anything found appears below."
-                else "Off."
+                if (prefs.timecodeEnabled) {
+                    "Listening for a Tentacle whenever the camera is open."
+                } else {
+                    "Off."
+                }
             )
-            .setPositiveButton(if (prefs.timecodeEnabled) "Turn off" else "Turn on") { _, _ ->
+            .setPositiveButton(
+                if (prefs.timecodeEnabled) "Turn off" else "Turn on"
+            ) { _, _ ->
                 prefs.timecodeEnabled = !prefs.timecodeEnabled
-                if (prefs.timecodeEnabled) requestBluetooth()
                 refresh()
             }
-            .setNeutralButton("Capture a device") { _, _ -> captureTentacle() }
+            .setNeutralButton("What it has heard") { _, _ -> showTimecodeCapture() }
             .setNegativeButton("Close", null)
-            .create()
-        dialog.show()
+            .show()
     }
 
-    private fun captureTentacle() {
-        requestBluetooth()
-        val sync = TentacleSync(this)
-        val progress = AlertDialog.Builder(this)
-            .setTitle("Listening for a Tentacle")
-            .setMessage("Fifteen seconds. Keep the device close and powered.")
-            .setCancelable(false)
-            .create()
-        progress.show()
-
-        sync.listener = object : TentacleSync.Listener {
-            override fun onTimecode(timecode: Timecode, atNanos: Long) = Unit
-            override fun onDeviceSeen(name: String, rssi: Int) {
-                runOnUiThread { progress.setMessage("Seen: " + name) }
-            }
-            override fun onRaw(name: String, manufacturerId: Int, bytes: ByteArray) = Unit
-            override fun onError(message: String) {
-                runOnUiThread { progress.setMessage(message) }
-            }
+    /**
+     * The raw advertisements, for working the format out from a real device.
+     * Bytes that change between two lines a second apart are the timecode;
+     * the ones that do not are identity and flags.
+     */
+    private fun showTimecodeCapture() {
+        val report = TimecodeLog.report()
+        val view = android.widget.ScrollView(this).apply {
+            addView(android.widget.TextView(this@SettingsActivity).apply {
+                text = report
+                typeface = android.graphics.Typeface.MONOSPACE
+                textSize = 10f
+                setTextColor(android.graphics.Color.parseColor("#CFD8DC"))
+                setPadding(36, 26, 36, 26)
+            })
         }
-        sync.start()
-
-        binding.root.postDelayed({
-            sync.stop()
-            progress.dismiss()
-            val report = sync.captureReport()
-            val target = MediaStoreOutput.writeText(
-                this, "MantraNDI_tentacle_capture.txt", report
-            )
-            AlertDialog.Builder(this)
-                .setTitle("Tentacle capture")
-                .setMessage(
-                    report.take(1200) +
-                        (if (target != null) "\n\nSaved to " + target.shortLocation else "")
+        AlertDialog.Builder(this)
+            .setTitle("Tentacle capture")
+            .setView(view)
+            .setPositiveButton("Close", null)
+            .setNeutralButton("Save") { _, _ ->
+                val target = MediaStoreOutput.writeText(
+                    this, "MantraNDI_tentacle_capture.txt", report
                 )
-                .setPositiveButton("Close", null)
-                .show()
-        }, 15_000)
-    }
-
-    private fun requestBluetooth() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            androidx.core.app.ActivityCompat.requestPermissions(
-                this, arrayOf(android.Manifest.permission.BLUETOOTH_SCAN), 77
-            )
-        } else {
-            androidx.core.app.ActivityCompat.requestPermissions(
-                this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 77
-            )
-        }
+                toast(
+                    if (target == null) "Could not write it"
+                    else "Saved to " + target.shortLocation
+                )
+            }
+            .show()
     }
 
     private fun runNetworkTest() {

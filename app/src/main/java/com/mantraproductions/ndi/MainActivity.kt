@@ -74,9 +74,6 @@ class MainActivity : AppCompatActivity() {
     private var balanceBase: FloatArray? = null
     private var lastAppliedMode: AppMode? = null
 
-    /** Timecode from a Tentacle, free running between broadcasts. */
-    private val timecodeClock = TimecodeClock()
-    private var tentacle: TentacleSync? = null
 
     /** The generator in the room, if there is one. */
     private val timecode by lazy { TimecodeSource(applicationContext) }
@@ -269,7 +266,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        tentacle?.stop()
         remoteEngine?.stop()
         remoteEngine = null
         KeyService.cameraInForeground = false
@@ -460,95 +456,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Listens for a Tentacle for as long as the camera screen is up.
-     *
-     * Nothing is connected to and nothing is paired: these devices broadcast,
-     * so any number of phones can read one of them at once, which is the point
-     * of the thing on a multi camera shoot.
-     */
-    private fun startTimecode() {
-        if (!appSettings.timecodeEnabled) return
-        if (tentacle != null) return
-        val sync = TentacleSync(this)
-        sync.listener = object : TentacleSync.Listener {
-            override fun onTimecode(timecode: Timecode, atNanos: Long) {
-                timecodeClock.jam(timecode, atNanos)
-            }
-
-            override fun onDeviceSeen(name: String, rssi: Int) {
-                timecodeSeenName = name
-            }
-
-            override fun onRaw(name: String, manufacturerId: Int, bytes: ByteArray) = Unit
-
-            override fun onError(message: String) {
-                runOnUiThread { say(message) }
-            }
-        }
-        if (sync.start()) tentacle = sync
-    }
-
-    private var timecodeSeenName: String? = null
-
-    private fun refreshTimecode() {
-        if (!appSettings.timecodeEnabled) {
-            binding.timecodeText.visibility = View.GONE
-            return
-        }
-        binding.timecodeText.visibility = View.VISIBLE
-        val now = android.os.SystemClock.elapsedRealtimeNanos()
-        val running = timecodeClock.now(now)
-
-        binding.timecodeText.text = when {
-            running != null -> running.toString()
-            timecodeSeenName != null -> "TC  device found, not readable"
-            else -> "TC  no device"
-        }
-        // Amber while running, dim once the device has gone quiet, so a
-        // Tentacle that walked out of range is visible rather than silently
-        // free running forever.
-        val stale = timecodeClock.secondsSinceHeard(now) > 60
-        binding.timecodeText.alpha = if (running != null && !stale) 1f else 0.45f
-    }
-
     private fun refreshStreamButton() {
         val streaming = service?.isStreaming == true
         binding.streamButton.ringColor =
             if (streaming) CircleButtonView.STREAMING else CircleButtonView.STREAM_IDLE
         binding.streamButton.glow = streaming
-    }
-
-    /**
-     * The start timecode, beside the file.
-     *
-     * MediaMuxer cannot write a timecode track, so the number is written where
-     * an edit can still use it: an ALE, which Avid imports directly and puts
-     * the start timecode straight onto the clip. Nobody has to read it by eye
-     * or type it in.
-     */
-    private fun writeTimecodeSidecar(svc: NdiSendService) {
-        val path = svc.lastRecordingPath ?: return
-        val file = java.io.File(path)
-        val start = timecodeClock.now(android.os.SystemClock.elapsedRealtimeNanos())
-            ?: return
-        val profile = activeProfile ?: return
-
-        val ale = buildString {
-            append("Heading\n")
-            append("FIELD_DELIM\tTABS\n")
-            append("VIDEO_FORMAT\t1080\n")
-            append("FPS\t").append(start.rate.label).append("\n\n")
-            append("Column\n")
-            append("Name\tStart\tEnd\tTape\tSource File\n\n")
-            append("Data\n")
-            append(file.nameWithoutExtension).append('\t')
-            append(start.toString()).append('\t')
-            append(start.toString()).append('\t')
-            append(SourceIdentity.sanitize(identity.name)).append('\t')
-            append(file.name).append('\n')
-        }
-        MediaStoreOutput.writeText(this, file.nameWithoutExtension + ".ale", ale)
     }
 
     private fun toggleRecording() {
@@ -1269,7 +1181,6 @@ class MainActivity : AppCompatActivity() {
                 svc.stopRecording()
                 say("Saved to DCIM/${MediaStoreOutput.FOLDER}")
             } else if (svc.startRecording()) {
-                writeTimecodeSidecar(svc)
                 say("Recording", transient = false)
             } else {
                 say("Go live first")
