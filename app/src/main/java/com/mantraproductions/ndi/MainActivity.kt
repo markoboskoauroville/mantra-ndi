@@ -483,7 +483,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun pushFocus() {
         if (!manualFocus) return
-        service?.controls?.setManualFocus(focusProgress / 100f)
+        service?.controls?.setFocusFraction(focusProgress / 100f)
     }
 
     // --- live actions -------------------------------------------------------

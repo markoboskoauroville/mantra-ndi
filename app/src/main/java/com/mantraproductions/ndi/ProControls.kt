@@ -159,9 +159,9 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
     /**
      * Focus as a fraction of the lens travel, 0 at infinity and 1 at the
      * closest the lens reaches. The travel differs per phone, so the UI works
-     * in a fraction and the dioptres are computed here.
+     * in a fraction and setManualFocus above takes the dioptres.
      */
-    fun setManualFocus(fraction: Float): Boolean {
+    fun setFocusFraction(fraction: Float): Boolean {
         val closest = characteristics()
             ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
         if (closest <= 0f) return false
