@@ -12,7 +12,9 @@ import android.os.IBinder
 import android.os.Looper
 import android.view.SurfaceHolder
 import android.view.View
+import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -365,6 +367,28 @@ class MainActivity : AppCompatActivity() {
         binding.vFocus.onRelease = { pump.flush() }
         binding.vFocus.onTouchedWhileAutomatic = { leaveAuto(null) }
 
+        // An A over each column. Pressing it asks the camera what it would
+        // choose, drops that value onto the fader, and stays manual. It is a
+        // recommendation, not a mode: the operator keeps the control and starts
+        // from somewhere sensible instead of from wherever the fader was left.
+        listOf(
+            binding.aIso to Mechanism.Param.ISO,
+            binding.aShutter to Mechanism.Param.SHUTTER,
+            binding.aWhiteBalance to Mechanism.Param.WHITE_BALANCE,
+            binding.aZoom to Mechanism.Param.ZOOM
+        ).forEach { (button, which) ->
+            button.symbol = "A"
+            button.ringColor = CircleButtonView.IDLE
+            button.setOnClickListener { suggestFor(which) }
+        }
+        binding.aFocus.symbol = "A"
+        binding.aFocus.ringColor = CircleButtonView.IDLE
+        binding.aFocus.setOnClickListener { focusOnSquare() }
+
+        binding.focusSquare.onMoved = { _, _ ->
+            binding.focusSquare.state = FocusSquareView.State.IDLE
+        }
+
         binding.autoModeCheck.setOnCheckedChangeListener { _, checked ->
             if (checked) returnToAuto() else leaveAuto(null)
         }
@@ -374,6 +398,7 @@ class MainActivity : AppCompatActivity() {
         if (binding.verticalPanel.visibility == View.VISIBLE) {
             binding.verticalPanel.visibility = View.GONE
             binding.autoModeCheck.visibility = View.GONE
+            binding.focusSquare.visibility = View.GONE
             return
         }
         // The single fader and the full panel are two answers to the same
@@ -382,6 +407,9 @@ class MainActivity : AppCompatActivity() {
         seedFromCamera()
         binding.verticalPanel.visibility = View.VISIBLE
         binding.autoModeCheck.visibility = View.VISIBLE
+        if (service?.controls?.supportsManualFocus() == true) {
+            binding.focusSquare.visibility = View.VISIBLE
+        }
         refreshVerticalPanel()
     }
 
@@ -481,6 +509,83 @@ class MainActivity : AppCompatActivity() {
         refreshVerticalPanel()
     }
 
+    /**
+     * Runs the camera's own routine for one moment, takes the number it
+     * arrives at, and hands control straight back.
+     */
+    private fun suggestFor(which: Mechanism.Param) {
+        val controls = service?.controls ?: return
+        when (which) {
+            Mechanism.Param.ISO, Mechanism.Param.SHUTTER -> {
+                controls.setAutoExposure()
+                say("Reading the scene")
+                ui.postDelayed({
+                    seedFromCamera()
+                    manualExposure = true
+                    pushExposure()
+                    refreshVerticalPanel()
+                    say("Set from auto, still manual")
+                }, 800)
+            }
+
+            Mechanism.Param.WHITE_BALANCE -> {
+                controls.setAutoWhiteBalance()
+                say("Reading the light")
+                ui.postDelayed({
+                    // Auto white balance reports no Kelvin, so the daylight
+                    // anchor is the honest starting point to hand back.
+                    kelvinProgress = 5600 - ProControls.KELVIN_MIN
+                    manualWhiteBalance = true
+                    controls.setManualWhiteBalance(ProControls.KELVIN_MIN + kelvinProgress)
+                    refreshVerticalPanel()
+                    say("Set to 5600K, still manual")
+                }, 700)
+            }
+
+            Mechanism.Param.ZOOM -> {
+                zoomProgress = 0
+                pushZoom(0)
+                refreshVerticalPanel()
+            }
+        }
+    }
+
+    /**
+     * Focus where the box is, then hold it. Focus as a place rather than a
+     * number: nobody thinks in dioptres, everybody can point at a face.
+     */
+    private fun focusOnSquare() {
+        val controls = service?.controls ?: return
+        if (binding.focusSquare.visibility != View.VISIBLE) {
+            binding.focusSquare.visibility = View.VISIBLE
+        }
+        binding.focusSquare.state = FocusSquareView.State.SEEKING
+        say("Focusing")
+
+        val started = controls.focusOnRegion(binding.focusSquare.normalisedBounds()) { focused ->
+            runOnUiThread {
+                binding.focusSquare.state =
+                    if (focused) FocusSquareView.State.LOCKED else FocusSquareView.State.FAILED
+                if (focused) {
+                    controls.lockFocusHere()
+                    manualFocus = true
+                    controls.lastFocusDistance?.let { distance ->
+                        val closest = maxOf(controls.minimumFocusDistanceOrZero(), 0.0001f)
+                        focusProgress = ((distance / closest) * 100).toInt().coerceIn(0, 100)
+                    }
+                    refreshVerticalPanel()
+                    say("Focus locked")
+                } else {
+                    say("Could not focus there")
+                }
+            }
+        }
+        if (!started) {
+            binding.focusSquare.state = FocusSquareView.State.FAILED
+            say("This camera has no focus control")
+        }
+    }
+
     private fun pushFocus() {
         if (!manualFocus) return
         service?.controls?.setFocusFraction(focusProgress / 100f)
@@ -553,6 +658,11 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             needed += Manifest.permission.POST_NOTIFICATIONS
         }
+        // From Android 10 an app writes its own media into DCIM without asking;
+        // below that the folder needs the old permission.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            needed += Manifest.permission.WRITE_EXTERNAL_STORAGE
+        }
         permissionLauncher.launch(needed.toTypedArray())
     }
 
@@ -571,6 +681,8 @@ class MainActivity : AppCompatActivity() {
             bindControlRanges()
             bindPump()
         }
+        // Levels before the take, not only during it.
+        svc.startMeteringIfIdle()
     }
 
     private fun warnIfNameTaken(name: String) {

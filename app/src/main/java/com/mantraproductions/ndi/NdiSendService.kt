@@ -67,6 +67,13 @@ class NdiSendService : Service() {
     @Volatile var audioLevel: Float = 0f
         private set
 
+    /**
+     * The meter runs whenever the encoder is not holding the microphone, so
+     * levels are visible before a take rather than only during one. Only one
+     * thing may own the mic, so the two take turns.
+     */
+    private val standaloneMeter = AudioMeter { level -> audioLevel = level }
+
     /** Tally from the receiving mixer: bit 0 program, bit 1 preview, -1 none. */
     @Volatile var tally: Int = -1
         private set
@@ -164,6 +171,9 @@ class NdiSendService : Service() {
         }
 
         currentSourceName = sourceName
+        // The encoder takes the microphone now, so the standalone meter steps
+        // aside; VuTap keeps the level coming from the audio actually encoded.
+        standaloneMeter.stop()
         startReconnectScheduler()
         startCommandListener()
         startTallyListener()
@@ -182,6 +192,17 @@ class NdiSendService : Service() {
 
         isStreaming = false
         stopForeground(STOP_FOREGROUND_REMOVE)
+        // Microphone is free again, so the meter goes back to reading it.
+        startMeteringIfIdle()
+    }
+
+    /** Called by the activity on resume, and internally whenever a stream ends. */
+    fun startMeteringIfIdle() {
+        if (!isStreaming && !standaloneMeter.isRunning) standaloneMeter.start()
+    }
+
+    fun stopMetering() {
+        standaloneMeter.stop()
     }
 
     /** Tear down the pipeline but keep the service alive (profile switches). */
@@ -204,6 +225,7 @@ class NdiSendService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        standaloneMeter.stop()
         stopReconnectScheduler()
         stream?.release()
         stream = null

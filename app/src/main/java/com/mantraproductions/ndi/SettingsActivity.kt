@@ -6,6 +6,8 @@ import android.hardware.camera2.CameraManager
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.mantraproductions.ndi.databinding.ActivitySettingsBinding
@@ -24,6 +26,47 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var prefs: AppSettings
     private lateinit var profileStore: ProfileStore
     private lateinit var identity: SourceIdentity
+
+    /**
+     * The system picker, so a LUT can come from anywhere: Downloads, Drive, a
+     * USB stick, wherever the colourist sent it. Going through the picker also
+     * means no storage permission is involved, because the operator granting
+     * access to one file is the permission.
+     */
+    private val lutPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            val parsed = text?.let { CubeLut.parse(it) }
+            if (parsed == null) {
+                toast("That file is not a 3D cube LUT this app can read")
+            } else {
+                // Copied in, because a picked uri is not guaranteed to still
+                // resolve next launch and a monitor LUT has to survive one.
+                val copy = File(lutFolder(), uri.lastPathSegment?.substringAfterLast('/')
+                    ?.takeIf { it.endsWith(".cube", true) } ?: "monitor.cube")
+                copy.writeText(text)
+                prefs.monitorLutName = "${copy.name}, ${parsed.size} cube"
+                refresh()
+                toast("Loaded ${parsed.title}, ${parsed.size} cube")
+            }
+        } catch (e: Exception) {
+            toast("Could not read that file: ${e.message}")
+        }
+    }
+
+    private fun lutFolder(): File {
+        val dir = File(
+            android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DCIM
+            ),
+            MediaStoreOutput.FOLDER
+        )
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,32 +171,23 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadLut() {
-        // A picker belongs here; until then the app reads whatever the operator
-        // has dropped into its own LUTs folder, which needs no permission.
-        val dir = File(
-            android.os.Environment.getExternalStoragePublicDirectory(
-                android.os.Environment.DIRECTORY_DCIM
-            ),
-            MediaStoreOutput.FOLDER
-        )
-        val cubes = dir.listFiles { f -> f.name.endsWith(".cube", ignoreCase = true) }
-        if (cubes.isNullOrEmpty()) {
-            toast("Put a .cube file in DCIM/${MediaStoreOutput.FOLDER}")
-            return
-        }
-        choose("Monitor LUT", listOf("None") + cubes.map { it.name }) { index ->
-            if (index == 0) {
-                prefs.monitorLutName = null
-                refresh()
-                return@choose
-            }
-            val file = cubes[index - 1]
-            val parsed = CubeLut.parse(file.readText())
-            if (parsed == null) {
-                toast("That file is not a 3D cube LUT this app can read")
-            } else {
-                prefs.monitorLutName = "${file.name}, ${parsed.size} cube"
-                refresh()
+        val known = lutFolder().listFiles { f -> f.name.endsWith(".cube", true) }.orEmpty()
+        val options = listOf("Browse the phone\u2026", "None") + known.map { it.name }
+        choose("Monitor LUT", options) { index ->
+            when (index) {
+                // Any MIME, because .cube is routinely served as octet-stream
+                // and filtering on it hides the file the operator came for.
+                0 -> lutPicker.launch(arrayOf("*/*"))
+                1 -> { prefs.monitorLutName = null; refresh() }
+                else -> {
+                    val file = known[index - 2]
+                    val parsed = CubeLut.parse(file.readText())
+                    if (parsed == null) toast("Not a 3D cube LUT this app can read")
+                    else {
+                        prefs.monitorLutName = "${file.name}, ${parsed.size} cube"
+                        refresh()
+                    }
+                }
             }
         }
     }

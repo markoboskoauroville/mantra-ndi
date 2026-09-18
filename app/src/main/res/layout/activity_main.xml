@@ -15,6 +15,16 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <com.mantraproductions.ndi.FocusSquareView
+        android:id="@+id/focusSquare"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/preview"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview" />
+
     <com.mantraproductions.ndi.TallyBorderView
         android:id="@+id/tallyBorder"
         android:layout_width="0dp"
@@ -29,7 +39,7 @@
     <com.mantraproductions.ndi.HairlineVuView
         android:id="@+id/vuHairline"
         android:layout_width="0dp"
-        android:layout_height="3dp"
+        android:layout_height="2dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
@@ -62,35 +72,110 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <com.mantraproductions.ndi.VerticalFaderView
-            android:id="@+id/vIso"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
 
-        <com.mantraproductions.ndi.VerticalFaderView
-            android:id="@+id/vShutter"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aIso"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="6dp" />
 
-        <com.mantraproductions.ndi.VerticalFaderView
-            android:id="@+id/vWhiteBalance"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vIso"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
 
-        <com.mantraproductions.ndi.VerticalFaderView
-            android:id="@+id/vFocus"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
+        </LinearLayout>
 
-        <com.mantraproductions.ndi.VerticalFaderView
-            android:id="@+id/vZoom"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aShutter"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="6dp" />
+
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vShutter"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aWhiteBalance"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="6dp" />
+
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vWhiteBalance"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aFocus"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="6dp" />
+
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vFocus"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aZoom"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="6dp" />
+
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vZoom"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

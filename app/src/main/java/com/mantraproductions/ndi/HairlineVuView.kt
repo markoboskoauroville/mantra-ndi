@@ -61,10 +61,12 @@ class HairlineVuView @JvmOverloads constructor(
         val h = height.toFloat()
         canvas.drawRect(0f, 0f, w, h, trackPaint)
 
+        // TTT mini's reading, which is the one already learned: green while
+        // there is headroom, yellow as it runs out, red when it is gone.
         levelPaint.color = when {
-            level > 0.94f -> Color.parseColor("#FF3B2F")
-            level > 0.82f -> Color.parseColor("#FFB300")
-            else -> Color.parseColor("#E7A44C")
+            level >= PEAKING -> Color.parseColor("#FF2D1F")
+            level >= NEARLY -> Color.parseColor("#FFD400")
+            else -> Color.parseColor("#12C46A")
         }
         canvas.drawRect(0f, 0f, w * level, h, levelPaint)
 
@@ -76,5 +78,11 @@ class HairlineVuView @JvmOverloads constructor(
 
     private companion object {
         const val PEAK_HOLD = 40
+
+        /** Roughly the last 1.5 dB, which is where a digital peak actually bites. */
+        const val PEAKING = 0.945f
+
+        /** About 6 dB of headroom left. */
+        const val NEARLY = 0.86f
     }
 }

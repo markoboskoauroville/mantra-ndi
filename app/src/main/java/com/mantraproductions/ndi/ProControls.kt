@@ -161,12 +161,62 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
      * closest the lens reaches. The travel differs per phone, so the UI works
      * in a fraction and setManualFocus above takes the dioptres.
      */
+    /**
+     * Focus on a rectangle rather than a distance. The box the operator drags
+     * becomes a metering region, the camera is told to find focus inside it,
+     * and once it reports a lock the mode is frozen so it cannot drift off
+     * again mid take.
+     *
+     * @param bounds left, top, right, bottom as fractions of the frame
+     */
+    fun focusOnRegion(bounds: FloatArray, onResult: (Boolean) -> Unit): Boolean {
+        val active = characteristics()
+            ?.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return false
+
+        val rect = android.graphics.Rect(
+            (bounds[0] * active.width()).toInt().coerceIn(0, active.width() - 1),
+            (bounds[1] * active.height()).toInt().coerceIn(0, active.height() - 1),
+            (bounds[2] * active.width()).toInt().coerceIn(1, active.width()),
+            (bounds[3] * active.height()).toInt().coerceIn(1, active.height())
+        )
+        val region = arrayOf(
+            android.hardware.camera2.params.MeteringRectangle(
+                rect, android.hardware.camera2.params.MeteringRectangle.METERING_WEIGHT_MAX
+            )
+        )
+
+        val ok = source.setCustomRequest { builder ->
+            builder.set(CaptureRequest.CONTROL_AF_REGIONS, region)
+            builder.set(CaptureRequest.CONTROL_AE_REGIONS, region)
+            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+            builder.set(
+                CaptureRequest.CONTROL_AF_TRIGGER,
+                CaptureRequest.CONTROL_AF_TRIGGER_START
+            )
+        }
+        if (!ok) return false
+
+        pendingFocusResult = onResult
+        return true
+    }
+
+    /** Freezes focus wherever it just landed, so nothing hunts during a take. */
+    fun lockFocusHere(): Boolean = source.setCustomRequest { builder ->
+        builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+    }
+
+    private var pendingFocusResult: ((Boolean) -> Unit)? = null
+
     fun setFocusFraction(fraction: Float): Boolean {
         val closest = characteristics()
             ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
         if (closest <= 0f) return false
         return setManualFocus(closest * fraction.coerceIn(0f, 1f))
     }
+
+    fun minimumFocusDistanceOrZero(): Float =
+        characteristics()?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
 
     fun supportsManualFocus(): Boolean =
         (characteristics()?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
@@ -177,11 +227,26 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
         private set
     @Volatile var lastExposureNs: Long? = null
         private set
+    @Volatile var lastFocusDistance: Float? = null
+        private set
 
     init {
         source.setCustomOnCaptureCompletedCallback { _, _, result ->
             lastIso = result.get(CaptureResult.SENSOR_SENSITIVITY)
             lastExposureNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+            lastFocusDistance = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
+
+            // A focus request answers through the capture result, not a
+            // callback, so the state is watched until it settles either way.
+            val afState = result.get(CaptureResult.CONTROL_AF_STATE)
+            val settled = afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED ||
+                    afState == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
+            if (settled) {
+                pendingFocusResult?.let { callback ->
+                    pendingFocusResult = null
+                    callback(afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED)
+                }
+            }
         }
     }
 
