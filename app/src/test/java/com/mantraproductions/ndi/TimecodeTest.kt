@@ -79,9 +79,12 @@ class TimecodeTest {
         // Not a bug: non drop labels every frame in order, so after an hour of
         // labels rather less than an hour has passed. Worth pinning down so
         // nobody later mistakes it for one.
+        // An hour of labels takes longer than an hour, because the labels are
+        // counted at thirty and the frames arrive at 29.97. About 3.6 seconds
+        // longer, which is precisely the amount drop frame exists to remove.
         val rate = Timecode.Rate.FPS_29_97
         val seconds = Timecode.toFrames(tc(1, 0, 0, 0, rate)) / rate.fps
-        assertTrue("drifted $seconds", seconds < 3600.0 - 3.0)
+        assertTrue("drifted $seconds", seconds > 3603.0)
     }
 
     @Test fun dropFrameRoundTripsAcrossAMinuteBoundaryEitherWay() {
@@ -133,6 +136,16 @@ class TimecodeTest {
         clock.jam(tc(0, 0, 0, 0, rate), atNanos = 0L)
         // 400 milliseconds at 25 is ten frames.
         assertEquals(tc(0, 0, 0, 10, rate), clock.now(400_000_000L))
+    }
+
+    @Test fun anAnchorAtZeroIsStillAnAnchor() {
+        // Zero is a perfectly good instant. Treating it as "nothing yet" is
+        // how a clock jammed at the start of a session reports no signal for
+        // the rest of it.
+        val clock = TimecodeClock()
+        clock.jam(tc(9, 0, 0, 0, Timecode.Rate.FPS_25), atNanos = 0L)
+        assertTrue(clock.hasSignal)
+        assertNotNull(clock.now(0L))
     }
 
     @Test fun nothingIsReportedBeforeADeviceHasBeenHeard() {

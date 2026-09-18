@@ -201,16 +201,21 @@ class TimecodeClock {
 
     private var anchorFrames = 0L
     private var anchorNanos = 0L
+
+    // A separate flag rather than a magic zero. Zero is a perfectly good
+    // instant, and treating it as "nothing yet" made a clock jammed at the
+    // start of time report no signal forever.
+    private var jammed = false
     private var rate: Timecode.Rate = Timecode.Rate.FPS_25
 
     @Volatile var lastHeardNanos = 0L
         private set
 
-    val hasSignal: Boolean get() = anchorNanos != 0L
+    val hasSignal: Boolean get() = jammed
 
     /** How long since a device was last heard from, in seconds. */
     fun secondsSinceHeard(nowNanos: Long): Double =
-        if (lastHeardNanos == 0L) Double.MAX_VALUE
+        if (!jammed) Double.MAX_VALUE
         else (nowNanos - lastHeardNanos) / 1_000_000_000.0
 
     fun jam(timecode: Timecode, atNanos: Long) {
@@ -218,6 +223,7 @@ class TimecodeClock {
         anchorNanos = atNanos
         rate = timecode.rate
         lastHeardNanos = atNanos
+        jammed = true
     }
 
     /** Where the clock is now, counted forward from the last reading. */
@@ -229,6 +235,7 @@ class TimecodeClock {
     }
 
     fun clear() {
+        jammed = false
         anchorNanos = 0L
         lastHeardNanos = 0L
     }
