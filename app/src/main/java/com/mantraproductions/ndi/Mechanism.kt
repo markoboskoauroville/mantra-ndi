@@ -23,8 +23,10 @@ object Mechanism {
 
     /** NDI names cross mDNS and get parsed by other software, so keep them plain. */
     fun sanitizeSourceName(raw: String): String {
+        // Disallowed characters become a space rather than vanishing: deleting a
+        // separator welds two words together, so "CAM/A" would read "CAMA".
         val cleaned = raw.trim()
-            .replace(Regex("[^A-Za-z0-9 ._()-]"), "")
+            .replace(Regex("[^A-Za-z0-9 ._()-]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
         return when {
