@@ -128,6 +128,15 @@
             android:layout_height="50dp"
             android:layout_marginBottom="14dp" />
 
+        <!-- Which source is being watched. Only in the modes where the
+             picture comes from somewhere else. -->
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/sourceButton"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_marginBottom="14dp"
+            android:visibility="gone" />
+
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/gearButton"
             android:layout_width="44dp"

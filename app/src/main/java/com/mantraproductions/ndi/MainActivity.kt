@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity() {
 
     /** The gains a drag started from, held for the length of that drag. */
     private var balanceBase: FloatArray? = null
+    private var lastAppliedMode: AppMode? = null
 
     /** Applied together, since one tone curve carries all three. */
     private var gradeDirty = false
@@ -236,7 +237,18 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.focusSquare.boxSize = appSettings.focusBoxSize
-        applyCameraSource()
+        // A mode change in settings takes effect here, including handing the
+        // preview from the camera to the decoder or back.
+        if (appSettings.appMode != lastAppliedMode) {
+            lastAppliedMode = appSettings.appMode
+            service?.releasePipeline()
+            remoteEngine?.stop()
+            remoteEngine = null
+            link = null
+            preparePipeline()
+        } else {
+            applyCameraSource()
+        }
         // Settings may have changed the profile while we were away.
         val picked = profileStore.selected()
         if (picked.name != activeProfile?.name) {
@@ -357,6 +369,41 @@ class MainActivity : AppCompatActivity() {
             say("Live as $name", transient = false)
         }
         refreshStreamButton()
+    }
+
+    /**
+     * The sources on the network, listed here rather than in settings. In
+     * monitor mode this is the only control that matters, so it is the one
+     * control that is there.
+     */
+    private fun pickSourceOnScreen() {
+        if (!NdiFinder.available) {
+            say("This build has no NDI SDK")
+            return
+        }
+        say("Looking for sources", transient = false)
+        thread(name = "source-scan") {
+            NdiFinder.start(applicationContext)
+            val found = NdiFinder.sources(timeoutMs = 3000)
+            NdiFinder.stop()
+            runOnUiThread {
+                if (found.isEmpty()) {
+                    say("Nothing found. Try the network test in settings.")
+                    return@runOnUiThread
+                }
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Watch")
+                    .setItems(found.toTypedArray()) { _, which ->
+                        appSettings.remoteSource = found[which]
+                        remoteEngine?.stop()
+                        remoteEngine = null
+                        link = null
+                        applyCameraSource()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
     }
 
     private fun refreshStreamButton() {
@@ -1061,6 +1108,12 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
+        // Picking what to watch belongs on the screen that watches it, not
+        // three taps away in settings.
+        binding.sourceButton.centerText = "SRC"
+        binding.sourceButton.ringColor = CircleButtonView.ACTIVE
+        binding.sourceButton.setOnClickListener { pickSourceOnScreen() }
+
         binding.streamButton.centerText = "NDI"
         binding.streamButton.setOnClickListener { toggleStreaming() }
 
@@ -1226,6 +1279,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshLiveIndicators() {
         val svc = service ?: return
+        if (appSettings.appMode == AppMode.MONITOR) {
+            // No microphone of ours in this mode, and no tally about us.
+            binding.vuHairline.setLevel(0f)
+            binding.tallyBorder.state = TallyBorderView.State.OFF
+            return
+        }
 
         // Top hairline is what the microphone hears; the gain fader's own
         // meter is what the encoder is given. The fader sits between them.
@@ -1260,30 +1319,46 @@ class MainActivity : AppCompatActivity() {
      * monitor at the chosen source, shows the red frame, and swaps the control
      * link; everything else on this screen is unchanged, which is the point.
      */
+    /**
+     * Local, remote or monitor, and the difference is which of two things
+     * fills the preview: this phone's sensor, or a decoder fed from the
+     * network. Never both.
+     */
     private fun applyCameraSource() {
-        val wantRemote = appSettings.remoteMode && appSettings.remoteSource != null
-        if (wantRemote == (link?.isRemote == true) && link != null) return
+        val mode = appSettings.appMode
+
+        if (mode == AppMode.LOCAL) {
+            remoteEngine?.stop()
+            remoteEngine = null
+            binding.remoteBorder.visibility = View.GONE
+            service?.controls?.let { link = LocalLink(it) }
+            applyModeToInterface(mode)
+            return
+        }
+
+        val source = appSettings.remoteSource
+        if (source == null) {
+            say("Pick a source in settings", transient = false)
+            applyModeToInterface(mode)
+            return
+        }
+
+        // Already watching this one; restarting would only blank the picture.
+        if (remoteEngine != null && (link as? RemoteLink)?.label == source) {
+            applyModeToInterface(mode)
+            return
+        }
 
         remoteEngine?.stop()
         remoteEngine = null
 
-        if (!wantRemote) {
-            binding.remoteBorder.visibility = View.GONE
-            service?.controls?.let { link = LocalLink(it) }
-            return
-        }
-
-        val source = appSettings.remoteSource ?: return
         val remote = RemoteLink(source)
         link = remote
         binding.remoteBorder.sourceName = source
         binding.remoteBorder.visibility = View.VISIBLE
-        say("Remote: $source", transient = false)
+        applyModeToInterface(mode)
 
         if (!surfaceReady) return
-        // The remote picture is decoded into the same TextureView the local
-        // camera draws to, so the scope reads a remote camera exactly as it
-        // reads this one.
         val texture = binding.preview.surfaceTexture ?: return
         val engine = MonitorEngine(
             surface = Surface(texture),
@@ -1295,12 +1370,48 @@ class MainActivity : AppCompatActivity() {
         )
         engine.start(source)
         remoteEngine = engine
-        // Ask the camera to describe itself, and put it on the same curve, or
-        // the two cameras will not cut together.
-        binding.root.postDelayed({
-            NdiReceiver.sendCommand(CameraCommand(requestState = true))
-            remote.setLogCurve(appSettings.logCurve)
-        }, 1500)
+        say("Watching $source", transient = false)
+
+        if (mode == AppMode.REMOTE) {
+            // Ask the camera to describe itself, and put it on the same curve,
+            // or the two cameras will not cut together.
+            binding.root.postDelayed({
+                NdiReceiver.sendCommand(CameraCommand(requestState = true))
+                remote.setLogCurve(appSettings.logCurve)
+            }, 1500)
+        }
+    }
+
+    /**
+     * What is on screen, decided by the mode rather than by what happens to be
+     * left over from the last one.
+     *
+     * Monitor has no lens anywhere, so it has no focus box, no control
+     * columns, no record and no stream: a monitor that offers to change
+     * exposure is lying about what it can do. It keeps the scopes, because
+     * they read pixels and there are pixels.
+     */
+    private fun applyModeToInterface(mode: AppMode) {
+        val hasLens = mode == AppMode.LOCAL || mode == AppMode.REMOTE
+        val shootsHere = mode == AppMode.LOCAL
+
+        binding.focusModeButton.visibility = if (hasLens) View.VISIBLE else View.GONE
+        binding.recordButton.visibility = if (shootsHere) View.VISIBLE else View.GONE
+        binding.streamButton.visibility = if (shootsHere) View.VISIBLE else View.GONE
+        binding.settingsButton.visibility = if (hasLens) View.VISIBLE else View.GONE
+        binding.sourceButton.visibility = if (shootsHere) View.GONE else View.VISIBLE
+
+        if (!hasLens) {
+            binding.focusSquare.visibility = View.GONE
+            binding.verticalPanel.visibility = View.GONE
+            binding.autoAllButton.visibility = View.GONE
+            binding.paramBar.visibility = View.GONE
+            binding.gradePanel.visibility = View.GONE
+        } else if (binding.verticalPanel.visibility != View.VISIBLE &&
+            binding.vectorscope.visibility != View.VISIBLE
+        ) {
+            binding.focusSquare.visibility = View.VISIBLE
+        }
     }
 
     /**
@@ -1505,7 +1616,26 @@ class MainActivity : AppCompatActivity() {
         bindService(Intent(this, NdiSendService::class.java), connection, Context.BIND_AUTO_CREATE)
     }
 
+    /**
+     * Only one thing may write to the preview.
+     *
+     * This was the bug behind a remote camera whose name appeared and whose
+     * picture never did. The local camera attached itself to the preview the
+     * moment the service connected, whatever the mode, and the NDI decoder
+     * then opened a second Surface on the same SurfaceTexture. Two producers,
+     * one consumer: the camera wins and the decoded frames go nowhere. The
+     * name still arrived because it comes over metadata rather than over the
+     * video.
+     *
+     * The mode now decides who owns it, once, and the loser is not started.
+     */
     private fun preparePipeline() {
+        if (appSettings.appMode != AppMode.LOCAL) {
+            // Not our camera's screen. Make sure it is not holding anything.
+            service?.releasePipeline()
+            applyCameraSource()
+            return
+        }
         val svc = service ?: return
         val profile = activeProfile ?: return
         val ok = svc.prepare(profile) { error ->
