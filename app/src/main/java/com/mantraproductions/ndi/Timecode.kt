@@ -113,6 +113,27 @@ data class Timecode(
             return plain - dropped
         }
 
+        /**
+         * Frames per second as an integer, for code that counts rather than
+         * formats. Kept as a function because the parser walking a byte buffer
+         * has an fps in hand rather than a Rate.
+         */
+        fun nominal(fps: Double): Int = Math.round(fps).toInt()
+
+        fun nominal(rate: Rate): Int = rate.nominal
+
+        /**
+         * The same as [fromFrames], named the way the parser asks for it, and
+         * taking the rate as fps plus a drop frame flag because that is what a
+         * device reports rather than an enum.
+         */
+        fun fromFrameCount(count: Long, fps: Double, dropFrame: Boolean): Timecode {
+            val rate = Rate.values().firstOrNull {
+                Math.abs(it.fps - fps) < 0.01 && it.dropFrame == dropFrame
+            } ?: Rate.FPS_25
+            return fromFrames(count, rate)
+        }
+
         /** Parses what a device or a person writes, in either separator. */
         fun parse(text: String, rate: Rate): Timecode? {
             val parts = text.trim().split(':', ';', '.')

@@ -404,68 +404,6 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Timecode, and the honest thing to do about a format nobody publishes.
-     *
-     * Everything above the radio is built and checked: the SMPTE arithmetic,
-     * drop frame, the clock that keeps running between broadcasts, the display
-     * and the sidecar an edit imports. The byte layout inside the
-     * advertisement is licensed rather than documented, so instead of guessing
-     * it the app records what a real device actually sends.
-     */
-    private fun manageTimecode() {
-        AlertDialog.Builder(this)
-            .setTitle("Timecode")
-            .setMessage(
-                if (prefs.timecodeEnabled) {
-                    "Listening for a Tentacle whenever the camera is open."
-                } else {
-                    "Off."
-                }
-            )
-            .setPositiveButton(
-                if (prefs.timecodeEnabled) "Turn off" else "Turn on"
-            ) { _, _ ->
-                prefs.timecodeEnabled = !prefs.timecodeEnabled
-                refresh()
-            }
-            .setNeutralButton("What it has heard") { _, _ -> showTimecodeCapture() }
-            .setNegativeButton("Close", null)
-            .show()
-    }
-
-    /**
-     * The raw advertisements, for working the format out from a real device.
-     * Bytes that change between two lines a second apart are the timecode;
-     * the ones that do not are identity and flags.
-     */
-    private fun showTimecodeCapture() {
-        val report = TimecodeLog.report()
-        val view = android.widget.ScrollView(this).apply {
-            addView(android.widget.TextView(this@SettingsActivity).apply {
-                text = report
-                typeface = android.graphics.Typeface.MONOSPACE
-                textSize = 10f
-                setTextColor(android.graphics.Color.parseColor("#CFD8DC"))
-                setPadding(36, 26, 36, 26)
-            })
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Tentacle capture")
-            .setView(view)
-            .setPositiveButton("Close", null)
-            .setNeutralButton("Save") { _, _ ->
-                val target = MediaStoreOutput.writeText(
-                    this, "MantraNDI_tentacle_capture.txt", report
-                )
-                toast(
-                    if (target == null) "Could not write it"
-                    else "Saved to " + target.shortLocation
-                )
-            }
-            .show()
-    }
-
     private fun runNetworkTest() {
         val waiting = AlertDialog.Builder(this)
             .setTitle("NDI network test")
