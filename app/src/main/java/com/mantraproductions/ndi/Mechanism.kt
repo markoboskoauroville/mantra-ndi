@@ -289,6 +289,34 @@ object Mechanism {
         return (fraction * steps).toInt().coerceIn(0, steps)
     }
 
+    /**
+     * The colour temperature that best matches a set of camera gains.
+     *
+     * The inverse of [kelvinToGains], found by search rather than by algebra:
+     * the forward curve is a piecewise black body approximation with no clean
+     * closed form, and a search over eight thousand Kelvin converges in about
+     * thirteen steps, which costs nothing once per press of a button.
+     *
+     * What matters is the red to blue ratio. Green is the reference both ways,
+     * and the absolute scale of the gains is set by whichever channel needed
+     * the least, so only the ratio carries the temperature.
+     */
+    fun kelvinFromGains(red: Float, green: Float, blue: Float): Int {
+        if (red <= 0f || blue <= 0f) return KELVIN_WORKING_CENTRE
+        val targetRatio = (red / blue).toDouble()
+
+        var low = KELVIN_MIN
+        var high = KELVIN_MAX
+        // Ratio rises with temperature: cool light needs more red gain.
+        repeat(14) {
+            val mid = (low + high) / 2
+            val gains = kelvinToGains(mid)
+            val ratio = gains[0].toDouble() / gains[2].toDouble()
+            if (ratio < targetRatio) low = mid else high = mid
+        }
+        return ((low + high) / 2).coerceIn(KELVIN_MIN, KELVIN_MAX)
+    }
+
     // --- audio gain -----------------------------------------------------------
 
     /** Gain in dB from a fader, centred on unity so the middle changes nothing. */

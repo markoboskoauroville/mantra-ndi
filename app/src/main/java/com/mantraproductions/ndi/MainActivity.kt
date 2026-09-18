@@ -722,20 +722,24 @@ class MainActivity : AppCompatActivity() {
             }
 
             Mechanism.Param.WHITE_BALANCE -> {
+                // Let the camera look at the frame and solve grey, then keep
+                // that solution. Its gains are the balance itself; a Kelvin
+                // number is only how the fader reads it back.
                 controls.setAutoWhiteBalance()
                 ui.postDelayed({
-                    // Auto white balance reports no Kelvin, so the daylight
-                    // anchor is the honest starting point to hand back.
-                    kelvinProgress = Mechanism.progressForKelvin(
-                        Mechanism.KELVIN_WORKING_CENTRE, 100
-                    )
-                    manualWhiteBalance = true
-                    controls.setManualWhiteBalance(
-                        Mechanism.kelvinFromProgress(kelvinProgress, 100)
-                    )
+                    val held = controls.holdMeasuredWhiteBalance()
+                    if (held == null) {
+                        say("This camera does not report its white balance")
+                        controls.setAutoWhiteBalance()
+                    } else {
+                        manualWhiteBalance = true
+                        val kelvin = Mechanism.kelvinFromGains(held[0], held[1], held[2])
+                        kelvinProgress = Mechanism.progressForKelvin(kelvin, 100)
+                        say("Balanced, holding ${kelvin}K")
+                    }
                     refreshVerticalPanel()
                     button.busy = false
-                }, 700)
+                }, 900)
             }
 
             Mechanism.Param.ZOOM -> {

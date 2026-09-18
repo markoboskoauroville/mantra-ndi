@@ -139,6 +139,31 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
 
     fun setWhiteBalancePreset(mode: Int): Boolean = source.enableAutoWhiteBalance(mode)
 
+    /**
+     * Freezes the camera's own grey balance rather than approximating it.
+     *
+     * Taking the gains auto computed and applying them as manual gains keeps
+     * exactly the balance that was on screen a moment ago. Converting to
+     * Kelvin and back would pass the measurement through an approximation in
+     * each direction and land somewhere else.
+     */
+    fun holdMeasuredWhiteBalance(): FloatArray? {
+        val gains = lastAwbGains ?: return null
+        val applied = source.setCustomRequest { builder ->
+            builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+            builder.set(
+                CaptureRequest.COLOR_CORRECTION_MODE,
+                CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
+            )
+            builder.set(
+                CaptureRequest.COLOR_CORRECTION_GAINS,
+                RggbChannelVector(gains[0], gains[1], gains[1], gains[2])
+            )
+            builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, IDENTITY_TRANSFORM)
+        }
+        return if (applied) gains else null
+    }
+
     fun setAutoWhiteBalance(): Boolean =
         source.enableAutoWhiteBalance(CaptureRequest.CONTROL_AWB_MODE_AUTO)
 
@@ -230,11 +255,28 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
     @Volatile var lastFocusDistance: Float? = null
         private set
 
+    /**
+     * The gains the camera's own white balance arrived at, as red, green, blue.
+     *
+     * This is the measurement that was missing. Auto white balance does not
+     * report a temperature anywhere in Camera2, which is why asking it for one
+     * produced a guess. It does report the gains it applied, and those gains
+     * are the grey balance itself: the phone has already looked at the frame
+     * and worked out what makes grey grey.
+     */
+    @Volatile var lastAwbGains: FloatArray? = null
+        private set
+
     init {
         source.setCustomOnCaptureCompletedCallback { _, _, result ->
             lastIso = result.get(CaptureResult.SENSOR_SENSITIVITY)
             lastExposureNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
             lastFocusDistance = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
+            result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { g ->
+                // Two greens are reported; they are the same reference, so one
+                // is enough and averaging them costs nothing.
+                lastAwbGains = floatArrayOf(g.red, (g.greenEven + g.greenOdd) / 2f, g.blue)
+            }
 
             // A focus request answers through the capture result, not a
             // callback, so the state is watched until it settles either way.
