@@ -49,6 +49,19 @@ class VectorscopeView @JvmOverloads constructor(
     var onBalanceMoved: ((Float, Float) -> Unit)? = null
     var onBalanceReleased: (() -> Unit)? = null
 
+    /** Long press anywhere on the scope closes it and gives the screen back. */
+    var onDismiss: (() -> Unit)? = null
+
+    private var pressStart = 0L
+    private var lastTapAt = 0L
+    private var movedWhilePressed = false
+
+    /** Double tap: back to no correction at all. */
+    var onResetBalance: (() -> Unit)? = null
+    private val holdToDismiss = Runnable {
+        if (!movedWhilePressed) onDismiss?.invoke()
+    }
+
     private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1f * density
@@ -146,7 +159,14 @@ class VectorscopeView @JvmOverloads constructor(
         // The handle the operator drags.
         val handleX = cx + offsetU * radius
         val handleY = cy - offsetV * radius
-        canvas.drawCircle(handleX, handleY, 11f * density, handlePaint)
+        canvas.drawCircle(handleX, handleY, 13f * density, handlePaint)
+
+        labelPaint.color = Color.parseColor("#7C8894")
+        canvas.drawText(
+            if (offsetU == 0f && offsetV == 0f) "LONG PRESS TO CLOSE"
+            else "DOUBLE TAP TO RESET, LONG PRESS TO CLOSE",
+            cx, height - 10f * density, labelPaint
+        )
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -155,17 +175,40 @@ class VectorscopeView @JvmOverloads constructor(
         val radius = minOf(cx, cy) - 4f * density
 
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+            MotionEvent.ACTION_DOWN -> {
+                pressStart = System.currentTimeMillis()
+                movedWhilePressed = false
+                postDelayed(holdToDismiss, 700)
+                parent?.requestDisallowInterceptTouchEvent(true)
+                return true
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                // Any real movement is a balance move, not a dismissal.
+                movedWhilePressed = true
+                removeCallbacks(holdToDismiss)
                 offsetU = ((event.x - cx) / radius).coerceIn(-1f, 1f)
                 offsetV = ((cy - event.y) / radius).coerceIn(-1f, 1f)
                 onBalanceMoved?.invoke(offsetU, offsetV)
-                parent?.requestDisallowInterceptTouchEvent(true)
                 invalidate()
                 return true
             }
+
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(holdToDismiss)
                 parent?.requestDisallowInterceptTouchEvent(false)
-                onBalanceReleased?.invoke()
+                if (movedWhilePressed) {
+                    onBalanceReleased?.invoke()
+                } else {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapAt < 320) {
+                        reset()
+                        onResetBalance?.invoke()
+                        lastTapAt = 0
+                    } else {
+                        lastTapAt = now
+                    }
+                }
                 return true
             }
         }

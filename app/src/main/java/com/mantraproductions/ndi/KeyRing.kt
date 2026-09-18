@@ -41,9 +41,42 @@ object KeyRing {
     }
 
     data class Entry(val key: String, val state: State = State.UNKNOWN) {
-        /** Only the last four, ever, for anything a person or a log will see. */
-        val masked: String get() = if (key.length <= 8) "…" else "…${key.takeLast(4)}"
+        /** Only the last four, ever, for a log. */
+        val masked: String get() = if (key.length <= 8) "..." else "..." + key.takeLast(4)
     }
+
+    /**
+     * How a key is named to the operator: its position on the ring, then
+     * enough of each end to tell it apart from its neighbours.
+     *
+     * A row of identical ellipses is unreadable, and the position is what
+     * actually matters, because the ring is walked in order and "key 3 is out
+     * of credit" is a sentence somebody can act on.
+     */
+    fun displayLabel(index: Int, key: String): String {
+        val body = key.removePrefix("gsk_")
+        val head = body.take(3)
+        val tail = body.takeLast(3)
+        return if (body.length < 8) "Key ${index + 1}" else "Key ${index + 1}   $head...$tail"
+    }
+
+    /**
+     * Dead keys to the bottom, order otherwise untouched.
+     *
+     * The alternative to deleting them. A key that is out of credit today is a
+     * key that may be topped up next week, and deleting it loses the only copy
+     * the phone has. Moving it down means the ring stops walking through it
+     * without anything being thrown away.
+     */
+    fun deadToBottom(entries: List<Entry>): List<Entry> {
+        val alive = entries.filter { it.state != State.REFUSED && it.state != State.NO_CREDIT }
+        val dead = entries.filter { it.state == State.REFUSED || it.state == State.NO_CREDIT }
+        return alive + dead
+    }
+
+    /** The other option: gone for good. */
+    fun removeDead(entries: List<Entry>): List<Entry> =
+        entries.filter { it.state != State.REFUSED && it.state != State.NO_CREDIT }
 
     /**
      * Pulls keys out of whatever the operator hands over.

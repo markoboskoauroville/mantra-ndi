@@ -644,6 +644,7 @@ class MainActivity : AppCompatActivity() {
         say("Auto, re-reading the scene")
         // Everything is re-detected, not merely handed back: the whole point
         // of pressing this is that the last answers were wrong.
+        binding.vectorscope.reset()
         ui.postDelayed({
             seedFromCamera()
             controls.holdMeasuredWhiteBalance()?.let {
@@ -1031,7 +1032,7 @@ class MainActivity : AppCompatActivity() {
         binding.vuHairline.setLevel(Mechanism.rmsToMeterFraction(svc.audioLevel))
 
         binding.recordButton.ringColor =
-            if (svc.isRecording) CircleButtonView.RECORDING else CircleButtonView.IDLE
+            if (svc.isRecording) CircleButtonView.RECORDING else CircleButtonView.RECORD_IDLE
         binding.recordButton.glow = svc.isRecording
         binding.recordButton.centerText =
             if (svc.isRecording) Mechanism.recordLabel(svc.recordingElapsedSeconds) else ""
@@ -1111,6 +1112,8 @@ class MainActivity : AppCompatActivity() {
             manualWhiteBalance = true
             say("Balance held")
         }
+        binding.vectorscope.onResetBalance = { resetBalance() }
+        binding.vectorscope.onDismiss = { hideVectorscope() }
     }
 
     private var scopeBitmap: Bitmap? = null
@@ -1126,9 +1129,51 @@ class MainActivity : AppCompatActivity() {
      * and reused, because allocating either at four hertz would be visible in
      * the garbage collector long before it was visible on screen.
      */
+    /**
+     * Back to whatever the camera itself had decided. Without this a balance
+     * dragged too far is a one way door, and the only escape is closing the
+     * app.
+     */
+    private fun resetBalance() {
+        val controls = service?.controls
+        binding.vectorscope.reset()
+        if (controls == null) return
+        controls.setAutoWhiteBalance()
+        ui.postDelayed({
+            controls.holdMeasuredWhiteBalance()
+            manualWhiteBalance = true
+            kelvinProgress = Mechanism.progressForKelvin(controls.heldKelvin, 100)
+            refreshVerticalPanel()
+            say("Balance back to the camera's own")
+        }, 900)
+    }
+
+    /**
+     * The scope owns the screen while it is up. A scope competing with six
+     * faders for the same glass is a scope nobody can read, and the controls
+     * were landing on top of it.
+     */
+    private fun showVectorscope() {
+        if (binding.verticalPanel.visibility == View.VISIBLE) toggleVerticalPanel()
+        if (binding.paramBar.visibility == View.VISIBLE) closeControlBar()
+        binding.focusSquare.visibility = View.GONE
+        binding.controlRow.visibility = View.GONE
+        binding.vectorscope.visibility = View.VISIBLE
+        say("Drag to balance, double tap to reset, long press to close", transient = false)
+    }
+
+    private fun hideVectorscope() {
+        binding.vectorscope.visibility = View.GONE
+        binding.controlRow.visibility = View.VISIBLE
+        binding.focusSquare.visibility = View.VISIBLE
+        appSettings.vectorscopeVisible = false
+        say("Balance locked")
+    }
+
     private fun refreshVectorscope() {
         val wanted = appSettings.vectorscopeVisible
-        binding.vectorscope.visibility = if (wanted) View.VISIBLE else View.GONE
+        if (wanted && binding.vectorscope.visibility != View.VISIBLE) showVectorscope()
+        if (!wanted && binding.vectorscope.visibility == View.VISIBLE) hideVectorscope()
         if (!wanted || !binding.preview.isAvailable) return
 
         val now = System.currentTimeMillis()

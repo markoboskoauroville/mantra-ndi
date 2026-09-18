@@ -143,7 +143,15 @@ class CircleButtonView @JvmOverloads constructor(
 
     companion object {
         val IDLE: Int = Color.parseColor("#F2F4F6")
-        val RECORDING: Int = Color.parseColor("#FF3B2F")
+
+        /**
+         * Record is red whether or not it is rolling, because a white ring
+         * beside two other white rings says nothing about what it does. Dark
+         * at rest, bright while recording, so the state is a change in the
+         * same colour rather than a change of colour.
+         */
+        val RECORD_IDLE: Int = Color.parseColor("#8E1B12")
+        val RECORDING: Int = Color.parseColor("#FF4436")
         val ACTIVE: Int = FaderView.AMBER
     }
 }

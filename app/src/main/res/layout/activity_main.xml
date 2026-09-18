@@ -171,14 +171,19 @@
 
     </LinearLayout>
 
+    <!-- Full screen, and alone. Balancing is a thing you stop to do, and a
+         scope competing with six faders for the same glass is a scope nobody
+         can read. Long press it to put everything back. -->
     <com.mantraproductions.ndi.VectorscopeView
         android:id="@+id/vectorscope"
-        android:layout_width="190dp"
-        android:layout_height="190dp"
-        android:layout_margin="14dp"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#CC05070A"
         android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/preview"
         app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview" />
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview" />
 
     <!-- One fader at a time, reached by holding the menu button. -->
     <androidx.constraintlayout.widget.ConstraintLayout

@@ -161,6 +161,72 @@ class KeyRingTest {
         assertEquals(ring, KeyRing.record(ring, k(9), KeyRing.State.REFUSED))
     }
 
+    // --- naming a key to a person -------------------------------------------
+
+    @Test fun aKeyIsNamedByItsPositionAndBothEnds() {
+        val key = "gsk_" + "abcdefghijklmnopqrstuvwxyz" + "789"
+        val label = KeyRing.displayLabel(0, key)
+        assertTrue(label, label.startsWith("Key 1"))
+        assertTrue(label, label.contains("abc"))
+        assertTrue(label, label.contains("789"))
+    }
+
+    @Test fun positionsAreCountedFromOneBecausePeopleAre() {
+        assertTrue(KeyRing.displayLabel(2, k(1)).startsWith("Key 3"))
+    }
+
+    @Test fun theMiddleOfAKeyIsNeverShown() {
+        val key = "gsk_" + "abcdefghijklmnopqrstuvwxyz" + "789"
+        val label = KeyRing.displayLabel(0, key)
+        assertFalse(label, label.contains("defghijklmn"))
+    }
+
+    @Test fun aKeyTooShortToSplitIsJustNumbered() {
+        assertEquals("Key 1", KeyRing.displayLabel(0, "gsk_abc"))
+    }
+
+    // --- two ways to deal with a spent key -----------------------------------
+
+    @Test fun deadKeysMoveDownWithoutAnythingBeingLost() {
+        val ring = listOf(
+            KeyRing.Entry(k(1), KeyRing.State.NO_CREDIT),
+            KeyRing.Entry(k(2), KeyRing.State.WORKING),
+            KeyRing.Entry(k(3), KeyRing.State.REFUSED),
+            KeyRing.Entry(k(4))
+        )
+        val sorted = KeyRing.deadToBottom(ring)
+        assertEquals(4, sorted.size)
+        assertEquals(k(2), sorted[0].key)
+        assertEquals(k(4), sorted[1].key)
+        assertTrue(sorted.drop(2).all {
+            it.state == KeyRing.State.NO_CREDIT || it.state == KeyRing.State.REFUSED
+        })
+    }
+
+    @Test fun movingDeadKeysDownKeepsTheOrderOfTheLivingOnes() {
+        val ring = listOf(
+            KeyRing.Entry(k(1)), KeyRing.Entry(k(2), KeyRing.State.REFUSED), KeyRing.Entry(k(3))
+        )
+        val sorted = KeyRing.deadToBottom(ring)
+        assertEquals(listOf(k(1), k(3), k(2)), sorted.map { it.key })
+    }
+
+    @Test fun deletingDeadKeysLeavesOnlyTheUsableOnes() {
+        val ring = listOf(
+            KeyRing.Entry(k(1), KeyRing.State.NO_CREDIT),
+            KeyRing.Entry(k(2), KeyRing.State.BUSY),
+            KeyRing.Entry(k(3), KeyRing.State.REFUSED)
+        )
+        assertEquals(listOf(k(2)), KeyRing.removeDead(ring).map { it.key })
+    }
+
+    @Test fun aThrottledKeyIsNeverTreatedAsDeadByEitherOption() {
+        // Busy says nothing about this minute, so it must survive both.
+        val ring = listOf(KeyRing.Entry(k(1), KeyRing.State.BUSY))
+        assertEquals(1, KeyRing.removeDead(ring).size)
+        assertEquals(k(1), KeyRing.deadToBottom(ring)[0].key)
+    }
+
     // --- never showing a key --------------------------------------------------
 
     @Test fun onlyTheLastFourAreEverVisible() {

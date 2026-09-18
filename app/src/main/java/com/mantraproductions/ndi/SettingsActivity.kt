@@ -226,33 +226,103 @@ class SettingsActivity : AppCompatActivity() {
     private fun manageKeyRing() {
         val store = KeyRingStore(this)
         val entries = store.load()
+
         val detail = if (entries.isEmpty()) {
             "No keys yet."
         } else {
-            entries.joinToString("\n") { "  ${'$'}{it.masked}  ${'$'}{it.state.name.lowercase()}" }
+            entries.mapIndexed { index, entry ->
+                KeyRing.displayLabel(index, entry.key) + "   " +
+                    entry.state.name.lowercase().replace('_', ' ')
+            }.joinToString("
+")
         }
 
         AlertDialog.Builder(this)
             .setTitle("AI focus keys")
             .setMessage(
-                "Tried in order, and only a real request decides whether one is " +
-                    "spent.\n\n" + detail
+                "Tried in order. A real request decides whether one is spent.
+
+" + detail
             )
-            .setPositiveButton("Import a file") { _, _ ->
-                // Any type: a key file is routinely served as octet-stream and
-                // filtering on text/plain hides the file it came for.
+            .setPositiveButton("Test all") { _, _ -> testAllKeys(store) }
+            .setNeutralButton("Import a file") { _, _ ->
+                // Any type: key files are routinely served as octet-stream and
+                // filtering hides the file the operator came for.
                 keyFilePicker.launch(arrayOf("*/*"))
             }
-            .setNeutralButton("Revive all") { _, _ ->
-                store.revive()
-                refresh()
-                toast("Every key back in play")
-            }
-            .setNegativeButton("Forget all") { _, _ ->
-                store.clear()
-                refresh()
-            }
+            .setNegativeButton("More") { _, _ -> keyRingHousekeeping(store) }
             .show()
+    }
+
+    /**
+     * The one time a speculative test is right: the operator asked for it.
+     * The ring itself still never probes, because a dead key should cost the
+     * single call that discovered it and nothing more.
+     */
+    private fun testAllKeys(store: KeyRingStore) {
+        val entries = store.load()
+        if (entries.isEmpty()) {
+            toast("No keys to test")
+            return
+        }
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Testing keys")
+            .setMessage("Asking each account to do the smallest thing it sells.")
+            .setCancelable(false)
+            .create()
+        progress.show()
+
+        KeyProbe.testAll(
+            entries = entries,
+            onProgress = { done, total, result ->
+                store.record(result.key, result.state)
+                runOnUiThread {
+                    progress.setMessage("$done of $total tested")
+                }
+            },
+            onFinished = {
+                runOnUiThread {
+                    progress.dismiss()
+                    refresh()
+                    manageKeyRing()
+                }
+            }
+        )
+    }
+
+    /**
+     * Two ways to deal with a spent key, because they are different decisions.
+     * Moving it down stops the ring walking through it and keeps the only copy
+     * this phone has; deleting it is for a key that is genuinely revoked.
+     */
+    private fun keyRingHousekeeping(store: KeyRingStore) {
+        choose(
+            "Keys",
+            listOf(
+                "Move dead keys to the bottom",
+                "Delete dead keys",
+                "Revive all, after topping up",
+                "Forget every key"
+            )
+        ) { index ->
+            when (index) {
+                0 -> {
+                    store.save(KeyRing.deadToBottom(store.load()))
+                    toast("Dead keys moved down")
+                }
+                1 -> {
+                    val before = store.load().size
+                    store.save(KeyRing.removeDead(store.load()))
+                    toast("Removed " + (before - store.load().size))
+                }
+                2 -> {
+                    store.revive()
+                    toast("Every key back in play")
+                }
+                3 -> store.clear()
+            }
+            refresh()
+        }
     }
 
     private fun editApiKey() {
