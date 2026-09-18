@@ -72,9 +72,16 @@ class MechanismTest {
     }
 
     @Test fun anUnusableNameFallsBackRatherThanProducingADotFile() {
-        assertEquals("MantraNDI", Mechanism.fileSafeName(""))
-        assertEquals("MantraNDI", Mechanism.fileSafeName("///"))
+        // An empty name has already become the default source name by the time
+        // it reaches here, so the file is named after that rather than after a
+        // second, different fallback. Two fallbacks for one condition is how
+        // files end up named inconsistently.
+        assertEquals("Mantra_Cam", Mechanism.fileSafeName(""))
+        assertEquals("Mantra_Cam", Mechanism.fileSafeName("///"))
+        // Only a name that survives sanitising and then strips to nothing
+        // reaches the last resort.
         assertEquals("MantraNDI", Mechanism.fileSafeName("..."))
+        assertTrue(Mechanism.fileSafeName("---").isNotEmpty())
     }
 
     @Test fun theExtensionIsNotDuplicatedIntoTheName() {
