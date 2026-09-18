@@ -83,7 +83,6 @@ class MainActivity : AppCompatActivity() {
         setUpDrawer()
         setUpProfileSpinner()
         setUpDials()
-        setUpWhiteBalance()
         setUpActions()
 
         binding.preview.holder.addCallback(object : SurfaceHolder.Callback {
@@ -117,39 +116,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
-        if (binding.settingsPanel.visibility == View.VISIBLE) closeDrawer()
+        if (binding.settingsOverlay.visibility == View.VISIBLE) closeSettings()
         else super.onBackPressed()
     }
 
     // --- drawer ---
 
     private fun setUpDrawer() {
-        binding.settingsFab.setOnClickListener { openDrawer() }
-        binding.scrim.setOnClickListener { closeDrawer() }
-        // Touching the image also dismisses, which is the gesture you reach for
-        // when you want the frame back.
-        binding.preview.setOnClickListener {
-            if (binding.settingsPanel.visibility == View.VISIBLE) closeDrawer()
-        }
+        binding.settingsButton.setOnClickListener { toggleSettings() }
     }
 
-    private fun openDrawer() {
-        binding.scrim.visibility = View.VISIBLE
-        binding.settingsPanel.visibility = View.VISIBLE
-        binding.settingsPanel.translationX = binding.settingsPanel.width.toFloat()
-        binding.settingsPanel.animate().translationX(0f).setDuration(160).start()
-        binding.settingsFab.visibility = View.GONE
+    /** The same ring opens and closes; nothing else on screen changes role. */
+    private fun toggleSettings() {
+        if (binding.settingsOverlay.visibility == View.VISIBLE) closeSettings() else openSettings()
     }
 
-    private fun closeDrawer() {
-        binding.settingsPanel.animate()
-            .translationX(binding.settingsPanel.width.toFloat())
-            .setDuration(140)
-            .withEndAction {
-                binding.settingsPanel.visibility = View.GONE
-                binding.scrim.visibility = View.GONE
-                binding.settingsFab.visibility = View.VISIBLE
-            }.start()
+    private fun openSettings() {
+        binding.settingsOverlay.alpha = 0f
+        binding.settingsOverlay.visibility = View.VISIBLE
+        binding.settingsOverlay.animate().alpha(1f).setDuration(180).start()
+        binding.settingsButton.ringColor = CircleButtonView.ACTIVE
+        binding.settingsButton.glow = true
+    }
+
+    private fun closeSettings() {
+        binding.settingsOverlay.animate().alpha(0f).setDuration(150).withEndAction {
+            binding.settingsOverlay.visibility = View.GONE
+        }.start()
+        binding.settingsButton.ringColor = CircleButtonView.IDLE
+        binding.settingsButton.glow = false
+
         // Name edits commit on close rather than needing a separate button.
         val name = SourceIdentity.sanitize(binding.sourceNameInput.text?.toString().orEmpty())
         binding.sourceNameInput.setText(name)
@@ -159,29 +155,40 @@ class MainActivity : AppCompatActivity() {
     // --- controls ---
 
     private fun setUpDials() {
-        binding.isoDial.label = "ISO"
-        binding.shutterDial.label = "SHUTTER"
-        binding.wbDial.label = "KELVIN"
-        binding.zoomDial.label = "ZOOM"
+        binding.isoFader.label = "ISO"
+        binding.shutterFader.label = "Shutter"
+        binding.wbFader.label = "White balance"
+        binding.zoomFader.label = "Zoom"
 
-        binding.isoDial.onChange = { updateExposureLabels() }
-        binding.isoDial.onRelease = { applyManualExposure() }
-        binding.shutterDial.onChange = { updateExposureLabels() }
-        binding.shutterDial.onRelease = { applyManualExposure() }
+        binding.isoFader.onChange = { updateExposureLabels() }
+        binding.isoFader.onRelease = { applyManualExposure() }
+        binding.shutterFader.onChange = { updateExposureLabels() }
+        binding.shutterFader.onRelease = { applyManualExposure() }
 
-        binding.wbDial.max = ProControls.KELVIN_MAX - ProControls.KELVIN_MIN
-        binding.wbDial.progress = 5600 - ProControls.KELVIN_MIN
-        binding.wbDial.valueText = "5600"
-        binding.wbDial.onChange = { binding.wbDial.valueText = "${ProControls.KELVIN_MIN + it}" }
-        binding.wbDial.onRelease = { applyWhiteBalance() }
+        binding.wbFader.max = ProControls.KELVIN_MAX - ProControls.KELVIN_MIN
+        binding.wbFader.progress = 5600 - ProControls.KELVIN_MIN
+        binding.wbFader.valueText = "5600 K"
+        binding.wbFader.onChange = { binding.wbFader.valueText = "${ProControls.KELVIN_MIN + it} K" }
+        binding.wbFader.onRelease = { applyWhiteBalance() }
 
-        binding.zoomDial.max = 100
-        binding.zoomDial.valueText = "1.0x"
-        binding.zoomDial.onChange = { applyZoom(it) }
+        binding.zoomFader.max = 100
+        binding.zoomFader.valueText = "1.0x"
+        binding.zoomFader.onChange = { applyZoom(it) }
 
-        binding.isoDial.isEnabled = false
-        binding.shutterDial.isEnabled = false
-        binding.wbDial.isEnabled = false
+        binding.isoFader.isEnabled = false
+        binding.shutterFader.isEnabled = false
+        binding.wbFader.isEnabled = false
+
+        binding.manualWbCheck.setOnCheckedChangeListener { _, checked ->
+            val controls = service?.controls
+            if (checked && controls?.supportsManualWhiteBalance() != true) {
+                binding.manualWbCheck.isChecked = false
+                binding.statusText.text = "No manual white balance on this camera"
+                return@setOnCheckedChangeListener
+            }
+            binding.wbFader.isEnabled = checked
+            if (checked) applyWhiteBalance() else controls?.setAutoWhiteBalance()
+        }
 
         binding.manualExposureCheck.setOnCheckedChangeListener { _, checked ->
             val controls = service?.controls ?: return@setOnCheckedChangeListener
@@ -190,8 +197,8 @@ class MainActivity : AppCompatActivity() {
                 binding.statusText.text = "This camera has no manual sensor control"
                 return@setOnCheckedChangeListener
             }
-            binding.isoDial.isEnabled = checked
-            binding.shutterDial.isEnabled = checked
+            binding.isoFader.isEnabled = checked
+            binding.shutterFader.isEnabled = checked
             if (checked) applyManualExposure() else controls.setAutoExposure()
         }
 
@@ -203,15 +210,15 @@ class MainActivity : AppCompatActivity() {
     private fun bindControlRanges() {
         val controls = service?.controls ?: return
         controls.isoRange()?.let { range ->
-            binding.isoDial.max = (range.upper - range.lower).coerceAtLeast(1)
-            binding.isoDial.progress = ((range.upper - range.lower) / 4)
+            binding.isoFader.max = (range.upper - range.lower).coerceAtLeast(1)
+            binding.isoFader.progress = ((range.upper - range.lower) / 4)
         }
         controls.exposureTimeRange()?.let {
-            binding.shutterDial.max = 200
-            binding.shutterDial.progress = 100
+            binding.shutterFader.max = 200
+            binding.shutterFader.progress = 100
         }
         controls.zoomRange().let { range ->
-            binding.zoomDial.valueText = String.format("%.1fx", range.lower)
+            binding.zoomFader.valueText = String.format("%.1fx", range.lower)
         }
         updateExposureLabels()
     }
@@ -222,8 +229,8 @@ class MainActivity : AppCompatActivity() {
         val isoRange = controls.isoRange() ?: return
         val exposureRange = controls.exposureTimeRange() ?: return
         controls.setManualExposure(
-            (isoRange.lower + binding.isoDial.progress).coerceIn(isoRange.lower, isoRange.upper),
-            progressToShutter(binding.shutterDial.progress, exposureRange.lower, exposureRange.upper)
+            (isoRange.lower + binding.isoFader.progress).coerceIn(isoRange.lower, isoRange.upper),
+            progressToShutter(binding.shutterFader.progress, exposureRange.lower, exposureRange.upper)
         )
         updateExposureLabels()
     }
@@ -231,11 +238,11 @@ class MainActivity : AppCompatActivity() {
     private fun updateExposureLabels() {
         val controls = service?.controls
         controls?.isoRange()?.let {
-            binding.isoDial.valueText = "${it.lower + binding.isoDial.progress}"
+            binding.isoFader.valueText = "${it.lower + binding.isoFader.progress}"
         }
         controls?.exposureTimeRange()?.let {
-            val ns = progressToShutter(binding.shutterDial.progress, it.lower, it.upper)
-            binding.shutterDial.valueText = "1/${(1_000_000_000.0 / ns).roundToInt()}"
+            val ns = progressToShutter(binding.shutterFader.progress, it.lower, it.upper)
+            binding.shutterFader.valueText = "1/${(1_000_000_000.0 / ns).roundToInt()}"
         }
     }
 
@@ -244,7 +251,7 @@ class MainActivity : AppCompatActivity() {
         val range = controls.zoomRange()
         val zoom = range.lower + (progress / 100f) * (range.upper - range.lower)
         controls.setZoom(zoom)
-        binding.zoomDial.valueText = String.format("%.1fx", zoom)
+        binding.zoomFader.valueText = String.format("%.1fx", zoom)
     }
 
     private fun progressToShutter(progress: Int, min: Long, max: Long): Long {
@@ -252,33 +259,10 @@ class MainActivity : AppCompatActivity() {
         return (min + fraction * (max - min)).toLong().coerceIn(min, max)
     }
 
-    private fun setUpWhiteBalance() {
-        val adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_item, listOf("Auto", "Manual (Kelvin)")
-        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        binding.wbSpinner.adapter = adapter
-
-        binding.wbSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                val controls = service?.controls
-                val manual = pos == 1
-                if (manual && controls?.supportsManualWhiteBalance() != true) {
-                    binding.statusText.text = "This camera has no manual white balance"
-                    binding.wbSpinner.setSelection(0)
-                    return
-                }
-                binding.wbDial.isEnabled = manual
-                if (manual) applyWhiteBalance() else controls?.setAutoWhiteBalance()
-            }
-
-            override fun onNothingSelected(p: AdapterView<*>?) {}
-        }
-    }
-
     private fun applyWhiteBalance() {
-        val kelvin = ProControls.KELVIN_MIN + binding.wbDial.progress
+        val kelvin = ProControls.KELVIN_MIN + binding.wbFader.progress
         service?.controls?.setManualWhiteBalance(kelvin)
-        binding.wbDial.valueText = "$kelvin"
+        binding.wbFader.valueText = "$kelvin K"
     }
 
     // --- live actions ---
@@ -323,8 +307,15 @@ class MainActivity : AppCompatActivity() {
     private fun refreshLiveIndicators() {
         val svc = service ?: return
         binding.vuMeter.setLevel(svc.audioLevel)
-        binding.recordButton.recording = svc.isRecording
-        binding.recordButton.elapsedSeconds = svc.recordingElapsedSeconds
+
+        binding.recordButton.ringColor =
+            if (svc.isRecording) CircleButtonView.RECORDING else CircleButtonView.IDLE
+        binding.recordButton.glow = svc.isRecording
+        binding.recordTimer.visibility = if (svc.isRecording) View.VISIBLE else View.INVISIBLE
+        if (svc.isRecording) {
+            val seconds = svc.recordingElapsedSeconds
+            binding.recordTimer.text = String.format("%02d:%02d", seconds / 60, seconds % 60)
+        }
         binding.tallyBorder.state = when {
             !svc.isStreaming -> TallyBorderView.State.OFF
             svc.tally < 0 -> TallyBorderView.State.OFF

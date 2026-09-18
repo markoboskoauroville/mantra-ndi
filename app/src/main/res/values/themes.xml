@@ -1,8 +1,22 @@
 <resources>
     <style name="Theme.MantraNdi" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">#00B4B4</item>
-        <item name="colorPrimaryDark">#008080</item>
-        <item name="colorAccent">#00E0E0</item>
-        <item name="android:windowBackground">#101418</item>
+        <item name="colorPrimary">#E7A44C</item>
+        <item name="colorPrimaryDark">#8A5F22</item>
+        <item name="colorAccent">#E7A44C</item>
+        <item name="android:windowBackground">#05070A</item>
+    </style>
+
+    <!-- Mantra: amber on near-black, wide letter spacing, hairline rules -->
+    <style name="MantraSectionLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">26dp</item>
+        <item name="android:layout_marginTop">18dp</item>
+        <item name="android:layout_marginBottom">2dp</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.28</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">#E7A44C</item>
+        <item name="android:alpha">0.75</item>
     </style>
 </resources>

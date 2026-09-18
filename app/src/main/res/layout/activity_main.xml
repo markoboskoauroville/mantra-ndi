@@ -2,12 +2,10 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="#05070A">
 
-    <!-- Image fills the screen; everything else floats over it -->
     <SurfaceView
         android:id="@+id/preview"
         android:layout_width="0dp"
@@ -17,7 +15,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Tally border, drawn over the image, never takes touches -->
     <com.mantraproductions.ndi.TallyBorderView
         android:id="@+id/tallyBorder"
         android:layout_width="0dp"
@@ -29,11 +26,11 @@
 
     <com.mantraproductions.ndi.VuMeterView
         android:id="@+id/vuMeter"
-        android:layout_width="6dp"
+        android:layout_width="4dp"
         android:layout_height="0dp"
-        android:layout_marginStart="18dp"
-        android:layout_marginTop="48dp"
-        android:layout_marginBottom="48dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="44dp"
+        android:layout_marginBottom="120dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
@@ -42,192 +39,208 @@
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="20dp"
-        android:background="#66000000"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="5dp"
-        android:text="Idle"
-        android:textColor="#ECEFF1"
-        android:textSize="13sp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="22dp"
+        android:letterSpacing="0.14"
+        android:text="IDLE"
+        android:textAllCaps="true"
+        android:textColor="#8C99A6"
+        android:textSize="11sp"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="@id/vuMeter"
         app:layout_constraintStart_toEndOf="@id/vuMeter" />
 
-    <com.mantraproductions.ndi.RecordButtonView
-        android:id="@+id/recordButton"
-        android:layout_width="76dp"
-        android:layout_height="76dp"
-        android:layout_marginBottom="20dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- Stream on/off sits beside record, so the two live actions are together -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/startStopButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="28dp"
-        android:text="Go live"
-        app:layout_constraintTop_toTopOf="@id/recordButton"
-        app:layout_constraintBottom_toBottomOf="@id/recordButton"
-        app:layout_constraintEnd_toStartOf="@id/recordButton" />
-
-    <!-- Opens the settings drawer -->
-    <View
-        android:id="@+id/settingsFab"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_margin="20dp"
-        android:background="@drawable/circle_outline"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- Tap anywhere outside the drawer to close it -->
-    <View
-        android:id="@+id/scrim"
+    <!-- Settings overlay: full screen, scrollable, sitting over the image -->
+    <ScrollView
+        android:id="@+id/settingsOverlay"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="#66000000"
+        android:background="@drawable/overlay_scrim"
+        android:fadeScrollbars="true"
+        android:scrollbars="none"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/controlRow"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <ScrollView
-        android:id="@+id/settingsPanel"
-        android:layout_width="320dp"
-        android:layout_height="0dp"
-        android:background="#F0101418"
-        android:visibility="gone"
-        android:scrollbars="vertical"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <LinearLayout
+            android:id="@+id/settingsColumn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="18dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/modeButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Switch to Monitor"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+            android:paddingTop="26dp"
+            android:paddingBottom="30dp">
 
             <TextView
+                style="@style/MantraSectionLabel"
+                android:text="Exposure" />
+
+            <CheckBox
+                android:id="@+id/manualExposureCheck"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="Profile"
-                android:textColor="#78909C"
-                android:textSize="12sp" />
+                android:layout_marginHorizontal="26dp"
+                android:buttonTint="#E7A44C"
+                android:text="Manual"
+                android:textColor="#B6C0CA"
+                android:textSize="13sp" />
+
+            <com.mantraproductions.ndi.FaderView
+                android:id="@+id/isoFader"
+                android:layout_width="match_parent"
+                android:layout_height="66dp" />
+
+            <com.mantraproductions.ndi.FaderView
+                android:id="@+id/shutterFader"
+                android:layout_width="match_parent"
+                android:layout_height="66dp" />
+
+            <TextView
+                style="@style/MantraSectionLabel"
+                android:text="Colour" />
+
+            <CheckBox
+                android:id="@+id/manualWbCheck"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="26dp"
+                android:buttonTint="#E7A44C"
+                android:text="Manual white balance"
+                android:textColor="#B6C0CA"
+                android:textSize="13sp" />
+
+            <com.mantraproductions.ndi.FaderView
+                android:id="@+id/wbFader"
+                android:layout_width="match_parent"
+                android:layout_height="66dp" />
+
+            <TextView
+                style="@style/MantraSectionLabel"
+                android:text="Lens" />
+
+            <com.mantraproductions.ndi.FaderView
+                android:id="@+id/zoomFader"
+                android:layout_width="match_parent"
+                android:layout_height="66dp" />
+
+            <CheckBox
+                android:id="@+id/stabilizationCheck"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="26dp"
+                android:buttonTint="#E7A44C"
+                android:text="Stabilisation"
+                android:textColor="#B6C0CA"
+                android:textSize="13sp" />
+
+            <TextView
+                style="@style/MantraSectionLabel"
+                android:text="Source" />
 
             <Spinner
                 android:id="@+id/profileSpinner"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="22dp" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginHorizontal="22dp"
+                android:layout_marginTop="6dp"
                 android:hint="NDI source name">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/sourceNameInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:inputType="text" />
+                    android:inputType="text"
+                    android:textColor="#ECEFF1" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <CheckBox
-                android:id="@+id/manualExposureCheck"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/startStopButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="Manual exposure"
-                android:textColor="#CFD8DC" />
+                android:layout_marginHorizontal="22dp"
+                android:layout_marginTop="12dp"
+                android:text="Go live"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
-            <!-- Dials, two per row, thumb sized -->
-            <LinearLayout
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/modeButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal">
-
-                <com.mantraproductions.ndi.DialView
-                    android:id="@+id/isoDial"
-                    android:layout_width="0dp"
-                    android:layout_height="132dp"
-                    android:layout_weight="1" />
-
-                <com.mantraproductions.ndi.DialView
-                    android:id="@+id/shutterDial"
-                    android:layout_width="0dp"
-                    android:layout_height="132dp"
-                    android:layout_weight="1" />
-
-            </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="White balance"
-                android:textColor="#78909C"
-                android:textSize="12sp" />
-
-            <Spinner
-                android:id="@+id/wbSpinner"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal">
-
-                <com.mantraproductions.ndi.DialView
-                    android:id="@+id/wbDial"
-                    android:layout_width="0dp"
-                    android:layout_height="132dp"
-                    android:layout_weight="1" />
-
-                <com.mantraproductions.ndi.DialView
-                    android:id="@+id/zoomDial"
-                    android:layout_width="0dp"
-                    android:layout_height="132dp"
-                    android:layout_weight="1" />
-
-            </LinearLayout>
-
-            <CheckBox
-                android:id="@+id/stabilizationCheck"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="Stabilization"
-                android:textColor="#CFD8DC" />
+                android:layout_marginHorizontal="22dp"
+                android:layout_marginTop="6dp"
+                android:text="Switch to Monitor"
+                style="@style/Widget.MaterialComponents.Button.TextButton" />
 
             <TextView
                 android:id="@+id/ndiAttribution"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginHorizontal="26dp"
+                android:layout_marginTop="14dp"
                 android:autoLink="web"
                 android:text="Powered by NDI®  https://ndi.video\nNDI® is a registered trademark of Vizrt NDI AB"
-                android:textColor="#546E7A"
-                android:textSize="10sp" />
+                android:textColor="#4A555F"
+                android:textSize="9sp" />
 
         </LinearLayout>
 
     </ScrollView>
+
+    <!-- Two rings. Left records, right reveals. -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/controlRow"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:paddingVertical="14dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/recordButton"
+            android:layout_width="66dp"
+            android:layout_height="66dp"
+            android:layout_marginEnd="30dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/centreGuide" />
+
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/centreGuide"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            app:layout_constraintGuide_percent="0.5" />
+
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/settingsButton"
+            android:layout_width="66dp"
+            android:layout_height="66dp"
+            android:layout_marginStart="30dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toEndOf="@id/centreGuide" />
+
+        <TextView
+            android:id="@+id/recordTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:letterSpacing="0.18"
+            android:text="00:00"
+            android:textColor="#FF3B2F"
+            android:textSize="12sp"
+            android:visibility="invisible"
+            app:layout_constraintBottom_toTopOf="@id/recordButton"
+            app:layout_constraintStart_toStartOf="@id/recordButton"
+            app:layout_constraintEnd_toEndOf="@id/recordButton" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
