@@ -74,9 +74,13 @@ object NetworkTest {
             )
             append('\n')
 
+            // Whether the interface carries multicast is reported per
+            // interface below, which is the answer that actually matters and
+            // the one the platform will still give.
             val wifi = context.applicationContext
                 .getSystemService(Context.WIFI_SERVICE) as WifiManager
-            append("  multicast supported: ").append(wifi.isMulticastEnabled).append('\n')
+            append("  wifi service: ").append(if (wifi.isWifiEnabled) "on" else "off")
+                .append('\n')
         } catch (e: Exception) {
             append("  unreadable: ").append(e.message).append('\n')
         }
