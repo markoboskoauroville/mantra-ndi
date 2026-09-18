@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0C0F"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="14dp"
+        android:paddingTop="26dp"
+        android:paddingBottom="30dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginBottom="18dp"
+            android:text="Settings"
+            android:textColor="#ECEFF1"
+            android:textSize="30sp" />
+
+        <!-- Capture -->
+        <LinearLayout style="@style/MantraSettingsGroup">
+
+            <LinearLayout android:id="@+id/rowProfile" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Capture profile" />
+                <TextView android:id="@+id/valueProfile" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowSourceName" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="NDI source name" />
+                <TextView android:id="@+id/valueSourceName" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowBitDepth" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Bit depth" />
+                <TextView android:id="@+id/valueBitDepth" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Colour -->
+        <LinearLayout style="@style/MantraSettingsGroup">
+
+            <LinearLayout android:id="@+id/rowLogCurve" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Log curve" />
+                <TextView android:id="@+id/valueLogCurve" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowExportLut" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Export LUT" />
+                <TextView android:id="@+id/valueExportLut" style="@style/MantraSettingsValue"
+                    android:text="Generated on demand, no files stored" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowLoadLut" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Monitor LUT" />
+                <TextView android:id="@+id/valueLoadLut" style="@style/MantraSettingsValue"
+                    android:text="None loaded" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Display -->
+        <LinearLayout style="@style/MantraSettingsGroup">
+
+            <LinearLayout android:id="@+id/rowHistogram" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Histogram" />
+                <TextView android:id="@+id/valueHistogram" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowStabilisation" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Stabilisation" />
+                <TextView android:id="@+id/valueStabilisation" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- This device -->
+        <LinearLayout style="@style/MantraSettingsGroup">
+
+            <LinearLayout android:id="@+id/rowCamera" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Camera" />
+                <TextView android:id="@+id/valueCamera" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowAbout" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="About" />
+                <TextView android:id="@+id/valueAbout" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="12dp"
+            android:layout_marginTop="18dp"
+            android:autoLink="web"
+            android:text="Powered by NDI®  https://ndi.video\nNDI® is a registered trademark of Vizrt NDI AB"
+            android:textColor="#4A555F"
+            android:textSize="9sp" />
+
+    </LinearLayout>
+
+</ScrollView>

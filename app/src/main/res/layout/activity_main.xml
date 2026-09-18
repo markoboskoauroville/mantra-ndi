@@ -24,164 +24,31 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Audio as a hairline across the very top. Costs no room, hides nothing,
+         and is the tell that the camera is still running. -->
+    <com.mantraproductions.ndi.HairlineVuView
+        android:id="@+id/vuHairline"
+        android:layout_width="0dp"
+        android:layout_height="3dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <TextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="18dp"
-        android:layout_marginTop="22dp"
+        android:layout_marginTop="14dp"
         android:letterSpacing="0.14"
         android:text="IDLE"
         android:textAllCaps="true"
         android:textColor="#8C99A6"
         android:textSize="11sp"
-        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/vuHairline"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Settings overlay: full screen, scrollable, sitting over the image -->
-    <ScrollView
-        android:id="@+id/settingsOverlay"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:background="@drawable/overlay_scrim"
-        android:fadeScrollbars="true"
-        android:scrollbars="none"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintBottom_toTopOf="@id/controlRow"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview">
-
-        <LinearLayout
-            android:id="@+id/settingsColumn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingTop="26dp"
-            android:paddingBottom="30dp">
-
-            <TextView
-                style="@style/MantraSectionLabel"
-                android:text="Exposure" />
-
-            <CheckBox
-                android:id="@+id/manualExposureCheck"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="26dp"
-                android:buttonTint="#E7A44C"
-                android:text="Manual"
-                android:textColor="#B6C0CA"
-                android:textSize="13sp" />
-
-            <com.mantraproductions.ndi.FaderView
-                android:id="@+id/isoFader"
-                android:layout_width="match_parent"
-                android:layout_height="66dp" />
-
-            <com.mantraproductions.ndi.FaderView
-                android:id="@+id/shutterFader"
-                android:layout_width="match_parent"
-                android:layout_height="66dp" />
-
-            <TextView
-                style="@style/MantraSectionLabel"
-                android:text="Colour" />
-
-            <CheckBox
-                android:id="@+id/manualWbCheck"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="26dp"
-                android:buttonTint="#E7A44C"
-                android:text="Manual white balance"
-                android:textColor="#B6C0CA"
-                android:textSize="13sp" />
-
-            <com.mantraproductions.ndi.FaderView
-                android:id="@+id/wbFader"
-                android:layout_width="match_parent"
-                android:layout_height="66dp" />
-
-            <TextView
-                style="@style/MantraSectionLabel"
-                android:text="Lens" />
-
-            <com.mantraproductions.ndi.FaderView
-                android:id="@+id/zoomFader"
-                android:layout_width="match_parent"
-                android:layout_height="66dp" />
-
-            <CheckBox
-                android:id="@+id/stabilizationCheck"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="26dp"
-                android:buttonTint="#E7A44C"
-                android:text="Stabilisation"
-                android:textColor="#B6C0CA"
-                android:textSize="13sp" />
-
-            <TextView
-                style="@style/MantraSectionLabel"
-                android:text="Source" />
-
-            <Spinner
-                android:id="@+id/profileSpinner"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="22dp" />
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="22dp"
-                android:layout_marginTop="6dp"
-                android:hint="NDI source name">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/sourceNameInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="text"
-                    android:textColor="#ECEFF1" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/startStopButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="22dp"
-                android:layout_marginTop="12dp"
-                android:text="Go live"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/modeButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="22dp"
-                android:layout_marginTop="6dp"
-                android:text="Switch to Monitor"
-                style="@style/Widget.MaterialComponents.Button.TextButton" />
-
-            <TextView
-                android:id="@+id/ndiAttribution"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="26dp"
-                android:layout_marginTop="14dp"
-                android:autoLink="web"
-                android:text="Powered by NDI®  https://ndi.video\nNDI® is a registered trademark of Vizrt NDI AB"
-                android:textColor="#4A555F"
-                android:textSize="9sp" />
-
-        </LinearLayout>
-
-    </ScrollView>
-
-    <!-- Two rings. Left records, right reveals. -->
+    <!-- Normal state: two rings and the gear -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/controlRow"
         android:layout_width="0dp"
@@ -190,6 +57,13 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
+
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/centreGuide"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            app:layout_constraintGuide_percent="0.5" />
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/recordButton"
@@ -200,13 +74,6 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/centreGuide" />
 
-        <androidx.constraintlayout.widget.Guideline
-            android:id="@+id/centreGuide"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            app:layout_constraintGuide_percent="0.5" />
-
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/settingsButton"
             android:layout_width="66dp"
@@ -216,19 +83,54 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toEndOf="@id/centreGuide" />
 
-        <TextView
-            android:id="@+id/recordTimer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:letterSpacing="0.18"
-            android:text="00:00"
-            android:textColor="#FF3B2F"
-            android:textSize="12sp"
-            android:visibility="invisible"
-            app:layout_constraintBottom_toTopOf="@id/recordButton"
-            app:layout_constraintStart_toStartOf="@id/recordButton"
-            app:layout_constraintEnd_toEndOf="@id/recordButton" />
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/gearButton"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:layout_marginEnd="18dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Adjusting state: one fader, replacing the rings entirely -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/paramBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:paddingVertical="6dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/paramCycleButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginStart="14dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <com.mantraproductions.ndi.FaderView
+            android:id="@+id/paramFader"
+            android:layout_width="0dp"
+            android:layout_height="78dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toEndOf="@id/paramCycleButton"
+            app:layout_constraintEnd_toStartOf="@id/paramCloseButton" />
+
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/paramCloseButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginEnd="14dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

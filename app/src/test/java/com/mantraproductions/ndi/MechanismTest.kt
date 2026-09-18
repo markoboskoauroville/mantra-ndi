@@ -260,6 +260,63 @@ class MechanismTest {
         assertEquals(0f, Mechanism.rmsOfPcm16(ByteArray(1)), 0.0001f)
     }
 
+    // --- the record counter, which has to fit inside a circle ---------------
+
+    @Test fun underAMinuteShowsOnlyTheSeconds() {
+        // No leading zero and no empty minute field, so the digits can be drawn
+        // twice the size inside the same ring.
+        assertEquals("0", Mechanism.recordLabel(0))
+        assertEquals("7", Mechanism.recordLabel(7))
+        assertEquals("45", Mechanism.recordLabel(45))
+        assertEquals("59", Mechanism.recordLabel(59))
+    }
+
+    @Test fun minutesAppearOnlyOnceThereAreMinutes() {
+        assertEquals("1:00", Mechanism.recordLabel(60))
+        assertEquals("1:05", Mechanism.recordLabel(65))
+        assertEquals("10:05", Mechanism.recordLabel(605))
+        assertEquals("59:59", Mechanism.recordLabel(3599))
+    }
+
+    @Test fun hoursAppearOnlyOnceThereAreHours() {
+        assertEquals("1:00:00", Mechanism.recordLabel(3600))
+        assertEquals("2:03:04", Mechanism.recordLabel(7384))
+    }
+
+    @Test fun theLabelOnlyEverGrows() {
+        // Each step up must be at least as long as the last, or the text would
+        // jump size backwards mid take.
+        var longest = 0
+        for (s in 0L..7300L step 7) {
+            val length = Mechanism.recordLabel(s).length
+            assertTrue("shrank at $s", length >= longest)
+            longest = length
+        }
+    }
+
+    @Test fun negativeTimeIsTreatedAsZeroRatherThanPrintingAMinus() {
+        assertEquals("0", Mechanism.recordLabel(-5))
+    }
+
+    // --- cycling the one fader ----------------------------------------------
+
+    @Test fun cyclingVisitsEveryParameterAndComesBack() {
+        var p = Mechanism.Param.ISO
+        val seen = mutableListOf(p)
+        repeat(Mechanism.Param.entries.size - 1) {
+            p = p.next()
+            seen.add(p)
+        }
+        assertEquals(Mechanism.Param.entries.size, seen.distinct().size)
+        assertEquals(Mechanism.Param.ISO, p.next())
+    }
+
+    @Test fun anUnknownRememberedParameterFallsBackRatherThanCrashing() {
+        assertEquals(Mechanism.Param.ISO, Mechanism.Param.fromName(null))
+        assertEquals(Mechanism.Param.ISO, Mechanism.Param.fromName("NONSENSE"))
+        assertEquals(Mechanism.Param.SHUTTER, Mechanism.Param.fromName("SHUTTER"))
+    }
+
     // --- remote control protocol -------------------------------------------
 
     @Test fun commandSurvivesTheRoundTrip() {

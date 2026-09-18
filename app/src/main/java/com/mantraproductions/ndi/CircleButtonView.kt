@@ -4,18 +4,22 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RectF
+import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.View
 import kotlin.math.min
 
 /**
- * A ring. Nothing inside it.
+ * A ring, with optional text inside it.
  *
- * The whole control is one stroked circle whose colour carries the state:
- * white at rest, red while recording, amber while a panel it opens is open.
- * No fill, no inner dot, no icon. On top of a live image that reads instantly
- * and hides none of the frame.
+ * The ring itself carries state through its colour alone: white at rest, red
+ * while recording. Nothing is filled, so the frame behind stays visible.
+ *
+ * When there is text it is sized to the circle rather than the other way
+ * round. The running time starts as one digit and is drawn enormous; it only
+ * shrinks when the clock actually needs more room. A fixed size would have to
+ * be small enough for the longest string it might ever hold, which means it is
+ * too small for the string it holds almost all of the time.
  */
 class CircleButtonView @JvmOverloads constructor(
     context: Context,
@@ -25,54 +29,27 @@ class CircleButtonView @JvmOverloads constructor(
 
     private val density = resources.displayMetrics.density
 
-    /** Ring colour. Changing this is the entire visual state of the control. */
-    var ringColor: Int = Color.WHITE
-        set(value) {
-            if (field != value) {
-                field = value
-                invalidate()
-            }
-        }
+    var ringColor: Int = IDLE
+        set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** A faint outer halo, used to mark the active state without adding fill. */
     var glow: Boolean = false
-        set(value) {
-            if (field != value) {
-                field = value
-                invalidate()
-            }
-        }
+        set(value) { if (field != value) { field = value; invalidate() } }
 
-    /**
-     * Audio level, 0..1, drawn as an arc around the same ring.
-     *
-     * It begins at the bottom of the circle and travels all the way round, so
-     * full scale arrives back where it started. Nothing new appears on screen
-     * to show audio: the control you already look at simply fills.
-     */
-    var level: Float = 0f
-        set(value) {
-            val clamped = value.coerceIn(0f, 1f)
-            if (field != clamped) {
-                field = clamped
-                invalidate()
-            }
-        }
+    /** Drawn inside the ring, scaled to fill it. Empty means an empty ring. */
+    var centerText: String = ""
+        set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** Set false on the ring that is not metering. */
-    var showsLevel: Boolean = false
+    /** A glyph for the ring when it has no text, such as the settings mark. */
+    var symbol: String = ""
+        set(value) { if (field != value) { field = value; invalidate() } }
 
-    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        isSubpixelText = true
     }
-    private val levelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val levelRect = RectF()
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-    }
+    private val bounds = Rect()
 
     init {
         isClickable = true
@@ -81,9 +58,10 @@ class CircleButtonView @JvmOverloads constructor(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val desired = (66 * density).toInt()
-        val w = resolveSize(desired, widthMeasureSpec)
-        val h = resolveSize(desired, heightMeasureSpec)
-        val size = min(w, h)
+        val size = min(
+            resolveSize(desired, widthMeasureSpec),
+            resolveSize(desired, heightMeasureSpec)
+        )
         setMeasuredDimension(size, size)
     }
 
@@ -108,19 +86,34 @@ class CircleButtonView @JvmOverloads constructor(
         }
         canvas.drawCircle(cx, cy, radius, ringPaint)
 
-        if (showsLevel && level > 0.005f) {
-            levelPaint.strokeWidth = ringPaint.strokeWidth
-            // Amber through most of the travel, red as it closes on the top of
-            // the scale, which is also where the arc meets its own start.
-            levelPaint.color = when {
-                level > 0.94f -> Color.parseColor("#FF3B2F")
-                level > 0.82f -> Color.parseColor("#FFB300")
-                else -> Color.parseColor("#E7A44C")
-            }
-            levelRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
-            // 90 degrees is the bottom of the circle on this canvas; sweeping
-            // negative runs anticlockwise so the arc climbs the left side first.
-            canvas.drawArc(levelRect, 90f, -360f * level, false, levelPaint)
+        val text = centerText.ifEmpty { symbol }
+        if (text.isEmpty()) return
+
+        // The largest square that fits inside the circle is the diameter over
+        // root two; a little less leaves the glyphs off the stroke.
+        val usable = radius * 1.30f
+        textPaint.color = ringColor
+        fitTextTo(text, usable)
+        textPaint.getTextBounds(text, 0, text.length, bounds)
+        canvas.drawText(text, cx, cy - bounds.exactCenterY(), textPaint)
+    }
+
+    /**
+     * Two passes rather than a search: text width scales linearly with size, so
+     * measuring once at a reference size gives the exact multiplier, and the
+     * second measure only corrects for hinting.
+     */
+    private fun fitTextTo(text: String, available: Float) {
+        val reference = 100f
+        textPaint.textSize = reference
+        val measured = textPaint.measureText(text)
+        if (measured <= 0f) return
+        var size = reference * available / measured
+        textPaint.textSize = size
+        val check = textPaint.measureText(text)
+        if (check > available) {
+            size *= available / check
+            textPaint.textSize = size
         }
     }
 

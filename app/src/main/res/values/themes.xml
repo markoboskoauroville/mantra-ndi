@@ -19,4 +19,40 @@
         <item name="android:textColor">#E7A44C</item>
         <item name="android:alpha">0.75</item>
     </style>
+
+    <!-- Settings rows, shaped like the phone's own settings so the eye knows
+         what it is looking at without being taught. -->
+    <style name="MantraSettingsGroup">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginBottom">16dp</item>
+        <item name="android:background">@drawable/settings_group</item>
+    </style>
+
+    <style name="MantraSettingsRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingHorizontal">20dp</item>
+        <item name="android:paddingVertical">16dp</item>
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="MantraSettingsTitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">#ECEFF1</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="MantraSettingsValue">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textColor">#7C8894</item>
+        <item name="android:textSize">13sp</item>
+    </style>
 </resources>

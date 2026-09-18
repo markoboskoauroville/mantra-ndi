@@ -153,6 +153,49 @@ object Mechanism {
         return floatArrayOf(r, g, b)
     }
 
+    // --- the record counter -------------------------------------------------
+
+    /**
+     * The running time, written as short as it can honestly be.
+     *
+     * Under a minute there is no reason to print a zero minute, and the digits
+     * that are left can then be drawn twice the size inside the same circle.
+     * The label grows only when the clock forces it: 7, 45, 1:00, 10:05,
+     * 1:00:00. Every step keeps the largest text that still fits.
+     */
+    fun recordLabel(seconds: Long): String {
+        val s = seconds.coerceAtLeast(0)
+        val hours = s / 3600
+        val minutes = (s % 3600) / 60
+        val secs = s % 60
+        return when {
+            hours > 0 -> "%d:%02d:%02d".format(hours, minutes, secs)
+            minutes > 0 -> "%d:%02d".format(minutes, secs)
+            else -> secs.toString()
+        }
+    }
+
+    // --- which control the single fader is showing ---------------------------
+
+    /**
+     * One fader at a time, cycled by the button at its left end. Covering the
+     * image with four faders to change one of them was the problem; this keeps
+     * a single row on screen and steps through it.
+     */
+    enum class Param(val label: String) {
+        ISO("ISO"),
+        SHUTTER("Shutter"),
+        WHITE_BALANCE("Kelvin"),
+        ZOOM("Zoom");
+
+        fun next(): Param = entries[(ordinal + 1) % entries.size]
+
+        companion object {
+            fun fromName(name: String?): Param =
+                entries.firstOrNull { it.name == name } ?: ISO
+        }
+    }
+
     // --- metering -----------------------------------------------------------
 
     const val METER_FLOOR_DB = -54f
