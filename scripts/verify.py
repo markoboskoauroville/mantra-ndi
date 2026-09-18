@@ -120,6 +120,19 @@ def main():
             bad_layouts.append(f"{layout.name}: {exc}")
     check("G10 all XML resources parse", not bad_layouts, "; ".join(bad_layouts))
 
+    # G13 — no id declared twice in one layout. The data binding generator
+    # rejects it, and it is the natural result of an edit that inserts a block
+    # twice, which a human reading the file will not notice.
+    duplicate_ids = []
+    for layout in (ROOT / "app/src/main/res/layout").glob("*.xml"):
+        ids = re.findall(r'android:id="@\+id/(\w+)"', layout.read_text())
+        seen = set()
+        for name in ids:
+            if name in seen:
+                duplicate_ids.append(f"{layout.name}:{name}")
+            seen.add(name)
+    check("G13 no duplicate ids in a layout", not duplicate_ids, ", ".join(duplicate_ids))
+
     print()
     if FAILS:
         print(f"{len(FAILS)} check(s) failed: {', '.join(FAILS)}")

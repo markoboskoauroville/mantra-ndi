@@ -108,11 +108,6 @@
                 <TextView android:id="@+id/valueAiFocus" style="@style/MantraSettingsValue" />
             </LinearLayout>
 
-            <LinearLayout android:id="@+id/rowTimecode" style="@style/MantraSettingsRow">
-                <TextView style="@style/MantraSettingsTitle" android:text="Timecode" />
-                <TextView android:id="@+id/valueTimecode" style="@style/MantraSettingsValue" />
-            </LinearLayout>
-
             <LinearLayout android:id="@+id/rowFocusTiming" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Focus hold and rack" />
                 <TextView android:id="@+id/valueFocusTiming" style="@style/MantraSettingsValue" />

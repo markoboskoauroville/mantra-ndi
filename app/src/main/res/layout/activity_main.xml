@@ -92,18 +92,6 @@
     <!-- Read constantly during a take, so it sits where the eye already goes
          and is monospaced, because digits that shift width are unreadable at
          a glance. -->
-    <TextView
-        android:id="@+id/timecodeText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:layout_marginEnd="14dp"
-        android:fontFamily="monospace"
-        android:textColor="#E7A44C"
-        android:textSize="16sp"
-        android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintEnd_toStartOf="@id/controlRow" />
 
     <TextView
         android:id="@+id/statusText"
