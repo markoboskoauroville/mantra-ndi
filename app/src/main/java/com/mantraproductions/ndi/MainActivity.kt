@@ -1029,7 +1029,16 @@ class MainActivity : AppCompatActivity() {
     private fun refreshLiveIndicators() {
         val svc = service ?: return
 
-        binding.vuHairline.setLevel(Mechanism.rmsToMeterFraction(svc.audioLevel))
+        val level = Mechanism.rmsToMeterFraction(svc.audioLevel)
+        binding.vuHairline.setLevel(level)
+
+        // The gain fader's own meter was only redrawn when the panel was
+        // rebuilt, which happens when a control changes and not otherwise, so
+        // it sat frozen at whatever the level had been when the panel opened.
+        // It belongs on the tick with every other live reading.
+        if (binding.verticalPanel.visibility == View.VISIBLE) {
+            binding.vGain.meterLevel = level
+        }
 
         binding.recordButton.ringColor =
             if (svc.isRecording) CircleButtonView.RECORDING else CircleButtonView.RECORD_IDLE

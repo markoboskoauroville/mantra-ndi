@@ -400,6 +400,8 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
     @Volatile var lastAwbKelvin: Int = Mechanism.KELVIN_WORKING_CENTRE
         private set
 
+    @Volatile private var lastKelvinAt = 0L
+
     init {
         source.setCustomOnCaptureCompletedCallback { _, _, result ->
             lastIso = result.get(CaptureResult.SENSOR_SENSITIVITY)
@@ -410,10 +412,17 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
                 // is enough and averaging them costs nothing.
                 val gains = floatArrayOf(g.red, (g.greenEven + g.greenOdd) / 2f, g.blue)
                 lastAwbGains = gains
-                // Constrained to a real illuminant rather than believed as is,
-                // so a scene full of grass cannot report itself as magenta.
-                val measured = Mechanism.constrainToPlanckian(gains[0], gains[1], gains[2])
-                lastAwbKelvin = Mechanism.smoothKelvin(lastAwbKelvin, measured)
+
+                // Reading the gains is free; turning them into a temperature is
+                // not, and nothing needs it thirty times a second. Four times
+                // is faster than anybody can read the number, and this callback
+                // belongs to the thread that delivers frames.
+                val now = System.currentTimeMillis()
+                if (now - lastKelvinAt > KELVIN_INTERVAL_MS) {
+                    lastKelvinAt = now
+                    val measured = Mechanism.constrainToPlanckian(gains[0], gains[1], gains[2])
+                    lastAwbKelvin = Mechanism.smoothKelvin(lastAwbKelvin, measured)
+                }
             }
             result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let { lastAwbTransform = it }
 
@@ -518,6 +527,9 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
     }
 
     companion object {
+        /** Four times a second: faster than a number can be read. */
+        private const val KELVIN_INTERVAL_MS = 250L
+
         const val KELVIN_MIN = Mechanism.KELVIN_MIN
         const val KELVIN_MAX = Mechanism.KELVIN_MAX
 

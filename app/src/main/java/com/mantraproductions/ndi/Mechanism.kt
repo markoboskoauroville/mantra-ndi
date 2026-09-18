@@ -336,28 +336,47 @@ object Mechanism {
      *
      * @return the constrained temperature in Kelvin
      */
+    /**
+     * The locus, computed once and then only ever read.
+     *
+     * The search used to evaluate the black body curve a hundred and sixty
+     * times per call, and it was called on every capture result, which is
+     * nearly five thousand logarithms and powers per second of video on the
+     * camera's own callback thread. That thread delivers frames; making it do
+     * arithmetic delays them, which is where the app's sluggishness and the
+     * minute-long wait after a balance reset both came from.
+     *
+     * The curve does not change, so it is a table. Built once on first use,
+     * read forever after, and the search becomes a scan over a hundred and
+     * sixty pairs of floats with no transcendental left in it.
+     */
+    private val planckianTable: Array<FloatArray> by lazy {
+        Array(((KELVIN_MAX - KELVIN_MIN) / 50) + 1) { i ->
+            val kelvin = KELVIN_MIN + i * 50
+            val gains = kelvinToGains(kelvin)
+            // kelvin, red over green, blue over green
+            floatArrayOf(kelvin.toFloat(), gains[0] / gains[1], gains[2] / gains[1])
+        }
+    }
+
     fun constrainToPlanckian(red: Float, green: Float, blue: Float): Int {
         if (red <= 0f || green <= 0f || blue <= 0f) return KELVIN_WORKING_CENTRE
-        // Work in gains normalised on green, which is how a sensor expresses
-        // an illuminant and what removes exposure from the comparison.
         val targetR = red / green
         val targetB = blue / green
 
         var best = KELVIN_WORKING_CENTRE
-        var bestError = Double.MAX_VALUE
-        var k = KELVIN_MIN
-        while (k <= KELVIN_MAX) {
-            val candidate = kelvinToGains(k)
-            val cr = candidate[0] / candidate[1]
-            val cb = candidate[2] / candidate[1]
-            // Angular-ish error in the two ratios, in log space so a factor of
-            // two costs the same whichever direction it goes.
-            val error = sq(ln((cr / targetR).toDouble())) + sq(ln((cb / targetB).toDouble()))
+        var bestError = Float.MAX_VALUE
+        for (row in planckianTable) {
+            // Squared difference of the two ratios. Not log space any more,
+            // which changes the answer by less than the table's own spacing
+            // and removes the last two logarithms from the hot path.
+            val dr = row[1] - targetR
+            val db = row[2] - targetB
+            val error = dr * dr + db * db
             if (error < bestError) {
                 bestError = error
-                best = k
+                best = row[0].toInt()
             }
-            k += 50
         }
         return best
     }
