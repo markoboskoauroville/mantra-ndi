@@ -983,9 +983,9 @@ class MainActivity : AppCompatActivity() {
      * rectangle at a face across a road, and it is the same focus afterwards.
      */
     private fun askVisionForSubjects() {
-        val key = appSettings.groqApiKey
-        if (key == null) {
-            say("Add a Groq key in settings for AI focus")
+        val store = KeyRingStore(this)
+        if (store.load().isEmpty()) {
+            say("Import AI focus keys in settings")
             return
         }
         if (!binding.preview.isAvailable) return
@@ -997,8 +997,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         say("Looking at the frame", transient = false)
-        VisionFocus.findSubjects(
-            apiKey = key,
+        VisionFocus.findSubjectsWithRing(
+            store = store,
             frame = frame,
             onResult = { subjects ->
                 runOnUiThread {

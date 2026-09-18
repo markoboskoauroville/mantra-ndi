@@ -38,6 +38,99 @@ object VisionFocus {
      */
     const val DEFAULT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
+    /**
+     * One job, one key.
+     *
+     * The ring is asked for a key at the start and that key does the whole
+     * request. It only moves on when the answer proves the key is genuinely
+     * gone, and then the job restarts rather than continuing on a different
+     * account. Nothing is tested speculatively: a dead key costs the one call
+     * that discovered it and nothing afterwards.
+     */
+    fun findSubjectsWithRing(
+        store: KeyRingStore,
+        frame: Bitmap,
+        model: String = DEFAULT_MODEL,
+        onResult: (List<Subject>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        thread(name = "vision-focus-ring") {
+            var entries = store.load()
+            if (entries.isEmpty()) {
+                onError("No keys loaded. Import a file in settings.")
+                return@thread
+            }
+
+            var attempt = KeyRing.nextUsable(entries)
+            var lastMessage = "Every key on the ring is spent"
+
+            while (attempt != null) {
+                val key = attempt.key
+                val outcome = try {
+                    val scaled = Bitmap.createScaledBitmap(frame, 640, 360, true)
+                    val jpeg = ByteArrayOutputStream().also {
+                        scaled.compress(Bitmap.CompressFormat.JPEG, 80, it)
+                    }.toByteArray()
+                    val base64 = Base64.encodeToString(jpeg, Base64.NO_WRAP)
+                    val reply = postForRing(key, buildRequest(model, base64))
+                    reply
+                } catch (e: Exception) {
+                    Reply(0, e.message.orEmpty())
+                }
+
+                val state = KeyRing.classify(outcome.code, outcome.body)
+                store.record(key, state)
+                entries = store.load()
+
+                if (state == KeyRing.State.WORKING) {
+                    val subjects = try {
+                        parseSubjects(outcome.body)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    if (subjects.isEmpty()) onError("Nothing recognisable in the frame")
+                    else onResult(subjects)
+                    return@thread
+                }
+
+                lastMessage = when (state) {
+                    KeyRing.State.NO_CREDIT -> "Key ${attempt.masked} is out of credit"
+                    KeyRing.State.REFUSED -> "Key ${attempt.masked} was refused"
+                    KeyRing.State.BUSY -> "Key ${attempt.masked} is throttled"
+                    else -> "No answer from Groq"
+                }
+
+                // A throttle is not a reason to burn the ring; it is a reason
+                // to stop and say so.
+                if (state == KeyRing.State.BUSY || state == KeyRing.State.UNKNOWN) break
+
+                attempt = KeyRing.nextUsable(entries, after = key)
+            }
+
+            onError(lastMessage)
+        }
+    }
+
+    data class Reply(val code: Int, val body: String)
+
+    private fun postForRing(apiKey: String, body: String): Reply {
+        val connection = URL(ENDPOINT).openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Authorization", "Bearer $apiKey")
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 20_000
+        connection.outputStream.use { it.write(body.toByteArray()) }
+
+        val code = connection.responseCode
+        val text = (if (code in 200..299) connection.inputStream else connection.errorStream)
+            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+        // The body is classified, never shown: a provider will happily echo a
+        // key back inside an error message.
+        return Reply(code, text)
+    }
+
     fun findSubjects(
         apiKey: String,
         frame: Bitmap,

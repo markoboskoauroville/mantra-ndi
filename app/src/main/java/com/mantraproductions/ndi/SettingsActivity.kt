@@ -34,6 +34,30 @@ class SettingsActivity : AppCompatActivity() {
      * means no storage permission is involved, because the operator granting
      * access to one file is the permission.
      */
+    /**
+     * A picker for the key file, because keys arrive as a note in Downloads or
+     * Drive rather than as something anybody wants to retype on a phone. The
+     * file is read, the keys are found inside whatever else it contains, and
+     * the file itself is not kept.
+     */
+    private val keyFilePicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            val text = contentResolver.openInputStream(uri)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val added = KeyRingStore(this).import(text)
+            toast(
+                if (added == 0) "No new keys found in that file"
+                else "Added $added key" + if (added == 1) "" else "s"
+            )
+            refresh()
+        } catch (e: Exception) {
+            toast("Could not read that file")
+        }
+    }
+
     private val lutPicker = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -97,7 +121,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowDetect.setOnClickListener { showFullReport() }
         binding.rowKeys.setOnClickListener { showKeys() }
         binding.rowFocusBox.setOnClickListener { pickFocusBox() }
-        binding.rowAiFocus.setOnClickListener { editApiKey() }
+        binding.rowAiFocus.setOnClickListener { manageKeyRing() }
 
         refresh()
     }
@@ -134,11 +158,8 @@ class SettingsActivity : AppCompatActivity() {
             FocusSquareView.Size.LARGE -> "Large"
             FocusSquareView.Size.FULL -> "Full screen"
         }
-        binding.valueAiFocus.text = if (prefs.groqApiKey == null) {
-            "Not set. Long press the focus box to name what to focus on"
-        } else {
-            "Key stored on this phone only"
-        }
+        binding.valueAiFocus.text = KeyRing.summarise(KeyRingStore(this).load()) +
+            ", on this phone only"
         binding.valueKeys.text = if (KeyService.isEnabled(this)) {
             "On. Volume rocker drives the camera"
         } else {
@@ -198,6 +219,42 @@ class SettingsActivity : AppCompatActivity() {
      * compiled into an APK can be read straight back out of it by anybody who
      * downloads one.
      */
+    /**
+     * The ring, not a key. Importing extends it rather than replacing it, and
+     * a buried key is never resurrected by re-importing the same note.
+     */
+    private fun manageKeyRing() {
+        val store = KeyRingStore(this)
+        val entries = store.load()
+        val detail = if (entries.isEmpty()) {
+            "No keys yet."
+        } else {
+            entries.joinToString("\n") { "  ${'$'}{it.masked}  ${'$'}{it.state.name.lowercase()}" }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("AI focus keys")
+            .setMessage(
+                "Tried in order, and only a real request decides whether one is " +
+                    "spent.\n\n" + detail
+            )
+            .setPositiveButton("Import a file") { _, _ ->
+                // Any type: a key file is routinely served as octet-stream and
+                // filtering on text/plain hides the file it came for.
+                keyFilePicker.launch(arrayOf("*/*"))
+            }
+            .setNeutralButton("Revive all") { _, _ ->
+                store.revive()
+                refresh()
+                toast("Every key back in play")
+            }
+            .setNegativeButton("Forget all") { _, _ ->
+                store.clear()
+                refresh()
+            }
+            .show()
+    }
+
     private fun editApiKey() {
         val input = android.widget.EditText(this).apply {
             setText(prefs.groqApiKey.orEmpty())
