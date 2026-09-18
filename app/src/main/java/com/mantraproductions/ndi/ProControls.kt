@@ -188,8 +188,22 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
      * only moves it warmer or cooler.
      */
     /** Gains straight from the scope, keeping the camera's own colour matrix. */
-    fun applyBalanceGains(gains: FloatArray): Boolean {
-        heldGains = gains
+    /**
+     * @param commit false while a finger is still moving.
+     *
+     * This is where the cast that would not go away came from. The drag
+     * computed its correction from heldGains and then wrote the result back
+     * into heldGains, so the next move event of the same drag started from the
+     * already corrected value and multiplied it again. A single sweep applied
+     * the correction fifty times over, and bringing the marker back to the
+     * centre then meant no change relative to gains that were already ruined,
+     * which is why the picture never came back.
+     *
+     * A drag now reads one base, taken when the finger lands, and only writes
+     * on release.
+     */
+    fun applyBalanceGains(gains: FloatArray, commit: Boolean = true): Boolean {
+        if (commit) heldGains = gains
         return applyGains(gains)
     }
 

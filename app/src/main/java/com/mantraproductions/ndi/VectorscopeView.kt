@@ -46,6 +46,8 @@ class VectorscopeView @JvmOverloads constructor(
         private set
 
     /** Fired continuously while dragging, with the current offset. */
+    /** Fired once when a drag begins, so the caller can take a fixed base. */
+    var onBalanceStarted: (() -> Unit)? = null
     var onBalanceMoved: ((Float, Float) -> Unit)? = null
     var onBalanceReleased: (() -> Unit)? = null
 
@@ -219,6 +221,7 @@ class VectorscopeView @JvmOverloads constructor(
                     dragging = true
                     removeCallbacks(tapWindow)
                     tapCount = 0
+                    onBalanceStarted?.invoke()
                 }
                 if (dragging) {
                     offsetU = ((event.x - cx) / radius).coerceIn(-1f, 1f)

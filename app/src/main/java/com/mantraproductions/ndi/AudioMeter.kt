@@ -20,7 +20,10 @@ import kotlin.concurrent.thread
  * moment the encoder wants it and takes over again when the encoder stops.
  * [NdiSendService] does the handover.
  */
-class AudioMeter(private val onLevel: (Float) -> Unit) {
+class AudioMeter(private val onLevel: (level: Float, isInput: Boolean) -> Unit) {
+
+    /** Mirrors the encoder's gain so the output meter reads the same idle or live. */
+    @Volatile var gain: Float = 1f
 
     private val running = AtomicBoolean(false)
     private var record: AudioRecord? = null
@@ -71,9 +74,12 @@ class AudioMeter(private val onLevel: (Float) -> Unit) {
                     break
                 }
                 if (read > 0) {
-                    // The same RMS the encoder path uses, so the meter reads
-                    // identically whether or not a stream is running.
-                    onLevel(Mechanism.rmsOfPcm16(buffer.copyOf(read)))
+                    // The same two readings the encoder path produces, so the
+                    // meters behave identically whether or not a stream runs.
+                    val slice = buffer.copyOf(read)
+                    onLevel(Mechanism.rmsOfPcm16(slice), true)
+                    Mechanism.applyGainPcm16(slice, gain)
+                    onLevel(Mechanism.rmsOfPcm16(slice), false)
                 }
             }
         }
@@ -90,7 +96,8 @@ class AudioMeter(private val onLevel: (Float) -> Unit) {
         }
         record?.release()
         record = null
-        onLevel(0f)
+        onLevel(0f, true)
+        onLevel(0f, false)
     }
 
     private companion object {

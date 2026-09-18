@@ -70,6 +70,9 @@ class MainActivity : AppCompatActivity() {
     }
     private var gainProgress = 50
 
+    /** The gains a drag started from, held for the length of that drag. */
+    private var balanceBase: FloatArray? = null
+
     private val pump = ControlPump()
 
     /**
@@ -1003,7 +1006,10 @@ class MainActivity : AppCompatActivity() {
             }
             focusDirector.setMode(next)
             refreshFocusButton()
-            say(if (next == FocusDirector.Mode.AUTO) "Focus checking every 2s" else "Focus locked")
+            say(
+                if (next == FocusDirector.Mode.AUTO) "Autofocus, checking every 2s"
+                else "Single focus, tap the box to set it"
+            )
         }
         refreshFocusButton()
 
@@ -1095,16 +1101,23 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * AF or SF, which is what the two modes actually are. A and M were
+     * borrowed from a lens barrel and neither one said what happens: AF checks
+     * and follows, SF focuses once on the box and holds it there.
+     */
     private fun refreshFocusButton() {
         binding.focusModeButton.centerText =
-            if (focusDirector.mode == FocusDirector.Mode.AUTO) "A" else "M"
+            if (focusDirector.mode == FocusDirector.Mode.AUTO) "AF" else "SF"
     }
 
     private fun refreshLiveIndicators() {
         val svc = service ?: return
 
-        val level = Mechanism.rmsToMeterFraction(svc.audioLevel)
-        binding.vuHairline.setLevel(level)
+        // Top hairline is what the microphone hears; the gain fader's own
+        // meter is what the encoder is given. The fader sits between them.
+        binding.vuHairline.setLevel(Mechanism.rmsToMeterFraction(svc.audioLevelIn))
+        val level = Mechanism.rmsToMeterFraction(svc.audioLevelOut)
 
         // The gain fader's own meter was only redrawn when the panel was
         // rebuilt, which happens when a control changes and not otherwise, so
@@ -1184,20 +1197,39 @@ class MainActivity : AppCompatActivity() {
      * as well as on screen.
      */
     private fun setUpVectorscope() {
+        // One base per drag, taken when the finger lands. Reading it again on
+        // every move event meant each one corrected the previous correction,
+        // so a sweep multiplied itself fifty times and the centre stopped
+        // meaning neutral.
+        binding.vectorscope.onBalanceStarted = {
+            val controls = service?.controls
+            balanceBase = controls?.heldGains
+                ?: controls?.lastAwbGains
+                ?: floatArrayOf(1f, 1f, 1f)
+        }
+
         binding.vectorscope.onBalanceMoved = { du, dv ->
             val controls = service?.controls
-            if (controls != null) {
-                // Neutral is a valid starting point. Waiting for the camera to
-                // have reported gains meant a drag did nothing at all on a
-                // camera that had not been asked to balance yet, which read as
-                // the scope being broken.
-                val base = controls.heldGains
-                    ?: controls.lastAwbGains
-                    ?: floatArrayOf(1f, 1f, 1f)
-                controls.applyBalanceGains(Mechanism.gainsFromChromaOffset(base, du, dv))
+            val base = balanceBase
+            if (controls != null && base != null) {
+                // Applied, not stored: the base must survive the whole drag.
+                controls.applyBalanceGains(
+                    Mechanism.gainsFromChromaOffset(base, du, dv), commit = false
+                )
             }
         }
         binding.vectorscope.onBalanceReleased = {
+            val controls = service?.controls
+            val base = balanceBase
+            if (controls != null && base != null) {
+                controls.applyBalanceGains(
+                    Mechanism.gainsFromChromaOffset(
+                        base, binding.vectorscope.offsetU, binding.vectorscope.offsetV
+                    ),
+                    commit = true
+                )
+            }
+            balanceBase = null
             manualWhiteBalance = true
             say("Balance held")
         }
@@ -1225,6 +1257,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun resetBalance() {
         val controls = service?.controls
+        balanceBase = null
         binding.vectorscope.reset()
         if (controls == null) return
         controls.setAutoWhiteBalance()

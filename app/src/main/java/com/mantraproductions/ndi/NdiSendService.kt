@@ -78,17 +78,29 @@ class NdiSendService : Service() {
         get() = if (isRecording) (System.currentTimeMillis() - recordStartedAt) / 1000 else 0
 
     /** Live mic level, 0..1 linear RMS, tapped on the way to the encoder. */
-    @Volatile var audioLevel: Float = 0f
+    /** What arrives from the microphone, before the gain fader. */
+    @Volatile var audioLevelIn: Float = 0f
         private set
+
+    /** What leaves for the encoder, after it. */
+    @Volatile var audioLevelOut: Float = 0f
+        private set
+
+    /** Kept for anything that only wants one number; it is the output. */
+    val audioLevel: Float get() = audioLevelOut
 
     /**
      * The meter runs whenever the encoder is not holding the microphone, so
      * levels are visible before a take rather than only during one. Only one
      * thing may own the mic, so the two take turns.
      */
-    private val standaloneMeter = AudioMeter { level -> audioLevel = level }
+    private val standaloneMeter = AudioMeter { level, isInput ->
+        if (isInput) audioLevelIn = level else audioLevelOut = level
+    }
 
-    private val vuTap = VuTap { level -> audioLevel = level }
+    private val vuTap = VuTap { level, isInput ->
+        if (isInput) audioLevelIn = level else audioLevelOut = level
+    }
 
     /** Digital gain on the recorded audio, 1.0 being untouched. */
     /**
@@ -100,6 +112,7 @@ class NdiSendService : Service() {
 
     fun setAudioGain(factor: Float) {
         vuTap.gain = factor
+        standaloneMeter.gain = factor
         hdr?.audioGain = factor
     }
 
@@ -192,7 +205,7 @@ class NdiSendService : Service() {
 
             override fun onError(message: String) = onError(message)
 
-            override fun onLevel(rms: Float) { audioLevel = rms }
+            override fun onLevel(rms: Float) { audioLevelOut = rms }
         }
         hdr = pipeline
         return true

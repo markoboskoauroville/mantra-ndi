@@ -443,6 +443,49 @@ class MechanismTest {
         Mechanism.applyGainPcm16(ByteArray(1), 2f)
     }
 
+    // --- the gain fader sits between two different readings ------------------
+
+    @Test fun outputDiffersFromInputOnceThereIsGain() {
+        // A quiet mic and six dB of gain: the top meter must not move and the
+        // fader's meter must. Showing one number in both places is what made
+        // the second meter furniture.
+        val pcm = ByteArray(512)
+        var i = 0
+        while (i + 1 < pcm.size) {
+            // A modest tone, well below clipping so gain has room to work.
+            pcm[i] = 0x00
+            pcm[i + 1] = 0x10
+            i += 2
+        }
+        val input = Mechanism.rmsOfPcm16(pcm, stride = 2)
+        val boosted = pcm.copyOf()
+        Mechanism.applyGainPcm16(boosted, Mechanism.gainFactor(6.02))
+        val output = Mechanism.rmsOfPcm16(boosted, stride = 2)
+
+        assertEquals(2.0, (output / input).toDouble(), 0.05)
+    }
+
+    @Test fun cuttingGainLowersTheOutputAndLeavesTheInputAlone() {
+        val pcm = ByteArray(512) { if (it % 2 == 0) 0x00 else 0x20 }
+        val input = Mechanism.rmsOfPcm16(pcm, stride = 2)
+        val cut = pcm.copyOf()
+        Mechanism.applyGainPcm16(cut, Mechanism.gainFactor(-6.02))
+        assertTrue(Mechanism.rmsOfPcm16(cut, stride = 2) < input)
+        // The original buffer is untouched, which is what lets both be read.
+        assertEquals(input, Mechanism.rmsOfPcm16(pcm, stride = 2), 0.0001f)
+    }
+
+    @Test fun atUnityTheTwoReadingsAgree() {
+        val pcm = ByteArray(512) { if (it % 2 == 0) 0x00 else 0x18 }
+        val copy = pcm.copyOf()
+        Mechanism.applyGainPcm16(copy, 1f)
+        assertEquals(
+            Mechanism.rmsOfPcm16(pcm, stride = 2),
+            Mechanism.rmsOfPcm16(copy, stride = 2),
+            0.0001f
+        )
+    }
+
     // --- remote control protocol -------------------------------------------
 
     @Test fun commandSurvivesTheRoundTrip() {
