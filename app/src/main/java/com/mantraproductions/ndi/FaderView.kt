@@ -84,10 +84,10 @@ class FaderView @JvmOverloads constructor(
     private var dragStartProgress = 0
     private var dragging = false
 
-    private val sidePadding get() = 26f * density
+    private val sidePadding get() = 30f * density
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val desired = (66 * density).toInt()
+        val desired = (78 * density).toInt()
         setMeasuredDimension(
             resolveSize((240 * density).toInt(), widthMeasureSpec),
             resolveSize(desired, heightMeasureSpec)
@@ -103,19 +103,19 @@ class FaderView @JvmOverloads constructor(
         canvas.drawText(label.uppercase(), left, height * 0.32f, labelPaint)
         canvas.drawText(valueText, right, height * 0.34f, valuePaint)
 
-        trackPaint.strokeWidth = 1.5f * density
+        trackPaint.strokeWidth = 3f * density
         canvas.drawLine(left, trackY, right, trackY, trackPaint)
 
         val fraction = progress.toFloat() / max
         val thumbX = left + span * fraction
 
         fillPaint.color = accent
-        fillPaint.strokeWidth = 1.5f * density
+        fillPaint.strokeWidth = 3f * density
         canvas.drawLine(left, trackY, thumbX, trackY, fillPaint)
 
         // A soft halo rather than a hard dot: legible over a bright image,
         // unobtrusive over a dark one.
-        val glowRadius = 13f * density
+        val glowRadius = 22f * density
         glowPaint.shader = RadialGradient(
             thumbX, trackY, glowRadius,
             intArrayOf(withAlpha(accent, 130), withAlpha(accent, 0)),
@@ -125,7 +125,8 @@ class FaderView @JvmOverloads constructor(
         canvas.drawCircle(thumbX, trackY, glowRadius, glowPaint)
 
         thumbPaint.color = if (isEnabled) accent else Color.parseColor("#4A5058")
-        canvas.drawCircle(thumbX, trackY, 4.5f * density, thumbPaint)
+        // Pixel sized: a thumb you can actually land on with a thumb.
+        canvas.drawCircle(thumbX, trackY, 11f * density, thumbPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

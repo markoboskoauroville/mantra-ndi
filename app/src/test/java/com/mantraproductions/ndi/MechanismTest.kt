@@ -91,6 +91,32 @@ class MechanismTest {
         assertEquals(0L, Mechanism.shutter180Ns(0))
     }
 
+    @Test fun longExposuresReadAsSecondsNotAsOneOverZero() {
+        // 1/0 was what the fader showed before this existed.
+        assertEquals("1.0s", Mechanism.formatShutter(1_000_000_000L))
+        assertEquals("2.5s", Mechanism.formatShutter(2_500_000_000L))
+        assertEquals("30s", Mechanism.formatShutter(30_000_000_000L))
+    }
+
+    @Test fun normalExposuresStillReadAsFractions() {
+        assertEquals("1/50", Mechanism.formatShutter(20_000_000L))
+        assertEquals("1/48", Mechanism.formatShutter(Mechanism.shutter180Ns(24)))
+        assertEquals("1/1000", Mechanism.formatShutter(1_000_000L))
+    }
+
+    @Test fun noShutterValueNeverPrintsAsANumber() {
+        assertEquals("--", Mechanism.formatShutter(0L))
+        assertEquals("--", Mechanism.formatShutter(-1L))
+    }
+
+    @Test fun everyShutterInASensorRangeFormatsWithoutZeroDenominator() {
+        for (p in 0..200) {
+            val ns = Mechanism.shutterFromProgress(p, 200, 1_000L, 60_000_000_000L)
+            val text = Mechanism.formatShutter(ns)
+            assertFalse("at $p got $text", text.endsWith("/0"))
+        }
+    }
+
     // --- white balance ------------------------------------------------------
 
     @Test fun warmLightBoostsBlueAndCoolLightBoostsRed() {

@@ -61,6 +61,19 @@ object Mechanism {
     fun shutterDenominator(ns: Long): Int =
         if (ns <= 0) 0 else Math.round(1_000_000_000.0 / ns).toInt()
 
+    /**
+     * What to print on the fader. Past one second the fraction collapses to
+     * 1/0, which is why long exposures are written as seconds instead.
+     */
+    fun formatShutter(ns: Long): String = when {
+        ns <= 0L -> "--"
+        ns >= 1_000_000_000L -> {
+            val seconds = ns / 1_000_000_000.0
+            if (seconds >= 10) "${Math.round(seconds)}s" else String.format("%.1fs", seconds)
+        }
+        else -> "1/${shutterDenominator(ns)}"
+    }
+
     /** The film-standard 180 degree shutter for a frame rate. */
     fun shutter180Ns(fps: Int): Long = if (fps <= 0) 0 else 1_000_000_000L / (fps * 2L)
 

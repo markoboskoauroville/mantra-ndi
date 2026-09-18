@@ -47,10 +47,10 @@
         android:fadeScrollbars="true"
         android:scrollbars="none"
         android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintTop_toTopOf="@id/preview"
         app:layout_constraintBottom_toTopOf="@id/controlRow"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview">
 
         <LinearLayout
             android:id="@+id/settingsColumn"

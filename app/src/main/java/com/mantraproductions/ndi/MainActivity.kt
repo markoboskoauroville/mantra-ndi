@@ -16,6 +16,11 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
 import com.mantraproductions.ndi.databinding.ActivityMainBinding
 import kotlin.concurrent.thread
 import kotlin.math.roundToInt
@@ -40,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private var profiles: List<CaptureProfile> = emptyList()
     private var activeProfile: CaptureProfile? = null
 
+    private val pump = ControlPump()
     private val ui = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
         override fun run() {
@@ -72,6 +78,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        setUpFullScreen()
 
         identity = SourceIdentity(this)
         binding.sourceNameInput.setText(identity.name)
@@ -102,12 +109,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        pump.start()
         requestPermissionsThenBind()
         ui.post(tick)
     }
 
     override fun onStop() {
         super.onStop()
+        pump.stop()
         ui.removeCallbacks(tick)
         if (bound) {
             unbindService(connection)
@@ -118,6 +127,34 @@ class MainActivity : AppCompatActivity() {
     override fun onBackPressed() {
         if (binding.settingsOverlay.visibility == View.VISIBLE) closeSettings()
         else super.onBackPressed()
+    }
+
+    /**
+     * The image is the interface, so the system bars go away and nothing is
+     * allowed to sit under the cutout. Swiping brings the bars back briefly
+     * and they retreat on their own.
+     */
+    private fun setUpFullScreen() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, binding.root).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        // Even hidden, a cutout still cuts. Pad by whatever the display says is
+        // unusable so a fader never runs under the camera hole or the corners.
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            binding.settingsOverlay.updatePadding(
+                left = bars.left, top = bars.top, right = bars.right
+            )
+            binding.controlRow.updatePadding(bottom = bars.bottom)
+            binding.statusText.updatePadding(left = bars.left, top = bars.top)
+            insets
+        }
     }
 
     // --- drawer ---
@@ -135,6 +172,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openSettings() {
+        // Reaching for the faders means wanting control, so manual goes on
+        // rather than making every adjustment a two step action.
+        if (!binding.manualExposureCheck.isChecked &&
+            service?.controls?.supportsManualSensor() == true
+        ) {
+            binding.manualExposureCheck.isChecked = true
+        }
         binding.settingsOverlay.alpha = 0f
         binding.settingsOverlay.visibility = View.VISIBLE
         binding.settingsOverlay.animate().alpha(1f).setDuration(180).start()
@@ -163,20 +207,28 @@ class MainActivity : AppCompatActivity() {
         binding.wbFader.label = "White balance"
         binding.zoomFader.label = "Zoom"
 
-        binding.isoFader.onChange = { updateExposureLabels() }
-        binding.isoFader.onRelease = { applyManualExposure() }
-        binding.shutterFader.onChange = { updateExposureLabels() }
-        binding.shutterFader.onRelease = { applyManualExposure() }
+        // Every move goes to the pump, which sends the newest value about
+        // thirty times a second. The label updates on every frame regardless,
+        // so the number tracks the finger exactly even though the sensor
+        // cannot.
+        binding.isoFader.onChange = { updateExposureLabels(); pushExposure() }
+        binding.isoFader.onRelease = { pump.flush() }
+        binding.shutterFader.onChange = { updateExposureLabels(); pushExposure() }
+        binding.shutterFader.onRelease = { pump.flush() }
 
         binding.wbFader.max = ProControls.KELVIN_MAX - ProControls.KELVIN_MIN
         binding.wbFader.progress = 5600 - ProControls.KELVIN_MIN
         binding.wbFader.valueText = "5600 K"
-        binding.wbFader.onChange = { binding.wbFader.valueText = "${ProControls.KELVIN_MIN + it} K" }
-        binding.wbFader.onRelease = { applyWhiteBalance() }
+        binding.wbFader.onChange = {
+            binding.wbFader.valueText = "${ProControls.KELVIN_MIN + it} K"
+            if (binding.manualWbCheck.isChecked) pump.setKelvin(ProControls.KELVIN_MIN + it)
+        }
+        binding.wbFader.onRelease = { pump.flush() }
 
         binding.zoomFader.max = 100
         binding.zoomFader.valueText = "1.0x"
-        binding.zoomFader.onChange = { applyZoom(it) }
+        binding.zoomFader.onChange = { pushZoom(it) }
+        binding.zoomFader.onRelease = { pump.flush() }
 
         binding.isoFader.isEnabled = false
         binding.shutterFader.isEnabled = false
@@ -226,6 +278,32 @@ class MainActivity : AppCompatActivity() {
         updateExposureLabels()
     }
 
+    private fun bindPump() {
+        val controls = service?.controls ?: return
+        pump.applyExposure = { iso, shutterNs -> controls.setManualExposure(iso, shutterNs) }
+        pump.applyWhiteBalance = { kelvin -> controls.setManualWhiteBalance(kelvin) }
+        pump.applyZoom = { zoom -> controls.setZoom(zoom) }
+    }
+
+    private fun pushExposure() {
+        if (!binding.manualExposureCheck.isChecked) return
+        val controls = service?.controls ?: return
+        val isoRange = controls.isoRange() ?: return
+        val exposureRange = controls.exposureTimeRange() ?: return
+        pump.setExposure(
+            (isoRange.lower + binding.isoFader.progress).coerceIn(isoRange.lower, isoRange.upper),
+            progressToShutter(binding.shutterFader.progress, exposureRange.lower, exposureRange.upper)
+        )
+    }
+
+    private fun pushZoom(progress: Int) {
+        val controls = service?.controls ?: return
+        val range = controls.zoomRange()
+        val zoom = range.lower + (progress / 100f) * (range.upper - range.lower)
+        binding.zoomFader.valueText = String.format("%.1fx", zoom)
+        pump.setZoom(zoom)
+    }
+
     private fun applyManualExposure() {
         val controls = service?.controls ?: return
         if (!binding.manualExposureCheck.isChecked) return
@@ -245,7 +323,7 @@ class MainActivity : AppCompatActivity() {
         }
         controls?.exposureTimeRange()?.let {
             val ns = progressToShutter(binding.shutterFader.progress, it.lower, it.upper)
-            binding.shutterFader.valueText = "1/${Mechanism.shutterDenominator(ns)}"
+            binding.shutterFader.valueText = Mechanism.formatShutter(ns)
         }
     }
 
@@ -347,6 +425,7 @@ class MainActivity : AppCompatActivity() {
         if (ok) {
             if (surfaceReady) svc.attachPreview(binding.preview)
             bindControlRanges()
+            bindPump()
         }
         refreshUi()
     }
