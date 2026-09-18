@@ -14,6 +14,8 @@ import android.view.KeyEvent
 import android.view.OrientationEventListener
 import android.view.SurfaceHolder
 import android.view.View
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -167,8 +169,28 @@ class MainActivity : AppCompatActivity() {
     }
     private var iconRotation = 0f
 
+    /**
+     * Keys forwarded by the accessibility service, which sees them before the
+     * system does. The same handlers as the in-app keys, so a rocker press
+     * behaves identically whichever route it took.
+     */
+    private val keyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.getStringExtra(KeyService.EXTRA_ACTION)) {
+                KeyService.ACTION_UP -> handleRocker(+1, intent.getIntExtra(KeyService.EXTRA_REPEAT, 0))
+                KeyService.ACTION_DOWN -> handleRocker(-1, intent.getIntExtra(KeyService.EXTRA_REPEAT, 0))
+                KeyService.ACTION_SHUTTER -> toggleRecording()
+            }
+        }
+    }
+
     override fun onStart() {
         super.onStart()
+        KeyService.cameraInForeground = true
+        ContextCompat.registerReceiver(
+            this, keyReceiver, IntentFilter(KeyService.BROADCAST),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         if (orientationWatcher.canDetectOrientation()) orientationWatcher.enable()
         pump.start()
         requestPermissionsThenBind()
@@ -187,6 +209,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        KeyService.cameraInForeground = false
+        try {
+            unregisterReceiver(keyReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Never registered, which happens if onStart bailed early.
+        }
         orientationWatcher.disable()
         pump.stop()
         ui.removeCallbacks(tick)
@@ -218,12 +246,17 @@ class MainActivity : AppCompatActivity() {
             else -> return super.onKeyDown(keyCode, event)
         }
 
+        handleRocker(direction, event.repeatCount)
+        return true
+    }
+
+    private fun handleRocker(direction: Int, repeatCount: Int) {
         // Held down: record, so a take can start without looking at the screen.
-        if (event.repeatCount == 3) {
+        if (repeatCount == 3) {
             toggleRecording()
-            return true
+            return
         }
-        if (event.repeatCount > 0) return true
+        if (repeatCount > 0) return
 
         when {
             binding.verticalPanel.visibility == View.VISIBLE -> nudgeFocusedColumn(direction)
@@ -239,7 +272,6 @@ class MainActivity : AppCompatActivity() {
                 say("Zoom ${binding.vZoom.valueText}")
             }
         }
-        return true
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
@@ -513,15 +545,19 @@ class MainActivity : AppCompatActivity() {
             binding.focusSquare.state = FocusSquareView.State.IDLE
         }
 
-        binding.autoModeCheck.setOnCheckedChangeListener { _, checked ->
-            if (checked) returnToAuto() else leaveAuto(null)
+        // One press puts every control back on automatic at once.
+        binding.autoAllButton.centerText = "VA"
+        binding.autoAllButton.setOnClickListener {
+            binding.autoAllButton.busy = true
+            returnToAuto()
+            ui.postDelayed({ binding.autoAllButton.busy = false }, 950)
         }
     }
 
     private fun toggleVerticalPanel() {
         if (binding.verticalPanel.visibility == View.VISIBLE) {
             binding.verticalPanel.visibility = View.GONE
-            binding.autoModeCheck.visibility = View.GONE
+            binding.autoAllButton.visibility = View.GONE
             binding.focusSquare.visibility = View.GONE
             return
         }
@@ -530,7 +566,7 @@ class MainActivity : AppCompatActivity() {
         if (binding.paramBar.visibility == View.VISIBLE) closeControlBar()
         seedFromCamera()
         binding.verticalPanel.visibility = View.VISIBLE
-        binding.autoModeCheck.visibility = View.VISIBLE
+        binding.autoAllButton.visibility = View.VISIBLE
         if (service?.controls?.supportsManualFocus() == true) {
             binding.focusSquare.visibility = View.VISIBLE
         }
@@ -558,7 +594,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun leaveAuto(which: Mechanism.Param?) {
         val controls = service?.controls ?: return
-        binding.autoModeCheck.isChecked = false
         when (which) {
             Mechanism.Param.WHITE_BALANCE -> manualWhiteBalance = true
             Mechanism.Param.ISO, Mechanism.Param.SHUTTER ->

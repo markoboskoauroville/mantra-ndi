@@ -94,6 +94,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         binding.rowCamera.setOnClickListener { showCameraCapabilities() }
         binding.rowDetect.setOnClickListener { showFullReport() }
+        binding.rowKeys.setOnClickListener { showKeys() }
 
         refresh()
     }
@@ -114,6 +115,11 @@ class SettingsActivity : AppCompatActivity() {
         binding.valueHistogram.text = if (prefs.histogramVisible) "Shown" else "Hidden"
         binding.valueStabilisation.text = if (prefs.stabilisation) "On" else "Off"
         binding.valueCamera.text = capabilitySummary()
+        binding.valueKeys.text = if (KeyService.isEnabled(this)) {
+            "On. Volume rocker drives the camera"
+        } else {
+            "Off. Tap to enable, then the rocker works everywhere"
+        }
         binding.valueAbout.text = "Mantra NDI v${BuildConfig.VERSION_NAME}" +
                 if (BuildConfig.NDI_SDK_PRESENT) "" else ", built without the NDI SDK"
         binding.valueLoadLut.text = prefs.monitorLutName ?: "None loaded"
@@ -218,6 +224,30 @@ class SettingsActivity : AppCompatActivity() {
                 val name = "MantraNDI_device_${Build.MODEL.replace(' ', '_')}.txt"
                 val target = MediaStoreOutput.writeText(this, name, report)
                 toast(if (target == null) "Could not write it" else "Saved to ${target.shortLocation}")
+            }
+            .show()
+    }
+
+    /**
+     * Whether the power key reaches an app at all is undocumented and differs
+     * between builds, so this shows what this phone has actually delivered
+     * rather than asserting either way.
+     */
+    private fun showKeys() {
+        val message = buildString {
+            append(if (KeyService.isEnabled(this@SettingsActivity)) "Service is on.\n\n"
+                   else "Service is off. Enable Mantra NDI in Accessibility.\n\n")
+            append("Keys this phone has delivered:\n")
+            append(KeyService.seenKeyReport())
+            append("\n\nVolume rocker: adjusts whatever is on screen, ")
+            append("zooms when nothing is, records when held.")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Hardware keys")
+            .setMessage(message)
+            .setPositiveButton("Close", null)
+            .setNeutralButton("Accessibility settings") { _, _ ->
+                startActivity(KeyService.settingsIntent())
             }
             .show()
     }

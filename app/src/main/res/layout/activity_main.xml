@@ -6,14 +6,19 @@
     android:layout_height="match_parent"
     android:background="#05070A">
 
+    <!-- Given the frame's own shape, so the view ends where the image ends.
+         Anything anchored to it is then on the picture rather than on a black
+         bar beside it. -->
     <SurfaceView
         android:id="@+id/preview"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        app:layout_constraintDimensionRatio="H,16:9"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintWidth_max="wrap" />
 
     <com.mantraproductions.ndi.FocusSquareView
         android:id="@+id/focusSquare"
@@ -68,10 +73,10 @@
         android:visibility="gone"
         android:layout_marginTop="18dp"
         android:layout_marginBottom="14dp"
-        android:layout_marginEnd="8dp"
-        app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/controlRow">
+        android:layout_marginEnd="6dp"
+        app:layout_constraintTop_toTopOf="@id/preview"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview">
 
         <LinearLayout
             android:layout_width="58dp"
@@ -195,19 +200,16 @@
 
     </LinearLayout>
 
-    <CheckBox
-        android:id="@+id/autoModeCheck"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="18dp"
-        android:layout_marginTop="10dp"
-        android:buttonTint="#E7A44C"
-        android:text="Auto"
-        android:textColor="#B6C0CA"
-        android:textSize="12sp"
+    <!-- Video Auto: the same circle as every other auto, because it is one.
+         Two letters rather than a word, so it takes a control's width. -->
+    <com.mantraproductions.ndi.CircleButtonView
+        android:id="@+id/autoAllButton"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginEnd="8dp"
         android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintEnd_toStartOf="@id/controlRow" />
+        app:layout_constraintTop_toTopOf="@id/verticalPanel"
+        app:layout_constraintEnd_toStartOf="@id/verticalPanel" />
 
     <!-- The action stack: right edge, gear at the bottom, record at the top,
          so the hand never crosses the frame to reach anything. -->

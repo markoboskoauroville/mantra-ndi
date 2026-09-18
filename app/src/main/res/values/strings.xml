@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Mantra NDI</string>
+    <string name="key_service_description">Lets the camera use the hardware keys: the volume rocker adjusts whatever control is on screen, and records when held. Keys are only taken while the camera is in front.</string>
+</resources>

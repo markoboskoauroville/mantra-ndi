@@ -51,6 +51,19 @@
             android:label="Settings" />
 
         <service
+            android:name=".KeyService"
+            android:exported="true"
+            android:label="Mantra NDI hardware keys"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/key_service" />
+        </service>
+
+        <service
             android:name=".NdiSendService"
             android:exported="false"
             android:foregroundServiceType="camera|microphone" />

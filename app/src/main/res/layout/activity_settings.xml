@@ -87,6 +87,11 @@
                 <TextView android:id="@+id/valueCamera" style="@style/MantraSettingsValue" />
             </LinearLayout>
 
+            <LinearLayout android:id="@+id/rowKeys" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Hardware keys" />
+                <TextView android:id="@+id/valueKeys" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
             <LinearLayout android:id="@+id/rowDetect" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Detect camera features" />
                 <TextView style="@style/MantraSettingsValue"
