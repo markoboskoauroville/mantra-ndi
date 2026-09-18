@@ -1009,8 +1009,12 @@ class MainActivity : AppCompatActivity() {
         say("Remote: $source", transient = false)
 
         if (!surfaceReady) return
+        // The remote picture is decoded into the same TextureView the local
+        // camera draws to, so the scope reads a remote camera exactly as it
+        // reads this one.
+        val texture = binding.preview.surfaceTexture ?: return
         val engine = MonitorEngine(
-            surface = binding.preview.holder.surface,
+            surface = Surface(texture),
             onStatus = { message -> runOnUiThread { say(message) } },
             onCameraState = { state ->
                 remote.state = state
