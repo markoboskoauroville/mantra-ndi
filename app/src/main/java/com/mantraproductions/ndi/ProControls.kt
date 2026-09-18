@@ -247,6 +247,35 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
         }
     }
 
+    /**
+     * The three way grade, as three tone curves.
+     *
+     * One curve per channel, composed with whatever log curve is active, so
+     * the grade rides in the same request the log already uses. No GPU, no
+     * extra pass, and no copy of any frame: a full three way grade costs
+     * exactly what log cost, which is nothing per frame.
+     */
+    fun setGrade(
+        curve: LogCurves.Curve,
+        lift: FloatArray,
+        gamma: FloatArray,
+        gain: FloatArray
+    ): Boolean {
+        val points = maxCurvePoints()
+        if (points < 2) return false
+        val curves = Mechanism.gradeCurves(curve, lift, gamma, gain, points)
+        return source.setCustomRequest { builder ->
+            builder.set(
+                CaptureRequest.TONEMAP_MODE,
+                CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE
+            )
+            builder.set(
+                CaptureRequest.TONEMAP_CURVE,
+                android.hardware.camera2.params.TonemapCurve(curves[0], curves[1], curves[2])
+            )
+        }
+    }
+
     /** How many points this camera accepts in a tone curve; 0 means none. */
     fun maxCurvePoints(): Int {
         val caps = characteristics()?.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)

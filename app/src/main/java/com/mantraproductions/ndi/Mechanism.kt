@@ -618,6 +618,109 @@ object Mechanism {
         return out
     }
 
+    // --- three way colour, applied in the camera ------------------------------
+
+    /**
+     * A wheel position as three channel offsets.
+     *
+     * Red, green and blue sit a hundred and twenty degrees apart, and the three
+     * cosines of any angle sum to zero. That is not a coincidence to be worked
+     * around, it is the property that makes a colour wheel a colour wheel: a
+     * push towards any hue takes from the other two and leaves the brightness
+     * where it was. Luminance is the master control's job, and only its job.
+     *
+     * @param angleDegrees 0 is red, 120 green, 240 blue
+     * @param radius 0 at the centre, 1 at the rim
+     */
+    fun wheelToChannels(angleDegrees: Double, radius: Double): FloatArray {
+        val r = radius.coerceIn(0.0, 1.0)
+        val a = Math.toRadians(angleDegrees)
+        return floatArrayOf(
+            (r * Math.cos(a)).toFloat(),
+            (r * Math.cos(a - 2.0 * Math.PI / 3.0)).toFloat(),
+            (r * Math.cos(a - 4.0 * Math.PI / 3.0)).toFloat()
+        )
+    }
+
+    /**
+     * Lift, gamma and gain for one channel.
+     *
+     * The classic form, and the one a colourist's hands already know:
+     *
+     *     out = ((in * (gain - lift)) + lift) ^ (1 / gamma)
+     *
+     * Lift moves the bottom and leaves white alone. Gain moves the top and
+     * leaves black alone. Gamma bends what is between them without touching
+     * either end. Applied in that order they stay independent, which is the
+     * whole reason the three exist rather than one.
+     */
+    fun gradeChannel(input: Double, lift: Double, gamma: Double, gain: Double): Double {
+        val safeGamma = gamma.coerceIn(0.2, 5.0)
+        val scaled = input * (gain - lift) + lift
+        if (scaled <= 0.0) return 0.0
+        return scaled.pow(1.0 / safeGamma).coerceIn(0.0, 1.0)
+    }
+
+    /**
+     * The whole grade as three tone curves, ready for the camera.
+     *
+     * One curve per channel does the grade, and the log curve is composed into
+     * the same pass rather than fighting it: the value is taken to scene light,
+     * encoded in whatever curve is chosen, then graded. So there is still only
+     * one tone curve on the request, still no GPU, and still no copy of any
+     * frame. A three way grade costs exactly what log already cost, which is
+     * nothing per frame.
+     *
+     * @return red, green and blue point arrays, each input, output, input, output
+     */
+    fun gradeCurves(
+        curve: LogCurves.Curve,
+        lift: FloatArray,
+        gamma: FloatArray,
+        gain: FloatArray,
+        points: Int
+    ): Array<FloatArray> {
+        val n = points.coerceIn(2, 128)
+        return Array(3) { channel ->
+            val out = FloatArray(n * 2)
+            for (i in 0 until n) {
+                val input = i.toDouble() / (n - 1)
+                // Display referred in, scene light, then the chosen curve.
+                val linear = LogCurves.decode(LogCurves.Curve.REC709, input).coerceAtLeast(0.0)
+                val encoded = LogCurves.encode(curve, linear).coerceIn(0.0, 1.0)
+                val graded = gradeChannel(
+                    encoded,
+                    lift[channel].toDouble(),
+                    gamma[channel].toDouble(),
+                    gain[channel].toDouble()
+                )
+                out[i * 2] = input.toFloat()
+                out[i * 2 + 1] = graded.toFloat()
+            }
+            out
+        }
+    }
+
+    /** How far a wheel may push a channel before it stops being a trim. */
+    const val LIFT_RANGE = 0.15
+    const val GAMMA_RANGE = 0.5
+    const val GAIN_RANGE = 0.4
+
+    /** Wheel offsets and a master, as the three numbers gradeChannel wants. */
+    fun liftFrom(channels: FloatArray, master: Double): FloatArray =
+        FloatArray(3) { (channels[it] * LIFT_RANGE + master * LIFT_RANGE).toFloat() }
+
+    fun gammaFrom(channels: FloatArray, master: Double): FloatArray =
+        FloatArray(3) { (1.0 + channels[it] * GAMMA_RANGE + master * GAMMA_RANGE).toFloat() }
+
+    fun gainFrom(channels: FloatArray, master: Double): FloatArray =
+        FloatArray(3) { (1.0 + channels[it] * GAIN_RANGE + master * GAIN_RANGE).toFloat() }
+
+    /** The grade that does nothing, for a reset. */
+    fun neutralGrade(): Triple<FloatArray, FloatArray, FloatArray> = Triple(
+        floatArrayOf(0f, 0f, 0f), floatArrayOf(1f, 1f, 1f), floatArrayOf(1f, 1f, 1f)
+    )
+
     // --- audio gain -----------------------------------------------------------
 
     /** Gain in dB from a fader, centred on unity so the middle changes nothing. */

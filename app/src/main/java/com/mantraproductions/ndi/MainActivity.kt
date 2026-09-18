@@ -73,6 +73,9 @@ class MainActivity : AppCompatActivity() {
     /** The gains a drag started from, held for the length of that drag. */
     private var balanceBase: FloatArray? = null
 
+    /** Applied together, since one tone curve carries all three. */
+    private var gradeDirty = false
+
     private val pump = ControlPump()
 
     /**
@@ -722,6 +725,7 @@ class MainActivity : AppCompatActivity() {
         // Everything is re-detected, not merely handed back: the whole point
         // of pressing this is that the last answers were wrong.
         binding.vectorscope.reset()
+        resetGrade()
         ui.postDelayed({
             seedFromCamera()
             controls.holdMeasuredWhiteBalance()?.let {
@@ -1016,6 +1020,10 @@ class MainActivity : AppCompatActivity() {
         binding.settingsButton.setOnClickListener { toggleVerticalPanel() }
         binding.settingsButton.setOnLongClickListener { openControlBar(); true }
         binding.gearButton.setOnClickListener { startActivity(SettingsActivity.intent(this)) }
+        binding.gearButton.setOnLongClickListener {
+            toggleGradePanel()
+            true
+        }
 
         binding.recordButton.setOnClickListener {
             val svc = service ?: return@setOnClickListener
@@ -1106,6 +1114,72 @@ class MainActivity : AppCompatActivity() {
      * borrowed from a lens barrel and neither one said what happens: AF checks
      * and follows, SF focuses once on the box and holds it there.
      */
+    /**
+     * Lift, gamma and gain, sent as one curve.
+     *
+     * Applied on release rather than on every move: the grade is three curves
+     * of up to a hundred and twenty eight points each, and rebuilding them per
+     * touch event would put the same load on the camera thread that the
+     * Planckian search used to. A finger sees the change when it lifts, which
+     * for a grade is the moment anybody judges it anyway.
+     */
+    private fun setUpGradeWheels() {
+        val wheels = listOf(
+            binding.wheelLift to "Lift",
+            binding.wheelGamma to "Gamma",
+            binding.wheelGain to "Gain"
+        )
+        wheels.forEach { (wheel, name) ->
+            wheel.label = name
+            wheel.onChanged = { gradeDirty = true }
+            wheel.onReleased = { applyGrade() }
+        }
+    }
+
+    private fun applyGrade() {
+        val controls = service?.controls ?: return
+        if (!DeviceProfile.logCapable) {
+            say("This camera will not take a custom curve, so grading is unavailable")
+            return
+        }
+        val lift = Mechanism.liftFrom(
+            Mechanism.wheelToChannels(binding.wheelLift.angle, binding.wheelLift.radius),
+            binding.wheelLift.master
+        )
+        val gamma = Mechanism.gammaFrom(
+            Mechanism.wheelToChannels(binding.wheelGamma.angle, binding.wheelGamma.radius),
+            binding.wheelGamma.master
+        )
+        val gain = Mechanism.gainFrom(
+            Mechanism.wheelToChannels(binding.wheelGain.angle, binding.wheelGain.radius),
+            binding.wheelGain.master
+        )
+        controls.setGrade(appSettings.logCurve, lift, gamma, gain)
+        gradeDirty = false
+    }
+
+    private fun toggleGradePanel() {
+        val opening = binding.gradePanel.visibility != View.VISIBLE
+        if (opening) {
+            if (binding.verticalPanel.visibility == View.VISIBLE) toggleVerticalPanel()
+            if (binding.paramBar.visibility == View.VISIBLE) closeControlBar()
+            binding.focusSquare.visibility = View.GONE
+            say("Drag a wheel, double tap one to neutral", transient = false)
+        } else {
+            binding.focusSquare.visibility = View.VISIBLE
+            say("Grade held")
+        }
+        binding.gradePanel.visibility = if (opening) View.VISIBLE else View.GONE
+    }
+
+    private fun resetGrade() {
+        binding.wheelLift.setNeutral()
+        binding.wheelGamma.setNeutral()
+        binding.wheelGain.setNeutral()
+        val (lift, gamma, gain) = Mechanism.neutralGrade()
+        service?.controls?.setGrade(appSettings.logCurve, lift, gamma, gain)
+    }
+
     private fun refreshFocusButton() {
         binding.focusModeButton.centerText =
             if (focusDirector.mode == FocusDirector.Mode.AUTO) "AF" else "SF"

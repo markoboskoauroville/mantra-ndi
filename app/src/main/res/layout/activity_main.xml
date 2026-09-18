@@ -35,7 +35,6 @@
         android:id="@+id/focusSquare"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:visibility="gone"
         app:layout_constraintTop_toTopOf="@id/preview"
         app:layout_constraintBottom_toBottomOf="@id/preview"
         app:layout_constraintStart_toStartOf="@id/preview"
@@ -220,6 +219,40 @@
         app:layout_constraintBottom_toBottomOf="@id/preview"
         app:layout_constraintStart_toStartOf="@id/preview"
         app:layout_constraintEnd_toEndOf="@id/preview" />
+
+    <!-- Three way grade. Lift, gamma, gain, each with its own master. -->
+    <LinearLayout
+        android:id="@+id/gradePanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#CC05070A"
+        android:padding="10dp"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toStartOf="@id/controlRow">
+
+        <com.mantraproductions.ndi.ColourWheelView
+            android:id="@+id/wheelLift"
+            android:layout_width="0dp"
+            android:layout_height="168dp"
+            android:layout_weight="1" />
+
+        <com.mantraproductions.ndi.ColourWheelView
+            android:id="@+id/wheelGamma"
+            android:layout_width="0dp"
+            android:layout_height="168dp"
+            android:layout_weight="1" />
+
+        <com.mantraproductions.ndi.ColourWheelView
+            android:id="@+id/wheelGain"
+            android:layout_width="0dp"
+            android:layout_height="168dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
 
     <!-- One fader at a time, reached by holding the menu button. -->
     <androidx.constraintlayout.widget.ConstraintLayout
