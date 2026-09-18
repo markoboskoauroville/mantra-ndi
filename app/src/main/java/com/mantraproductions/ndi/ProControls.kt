@@ -60,17 +60,32 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
     }
 
     /**
-     * Manual exposure. Passing both ISO and shutter switches AE off entirely,
-     * which is what you want for anything being cut together later — no
-     * mid-shot exposure ramps.
+     * Manual exposure, applied in one capture request.
+     *
+     * Two things here were learned the hard way.
+     *
+     * First, SENSOR_FRAME_DURATION must be set explicitly. With AE off the
+     * camera hands frame duration to the caller along with exposure and gain,
+     * and CONTROL_AE_TARGET_FPS_RANGE stops meaning anything, because it only
+     * ever constrained the auto exposure routine. Leave frame duration unset
+     * and the sensor derives it from the exposure, so a long shutter quietly
+     * drops the camera to a few frames a second and the preview looks hung.
+     *
+     * Second, this is one setCustomRequest rather than a disable followed by a
+     * set. Each call rebuilds the repeating request on the camera thread, so
+     * doing it twice per fader movement doubled the work for no reason.
      */
-    fun setManualExposure(iso: Int, shutterNs: Long): Boolean {
+    fun setManualExposure(iso: Int, shutterNs: Long, frameDurationNs: Long = 0L): Boolean {
         if (!supportsManualSensor()) return false
-        source.disableAutoExposure()
+        // Never ask for an exposure longer than the frame it has to fit inside.
+        val exposure = if (frameDurationNs > 0) minOf(shutterNs, frameDurationNs) else shutterNs
         return source.setCustomRequest { builder ->
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             builder.set(CaptureRequest.SENSOR_SENSITIVITY, iso)
-            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, shutterNs)
+            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposure)
+            if (frameDurationNs > 0) {
+                builder.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDurationNs)
+            }
         }
     }
 

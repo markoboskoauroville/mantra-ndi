@@ -49,7 +49,7 @@ class MechanismTest {
 
     // --- exposure -----------------------------------------------------------
 
-    @Test fun shutterEndsLandOnTheSensorLimits() {
+    @Test fun shutterEndsLandOnTheLimits() {
         assertEquals(1_000L, Mechanism.shutterFromProgress(0, 200, 1_000L, 100_000_000L))
         assertEquals(100_000_000L, Mechanism.shutterFromProgress(200, 200, 1_000L, 100_000_000L))
     }
@@ -63,12 +63,6 @@ class MechanismTest {
         }
     }
 
-    @Test fun shutterCurveFavoursTheShortEnd() {
-        // Squared travel: halfway along the fader must still be well under halfway in time.
-        val mid = Mechanism.shutterFromProgress(100, 200, 0L, 1_000_000L)
-        assertTrue("mid was $mid", mid < 300_000L)
-    }
-
     @Test fun shutterOutOfRangeInputIsClamped() {
         assertEquals(1_000L, Mechanism.shutterFromProgress(-50, 200, 1_000L, 2_000L))
         assertEquals(2_000L, Mechanism.shutterFromProgress(9_999, 200, 1_000L, 2_000L))
@@ -76,6 +70,7 @@ class MechanismTest {
 
     @Test fun degenerateSensorRangeDoesNotDivideByZero() {
         assertEquals(5_000L, Mechanism.shutterFromProgress(100, 200, 5_000L, 5_000L))
+        assertEquals(0, Mechanism.progressForShutter(5_000L, 200, 5_000L, 5_000L))
         assertEquals(5_000L, Mechanism.shutterFromProgress(100, 0, 5_000L, 9_000L))
     }
 
@@ -89,6 +84,73 @@ class MechanismTest {
         assertEquals(1_000_000_000L / 48, Mechanism.shutter180Ns(24))
         assertEquals(1_000_000_000L / 50, Mechanism.shutter180Ns(25))
         assertEquals(0L, Mechanism.shutter180Ns(0))
+    }
+
+    // The bug that froze the preview: a shutter longer than the frame.
+
+    @Test fun shutterNeverExceedsOneFrameInterval() {
+        // Sensor offers ten seconds; at 24fps nothing beyond 1/24 is usable.
+        val (min, max) = Mechanism.shutterRangeForFps(24, 1_000L, 10_000_000_000L)
+        assertEquals(1_000L, min)
+        assertEquals(1_000_000_000L / 24, max)
+    }
+
+    @Test fun everyFrameRateGetsItsOwnCeiling() {
+        assertEquals(1_000_000_000L / 25, Mechanism.shutterRangeForFps(25, 1_000L, 1_000_000_000L).second)
+        assertEquals(1_000_000_000L / 50, Mechanism.shutterRangeForFps(50, 1_000L, 1_000_000_000L).second)
+    }
+
+    @Test fun aSlowSensorCeilingIsNotRaisedToTheFrameInterval() {
+        // If the sensor cannot reach 1/24, the sensor wins.
+        val (_, max) = Mechanism.shutterRangeForFps(24, 1_000L, 5_000_000L)
+        assertEquals(5_000_000L, max)
+    }
+
+    @Test fun noFrameRateMeansNoCeiling() {
+        val (_, max) = Mechanism.shutterRangeForFps(0, 1_000L, 9_000_000_000L)
+        assertEquals(9_000_000_000L, max)
+    }
+
+    @Test fun oneHundredEightyDegreeShutterFitsInsideEveryFrameRateCeiling() {
+        for (fps in intArrayOf(24, 25, 30, 50, 60)) {
+            val (_, max) = Mechanism.shutterRangeForFps(fps, 1_000L, 10_000_000_000L)
+            assertTrue("at $fps", Mechanism.shutter180Ns(fps) <= max)
+        }
+    }
+
+    @Test fun frameDurationMatchesTheFrameRate() {
+        assertEquals(1_000_000_000L / 24, Mechanism.frameDurationForFps(24))
+        assertEquals(0L, Mechanism.frameDurationForFps(0))
+    }
+
+    // Stops, not linear: a fader that is useful across the whole range.
+
+    @Test fun shutterTravelIsGeometricSoEachHalfIsAnEqualNumberOfStops() {
+        val min = 1_000L
+        val max = 1_000_000_000L / 24
+        val quarter = Mechanism.shutterFromProgress(50, 200, min, max)
+        val half = Mechanism.shutterFromProgress(100, 200, min, max)
+        val threeQuarter = Mechanism.shutterFromProgress(150, 200, min, max)
+        // Equal ratios between equal steps is what geometric means.
+        val firstRatio = half.toDouble() / quarter
+        val secondRatio = threeQuarter.toDouble() / half
+        assertEquals(firstRatio, secondRatio, firstRatio * 0.05)
+    }
+
+    @Test fun shutterRoundTripsThroughItsOwnInverse() {
+        val min = 1_000L
+        val max = 1_000_000_000L / 25
+        for (p in 0..200 step 25) {
+            val ns = Mechanism.shutterFromProgress(p, 200, min, max)
+            val back = Mechanism.progressForShutter(ns, 200, min, max)
+            assertTrue("at $p came back $back", Math.abs(back - p) <= 1)
+        }
+    }
+
+    @Test fun oneEightyShutterLandsInsideTheFaderTravel() {
+        val (min, max) = Mechanism.shutterRangeForFps(24, 1_000L, 10_000_000_000L)
+        val p = Mechanism.progressForShutter(Mechanism.shutter180Ns(24), 200, min, max)
+        assertTrue("landed at $p", p in 1..199)
     }
 
     @Test fun longExposuresReadAsSecondsNotAsOneOverZero() {
@@ -111,7 +173,8 @@ class MechanismTest {
 
     @Test fun everyShutterInASensorRangeFormatsWithoutZeroDenominator() {
         for (p in 0..200) {
-            val ns = Mechanism.shutterFromProgress(p, 200, 1_000L, 60_000_000_000L)
+            val (lo, hi) = Mechanism.shutterRangeForFps(24, 1_000L, 60_000_000_000L)
+            val ns = Mechanism.shutterFromProgress(p, 200, lo, hi)
             val text = Mechanism.formatShutter(ns)
             assertFalse("at $p got $text", text.endsWith("/0"))
         }

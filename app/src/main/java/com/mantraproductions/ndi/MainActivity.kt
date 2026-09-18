@@ -268,9 +268,12 @@ class MainActivity : AppCompatActivity() {
             binding.isoFader.max = (range.upper - range.lower).coerceAtLeast(1)
             binding.isoFader.progress = ((range.upper - range.lower) / 4)
         }
-        controls.exposureTimeRange()?.let {
-            binding.shutterFader.max = 200
-            binding.shutterFader.progress = 100
+        binding.shutterFader.max = 200
+        shutterRange()?.let { (minNs, maxNs) ->
+            // Start where a film camera would: 180 degrees for this frame rate.
+            val target = Mechanism.shutter180Ns(activeProfile?.fps ?: 25)
+            binding.shutterFader.progress =
+                Mechanism.progressForShutter(target, 200, minNs, maxNs)
         }
         controls.zoomRange().let { range ->
             binding.zoomFader.valueText = String.format("%.1fx", range.lower)
@@ -280,7 +283,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindPump() {
         val controls = service?.controls ?: return
-        pump.applyExposure = { iso, shutterNs -> controls.setManualExposure(iso, shutterNs) }
+        val frameDuration = Mechanism.frameDurationForFps(activeProfile?.fps ?: 25)
+        pump.applyExposure = { iso, shutterNs ->
+            controls.setManualExposure(iso, shutterNs, frameDuration)
+        }
         pump.applyWhiteBalance = { kelvin -> controls.setManualWhiteBalance(kelvin) }
         pump.applyZoom = { zoom -> controls.setZoom(zoom) }
     }
@@ -289,10 +295,10 @@ class MainActivity : AppCompatActivity() {
         if (!binding.manualExposureCheck.isChecked) return
         val controls = service?.controls ?: return
         val isoRange = controls.isoRange() ?: return
-        val exposureRange = controls.exposureTimeRange() ?: return
+        val (minNs, maxNs) = shutterRange() ?: return
         pump.setExposure(
             (isoRange.lower + binding.isoFader.progress).coerceIn(isoRange.lower, isoRange.upper),
-            progressToShutter(binding.shutterFader.progress, exposureRange.lower, exposureRange.upper)
+            progressToShutter(binding.shutterFader.progress, minNs, maxNs)
         )
     }
 
@@ -308,10 +314,11 @@ class MainActivity : AppCompatActivity() {
         val controls = service?.controls ?: return
         if (!binding.manualExposureCheck.isChecked) return
         val isoRange = controls.isoRange() ?: return
-        val exposureRange = controls.exposureTimeRange() ?: return
+        val (minNs, maxNs) = shutterRange() ?: return
         controls.setManualExposure(
             (isoRange.lower + binding.isoFader.progress).coerceIn(isoRange.lower, isoRange.upper),
-            progressToShutter(binding.shutterFader.progress, exposureRange.lower, exposureRange.upper)
+            progressToShutter(binding.shutterFader.progress, minNs, maxNs),
+            Mechanism.frameDurationForFps(activeProfile?.fps ?: 25)
         )
         updateExposureLabels()
     }
@@ -321,8 +328,8 @@ class MainActivity : AppCompatActivity() {
         controls?.isoRange()?.let {
             binding.isoFader.valueText = "${it.lower + binding.isoFader.progress}"
         }
-        controls?.exposureTimeRange()?.let {
-            val ns = progressToShutter(binding.shutterFader.progress, it.lower, it.upper)
+        shutterRange()?.let { (minNs, maxNs) ->
+            val ns = progressToShutter(binding.shutterFader.progress, minNs, maxNs)
             binding.shutterFader.valueText = Mechanism.formatShutter(ns)
         }
     }
@@ -333,6 +340,16 @@ class MainActivity : AppCompatActivity() {
         val zoom = range.lower + (progress / 100f) * (range.upper - range.lower)
         controls.setZoom(zoom)
         binding.zoomFader.valueText = String.format("%.1fx", zoom)
+    }
+
+    /**
+     * The usable shutter range at this profile's frame rate, which is not the
+     * sensor's full range: nothing longer than one frame interval.
+     */
+    private fun shutterRange(): Pair<Long, Long>? {
+        val sensor = service?.controls?.exposureTimeRange() ?: return null
+        val fps = activeProfile?.fps ?: 25
+        return Mechanism.shutterRangeForFps(fps, sensor.lower, sensor.upper)
     }
 
     private fun progressToShutter(progress: Int, min: Long, max: Long): Long =

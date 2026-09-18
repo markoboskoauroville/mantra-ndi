@@ -48,14 +48,51 @@ object Mechanism {
     // --- exposure -----------------------------------------------------------
 
     /**
-     * Fader position to shutter time. Squared so the short end, where the
-     * useful stops are, gets most of the travel.
+     * The shutter range a camera may actually use at a given frame rate.
+     *
+     * This is the rule the app was missing and it is why the preview froze.
+     * The sensor will happily accept a two second exposure, and a sensor
+     * producing a frame every two seconds is a camera running at half a frame
+     * per second. Nothing is hung; there is simply no next frame. Film cameras
+     * have the same physical limit and nobody notices, because a shutter dial
+     * does not offer speeds the frame rate cannot carry.
+     *
+     * So the longest exposure is one frame interval, whatever the sensor
+     * claims it can do.
+     */
+    fun shutterRangeForFps(fps: Int, sensorMinNs: Long, sensorMaxNs: Long): Pair<Long, Long> {
+        if (fps <= 0) return sensorMinNs to sensorMaxNs
+        val frameInterval = 1_000_000_000L / fps
+        val upper = minOf(sensorMaxNs, frameInterval).coerceAtLeast(sensorMinNs)
+        return sensorMinNs to upper
+    }
+
+    /**
+     * Fader position to shutter time, in stops.
+     *
+     * Geometric rather than linear, because that is how shutter speeds work:
+     * each stop halves the light. A linear fader spends most of its length
+     * between 1/40 and 1/50 and crosses everything from 1/500 to 1/8000 in the
+     * last few pixels, which is exactly backwards from what the hand wants.
      */
     fun shutterFromProgress(progress: Int, steps: Int, minNs: Long, maxNs: Long): Long {
         if (maxNs <= minNs || steps <= 0) return minNs
-        val fraction = (progress.coerceIn(0, steps).toDouble() / steps).pow(2.0)
-        return (minNs + fraction * (maxNs - minNs)).toLong().coerceIn(minNs, maxNs)
+        val fraction = progress.coerceIn(0, steps).toDouble() / steps
+        val ratio = maxNs.toDouble() / minNs.toDouble()
+        return (minNs * ratio.pow(fraction)).toLong().coerceIn(minNs, maxNs)
     }
+
+    /** The inverse of [shutterFromProgress], for placing the fader at a known speed. */
+    fun progressForShutter(ns: Long, steps: Int, minNs: Long, maxNs: Long): Int {
+        if (maxNs <= minNs || steps <= 0) return 0
+        val clamped = ns.coerceIn(minNs, maxNs)
+        val fraction = ln(clamped.toDouble() / minNs) / ln(maxNs.toDouble() / minNs)
+        return Math.round(fraction * steps).toInt().coerceIn(0, steps)
+    }
+
+    /** Frame duration to request alongside a manual exposure, in nanoseconds. */
+    fun frameDurationForFps(fps: Int): Long =
+        if (fps <= 0) 0L else 1_000_000_000L / fps
 
     /** The denominator a camera operator reads: 20000000ns becomes 50, as in 1/50. */
     fun shutterDenominator(ns: Long): Int =
