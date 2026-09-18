@@ -46,7 +46,8 @@ class FocusSquareView @JvmOverloads constructor(
     private val half get() = 46f * density
 
     init {
-        isClickable = true
+        // Not clickable: an unclaimed touch has to fall through to the image.
+        isClickable = false
     }
 
     fun moveTo(x: Float, y: Float) {
@@ -99,20 +100,43 @@ class FocusSquareView @JvmOverloads constructor(
         }
     }
 
+    private var grabbed = false
+
+    /**
+     * Only touches on the box itself belong to the box.
+     *
+     * This view covers the whole image, so claiming every touch would swallow
+     * the tap that opens and closes the controls, which is exactly what it did
+     * the first time. A touch outside the box is returned untouched and reaches
+     * the preview underneath.
+     */
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                moveTo(event.x / width, event.y / height)
-                state = State.IDLE
-                onMoved?.invoke(centreX, centreY)
+            MotionEvent.ACTION_DOWN -> {
+                val cx = width * centreX
+                val cy = height * centreY
+                val reach = half + 20f * density
+                grabbed = Math.abs(event.x - cx) <= reach && Math.abs(event.y - cy) <= reach
+                if (!grabbed) return false
                 parent?.requestDisallowInterceptTouchEvent(true)
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                parent?.requestDisallowInterceptTouchEvent(false)
+
+            MotionEvent.ACTION_MOVE -> {
+                if (!grabbed) return false
+                moveTo(event.x / width, event.y / height)
+                state = State.IDLE
+                onMoved?.invoke(centreX, centreY)
                 return true
             }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                parent?.requestDisallowInterceptTouchEvent(false)
+                val wasGrabbed = grabbed
+                grabbed = false
+                return wasGrabbed
+            }
         }
-        return super.onTouchEvent(event)
+        return false
     }
 }

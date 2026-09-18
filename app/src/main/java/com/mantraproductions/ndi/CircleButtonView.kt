@@ -39,6 +39,24 @@ class CircleButtonView @JvmOverloads constructor(
     var centerText: String = ""
         set(value) { if (field != value) { field = value; invalidate() } }
 
+    /** A bare glyph with no ring around it, for the gear. */
+    var showRing: Boolean = true
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    /**
+     * Red while the camera is being asked something and white once it answers.
+     * An A that does nothing visible for most of a second reads as a dead
+     * button, and the operator presses it again.
+     */
+    var busy: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                ringColor = if (value) RECORDING else IDLE
+                invalidate()
+            }
+        }
+
     /** A glyph for the ring when it has no text, such as the settings mark. */
     var symbol: String = ""
         set(value) { if (field != value) { field = value; invalidate() } }
@@ -84,14 +102,15 @@ class CircleButtonView @JvmOverloads constructor(
         } else {
             ringColor
         }
-        canvas.drawCircle(cx, cy, radius, ringPaint)
+        if (showRing) canvas.drawCircle(cx, cy, radius, ringPaint)
 
         val text = centerText.ifEmpty { symbol }
         if (text.isEmpty()) return
 
         // The largest square that fits inside the circle is the diameter over
         // root two; a little less leaves the glyphs off the stroke.
-        val usable = radius * 1.30f
+        // With no ring there is nothing to stay clear of, so the glyph fills.
+        val usable = if (showRing) radius * 1.30f else radius * 1.9f
         textPaint.color = ringColor
         fitTextTo(text, usable)
         textPaint.getTextBounds(text, 0, text.length, bounds)

@@ -68,10 +68,10 @@
         android:visibility="gone"
         android:layout_marginTop="18dp"
         android:layout_marginBottom="14dp"
-        android:layout_marginEnd="16dp"
+        android:layout_marginEnd="8dp"
         app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintBottom_toTopOf="@id/controlRow"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/controlRow">
 
         <LinearLayout
             android:layout_width="58dp"
@@ -207,53 +207,39 @@
         android:textSize="12sp"
         android:visibility="gone"
         app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toStartOf="@id/controlRow" />
 
-    <!-- Normal state: two rings and the gear -->
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <!-- The action stack: right edge, gear at the bottom, record at the top,
+         so the hand never crosses the frame to reach anything. -->
+    <LinearLayout
         android:id="@+id/controlRow"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:paddingVertical="14dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingHorizontal="10dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
-
-        <androidx.constraintlayout.widget.Guideline
-            android:id="@+id/centreGuide"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            app:layout_constraintGuide_percent="0.5" />
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/recordButton"
-            android:layout_width="66dp"
-            android:layout_height="66dp"
-            android:layout_marginEnd="30dp"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/centreGuide" />
+            android:layout_width="62dp"
+            android:layout_height="62dp"
+            android:layout_marginBottom="16dp" />
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/settingsButton"
-            android:layout_width="66dp"
-            android:layout_height="66dp"
-            android:layout_marginStart="30dp"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toEndOf="@id/centreGuide" />
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginBottom="16dp" />
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/gearButton"
             android:layout_width="46dp"
             android:layout_height="46dp"
-            android:layout_marginEnd="18dp"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            android:layout_marginBottom="14dp" />
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
 
     <!-- Adjusting state: one fader, replacing the rings entirely -->
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -264,7 +250,7 @@
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toStartOf="@id/controlRow">
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/paramCycleButton"

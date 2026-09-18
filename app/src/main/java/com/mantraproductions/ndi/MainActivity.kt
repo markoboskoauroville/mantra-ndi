@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.view.KeyEvent
+import android.view.OrientationEventListener
 import android.view.SurfaceHolder
 import android.view.View
 import android.content.pm.PackageManager
@@ -141,8 +142,34 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    /**
+     * The stack stays on the right where the hand is; only the glyphs turn, so
+     * a record ring never appears upside down while the layout stays put.
+     */
+    private val orientationWatcher by lazy {
+        object : OrientationEventListener(this) {
+            override fun onOrientationChanged(degrees: Int) {
+                if (degrees == ORIENTATION_UNKNOWN) return
+                val quarter = ((degrees + 45) / 90) % 4
+                val rotation = when (quarter) {
+                    1 -> -90f
+                    2 -> 180f
+                    3 -> 90f
+                    else -> 0f
+                }
+                if (iconRotation == rotation) return
+                iconRotation = rotation
+                listOf(
+                    binding.recordButton, binding.settingsButton, binding.gearButton
+                ).forEach { it.animate().rotation(rotation).setDuration(180).start() }
+            }
+        }
+    }
+    private var iconRotation = 0f
+
     override fun onStart() {
         super.onStart()
+        if (orientationWatcher.canDetectOrientation()) orientationWatcher.enable()
         pump.start()
         requestPermissionsThenBind()
         ui.post(tick)
@@ -160,6 +187,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        orientationWatcher.disable()
         pump.stop()
         ui.removeCallbacks(tick)
         if (bound) {
@@ -233,6 +261,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleRecording() {
         val svc = service ?: return
+        // A clean frame is the point of recording, so the controls go away.
+        if (!svc.isRecording && binding.verticalPanel.visibility == View.VISIBLE) {
+            toggleVerticalPanel()
+        }
         if (svc.isRecording) {
             svc.stopRecording()
             say("Saved to DCIM/${MediaStoreOutput.FOLDER}")
@@ -471,7 +503,7 @@ class MainActivity : AppCompatActivity() {
         ).forEach { (button, which) ->
             button.symbol = "A"
             button.ringColor = CircleButtonView.IDLE
-            button.setOnClickListener { suggestFor(which) }
+            button.setOnClickListener { suggestFor(which, button) }
         }
         binding.aFocus.symbol = "A"
         binding.aFocus.ringColor = CircleButtonView.IDLE
@@ -614,24 +646,23 @@ class MainActivity : AppCompatActivity() {
      * Runs the camera's own routine for one moment, takes the number it
      * arrives at, and hands control straight back.
      */
-    private fun suggestFor(which: Mechanism.Param) {
+    private fun suggestFor(which: Mechanism.Param, button: CircleButtonView) {
         val controls = service?.controls ?: return
+        button.busy = true
         when (which) {
             Mechanism.Param.ISO, Mechanism.Param.SHUTTER -> {
                 controls.setAutoExposure()
-                say("Reading the scene")
                 ui.postDelayed({
                     seedFromCamera()
                     manualExposure = true
                     pushExposure()
                     refreshVerticalPanel()
-                    say("Set from auto, still manual")
+                    button.busy = false
                 }, 800)
             }
 
             Mechanism.Param.WHITE_BALANCE -> {
                 controls.setAutoWhiteBalance()
-                say("Reading the light")
                 ui.postDelayed({
                     // Auto white balance reports no Kelvin, so the daylight
                     // anchor is the honest starting point to hand back.
@@ -643,7 +674,7 @@ class MainActivity : AppCompatActivity() {
                         Mechanism.kelvinFromProgress(kelvinProgress, 100)
                     )
                     refreshVerticalPanel()
-                    say("Set to ${Mechanism.KELVIN_WORKING_CENTRE}K, still manual")
+                    button.busy = false
                 }, 700)
             }
 
@@ -651,6 +682,7 @@ class MainActivity : AppCompatActivity() {
                 zoomProgress = 0
                 pushZoom(0)
                 refreshVerticalPanel()
+                button.busy = false
             }
         }
     }
@@ -665,10 +697,11 @@ class MainActivity : AppCompatActivity() {
             binding.focusSquare.visibility = View.VISIBLE
         }
         binding.focusSquare.state = FocusSquareView.State.SEEKING
-        say("Focusing")
+        binding.aFocus.busy = true
 
         val started = controls.focusOnRegion(binding.focusSquare.normalisedBounds()) { focused ->
             runOnUiThread {
+                binding.aFocus.busy = false
                 binding.focusSquare.state =
                     if (focused) FocusSquareView.State.LOCKED else FocusSquareView.State.FAILED
                 if (focused) {
@@ -686,6 +719,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (!started) {
+            binding.aFocus.busy = false
             binding.focusSquare.state = FocusSquareView.State.FAILED
             say("This camera has no focus control")
         }
@@ -707,8 +741,15 @@ class MainActivity : AppCompatActivity() {
     private fun setUpActions() {
         binding.settingsButton.symbol = "\u2261"
         binding.gearButton.symbol = "\u2699"
+        // A gear reads as a gear. A ring around it is one more shape competing
+        // with the frame for nothing.
+        binding.gearButton.showRing = false
 
-        binding.settingsButton.setOnClickListener { openControlBar() }
+        // The menu is the controls, and pressing it again puts them away. The
+        // focus box used to swallow the tap that did this, which left no way
+        // out at all.
+        binding.settingsButton.setOnClickListener { toggleVerticalPanel() }
+        binding.settingsButton.setOnLongClickListener { openControlBar(); true }
         binding.gearButton.setOnClickListener { startActivity(SettingsActivity.intent(this)) }
 
         binding.recordButton.setOnClickListener {
