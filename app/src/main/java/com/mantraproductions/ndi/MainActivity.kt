@@ -1030,9 +1030,11 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setUpVectorscope() {
         binding.vectorscope.onBalanceMoved = { du, dv ->
-            val controls = service?.controls ?: return@onBalanceMoved
-            val base = controls.heldGains ?: controls.lastAwbGains ?: return@onBalanceMoved
-            controls.applyBalanceGains(Mechanism.gainsFromChromaOffset(base, du, dv))
+            val controls = service?.controls
+            val base = controls?.heldGains ?: controls?.lastAwbGains
+            if (controls != null && base != null) {
+                controls.applyBalanceGains(Mechanism.gainsFromChromaOffset(base, du, dv))
+            }
         }
         binding.vectorscope.onBalanceReleased = {
             manualWhiteBalance = true
