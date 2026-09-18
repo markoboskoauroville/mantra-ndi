@@ -233,13 +233,13 @@ class KeyRingTest {
         // Built rather than written, so a scan for key-shaped strings in this
         // repository keeps meaning something.
         val entry = KeyRing.Entry("gsk_" + "abcdefghijklmnopqrstuvwxyz" + "1234")
-        assertEquals("…1234", entry.masked)
+        assertEquals("...1234", entry.masked)
         assertFalse(entry.masked.contains("gsk_"))
         assertFalse(entry.masked.contains("abcdefgh"))
     }
 
     @Test fun aShortStringIsNotPartlyRevealedByMasking() {
-        assertEquals("…", KeyRing.Entry("gsk_").masked)
+        assertEquals("...", KeyRing.Entry("gsk_").masked)
     }
 
     @Test fun theSummaryNamesNoKey() {
