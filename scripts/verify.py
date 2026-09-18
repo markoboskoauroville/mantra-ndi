@@ -89,6 +89,17 @@ def main():
             missing_views.append(view)
     check("G9 custom views exist", not missing_views, ", ".join(missing_views))
 
+    # G10 — every layout is well formed. A duplicate attribute is valid enough
+    # for a text editor and fatal to the resource merger.
+    import xml.dom.minidom
+    bad_layouts = []
+    for layout in (ROOT / "app/src/main/res").rglob("*.xml"):
+        try:
+            xml.dom.minidom.parse(str(layout))
+        except Exception as exc:
+            bad_layouts.append(f"{layout.name}: {exc}")
+    check("G10 all XML resources parse", not bad_layouts, "; ".join(bad_layouts))
+
     print()
     if FAILS:
         print(f"{len(FAILS)} check(s) failed: {', '.join(FAILS)}")
