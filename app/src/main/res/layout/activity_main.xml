@@ -9,7 +9,10 @@
     <!-- The image, letterboxed to its own shape. Everything else is anchored
          to this view rather than to the window, so nothing lands on a black
          bar beside the picture. -->
-    <SurfaceView
+    <!-- A TextureView rather than a SurfaceView: its contents can be read
+         back, which is what lets the scope work on every pipeline instead of
+         only the one that can carry an analysis stream. -->
+    <TextureView
         android:id="@+id/preview"
         android:layout_width="0dp"
         android:layout_height="0dp"

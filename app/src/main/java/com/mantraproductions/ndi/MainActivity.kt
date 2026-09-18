@@ -12,7 +12,10 @@ import android.os.IBinder
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.OrientationEventListener
-import android.view.SurfaceHolder
+import android.graphics.Bitmap
+import android.graphics.SurfaceTexture
+import android.view.Surface
+import android.view.TextureView
 import android.view.View
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
@@ -145,19 +148,22 @@ class MainActivity : AppCompatActivity() {
 
         binding.preview.setOnClickListener { toggleVerticalPanel() }
 
-        binding.preview.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) {
+        binding.preview.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) {
                 surfaceReady = true
                 service?.attachPreview(binding.preview)
             }
 
-            override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, ht: Int) {}
+            override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) {}
 
-            override fun surfaceDestroyed(holder: SurfaceHolder) {
+            override fun onSurfaceTextureDestroyed(t: SurfaceTexture): Boolean {
                 surfaceReady = false
                 service?.detachPreview()
+                return true
             }
-        })
+
+            override fun onSurfaceTextureUpdated(t: SurfaceTexture) {}
+        }
     }
 
     /**
@@ -1042,16 +1048,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var scopeBitmap: Bitmap? = null
+    private var scopePixels: IntArray? = null
+    private var lastScopeAt = 0L
+
+    /**
+     * Sampled from the preview, four times a second.
+     *
+     * A hundred and sixty by ninety is about fourteen thousand pixels, read at
+     * every third one, which is plenty for a scope and a rounding error next
+     * to encoding a frame. The bitmap and the pixel array are allocated once
+     * and reused, because allocating either at four hertz would be visible in
+     * the garbage collector long before it was visible on screen.
+     */
     private fun refreshVectorscope() {
         val wanted = appSettings.vectorscopeVisible
         binding.vectorscope.visibility = if (wanted) View.VISIBLE else View.GONE
-        if (!wanted) return
-        service?.latestChroma()?.let { (u, v) ->
-            val centroid = Mechanism.chromaCentroid(u, v)
-            binding.vectorscope.setFrame(
-                Mechanism.vectorscope(u, v), 64, centroid[0], centroid[1]
-            )
+        if (!wanted || !binding.preview.isAvailable) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastScopeAt < 250) return
+        lastScopeAt = now
+
+        val bitmap = scopeBitmap ?: Bitmap.createBitmap(160, 90, Bitmap.Config.ARGB_8888)
+            .also { scopeBitmap = it }
+        val pixels = scopePixels ?: IntArray(160 * 90).also { scopePixels = it }
+
+        try {
+            binding.preview.getBitmap(bitmap) ?: return
+            bitmap.getPixels(pixels, 0, 160, 0, 0, 160, 90)
+        } catch (e: Exception) {
+            return
         }
+
+        val centroid = Mechanism.chromaCentroidFromArgb(pixels)
+        binding.vectorscope.setFrame(
+            Mechanism.vectorscopeFromArgb(pixels), 64, centroid[0], centroid[1]
+        )
     }
 
     // --- plumbing -----------------------------------------------------------

@@ -15,7 +15,8 @@ import android.os.Environment
 import android.os.HandlerThread
 import android.os.IBinder
 import android.util.Log
-import android.view.SurfaceView
+import android.view.Surface
+import android.view.TextureView
 import androidx.core.app.NotificationCompat
 import com.pedro.common.VideoCodec
 import com.pedro.encoder.input.sources.video.Camera2Source
@@ -185,15 +186,17 @@ class NdiSendService : Service() {
         return true
     }
 
-    fun attachPreview(surfaceView: SurfaceView) {
+    fun attachPreview(textureView: TextureView) {
         hdr?.let { pipeline ->
             if (!pipeline.isRunning) {
                 val profile = activeProfile ?: return
                 val settings = AppSettings(applicationContext)
+                val texture = textureView.surfaceTexture ?: return
+                texture.setDefaultBufferSize(profile.width, profile.height)
                 pipeline.start(
                     profile = profile,
                     sourceName = SourceIdentity(applicationContext).name,
-                    previewSurface = surfaceView.holder.surface,
+                    previewSurface = Surface(texture),
                     wantTenBit = settings.tenBitWanted,
                     logCurve = settings.logCurve
                 )
@@ -201,7 +204,7 @@ class NdiSendService : Service() {
             return
         }
         val s = stream ?: return
-        if (!s.isOnPreview) s.startPreview(surfaceView)
+        if (!s.isOnPreview) s.startPreview(textureView)
     }
 
     fun detachPreview() {

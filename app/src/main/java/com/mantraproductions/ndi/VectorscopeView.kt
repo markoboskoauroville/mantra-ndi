@@ -77,11 +77,16 @@ class VectorscopeView @JvmOverloads constructor(
     fun setFrame(newGrid: IntArray, size: Int, cu: Float, cv: Float) {
         grid = newGrid
         gridSize = size
+        hasFrame = true
         peak = (newGrid.maxOrNull() ?: 1).coerceAtLeast(1)
         centroidU = cu
         centroidV = cv
         postInvalidateOnAnimation()
     }
+
+    /** True once a frame has been supplied, so an empty scope can say why. */
+    var hasFrame: Boolean = false
+        private set
 
     fun reset() {
         offsetU = 0f

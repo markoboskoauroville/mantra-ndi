@@ -493,6 +493,70 @@ object Mechanism {
     }
 
     /**
+     * The same scope, computed from ordinary pixels.
+     *
+     * Reading chroma planes needs an analysis stream, and only the direct
+     * pipeline can carry one. Every pipeline has a preview, though, and a
+     * preview can be sampled, so the scope is built from that instead and then
+     * works everywhere rather than only where ten bit does.
+     *
+     * The conversion is BT.601, which is what U and V mean on a vectorscope.
+     * It is the same arithmetic the camera did on the way out, run backwards
+     * on a small copy.
+     *
+     * @param argb packed pixels, as a Bitmap hands them over
+     */
+    fun vectorscopeFromArgb(argb: IntArray, stride: Int = 3, size: Int = 64): IntArray {
+        val grid = IntArray(size * size)
+        var i = 0
+        while (i < argb.size) {
+            val p = argb[i]
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            // U is blue minus luma, V is red minus luma, both scaled the way a
+            // scope expects and normalised to plus or minus one.
+            val u = (-0.169 * r - 0.331 * g + 0.5 * b) / 128.0
+            val v = (0.5 * r - 0.419 * g - 0.081 * b) / 128.0
+            val x = ((u * 0.5 + 0.5) * (size - 1)).toInt().coerceIn(0, size - 1)
+            val y = ((0.5 - v * 0.5) * (size - 1)).toInt().coerceIn(0, size - 1)
+            grid[y * size + x]++
+            i += stride
+        }
+        return grid
+    }
+
+    /**
+     * Where the cast is, from the same pixels.
+     *
+     * Near black and clipped pixels are left out. Black carries no colour and
+     * clipped highlights carry whatever channel saturated first, so both drag
+     * the answer towards a cast that is not in the scene. Leaving them out is
+     * the same reason a colourist reads the mids rather than the whole frame.
+     */
+    fun chromaCentroidFromArgb(argb: IntArray, stride: Int = 3): FloatArray {
+        var su = 0.0
+        var sv = 0.0
+        var n = 0
+        var i = 0
+        while (i < argb.size) {
+            val p = argb[i]
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            val luma = 0.299 * r + 0.587 * g + 0.114 * b
+            if (luma in 24.0..238.0) {
+                su += (-0.169 * r - 0.331 * g + 0.5 * b) / 128.0
+                sv += (0.5 * r - 0.419 * g - 0.081 * b) / 128.0
+                n++
+            }
+            i += stride
+        }
+        if (n == 0) return floatArrayOf(0f, 0f)
+        return floatArrayOf((su / n).toFloat(), (sv / n).toFloat())
+    }
+
+    /**
      * Where the cloud sits, as a fraction from the centre.
      *
      * The average chroma of a frame is the cast: a neutral scene sits on the
