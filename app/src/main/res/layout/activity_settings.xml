@@ -123,6 +123,11 @@
                 <TextView android:id="@+id/valueWaveform" style="@style/MantraSettingsValue" />
             </LinearLayout>
 
+            <LinearLayout android:id="@+id/rowTimecode" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Timecode" />
+                <TextView android:id="@+id/valueTimecode" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
             <LinearLayout android:id="@+id/rowNetwork" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="NDI network test" />
                 <TextView style="@style/MantraSettingsValue"

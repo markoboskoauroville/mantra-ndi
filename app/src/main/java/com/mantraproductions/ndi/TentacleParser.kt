@@ -64,7 +64,9 @@ object TentacleParser {
             val rate = RATE_BY_INDEX.getOrNull(rateByte and 0x0F) ?: continue
             val count = readLittleEndian(data, offset + 1) ?: continue
             val perDay = Timecode.nominal(rate.first) * 86400L
-            if (count !in 0 until perDay) continue
+            // Zero is refused for the same reason as above: an empty buffer
+            // and midnight are the same bytes, and one of them is a mistake.
+            if (count !in 1 until perDay) continue
             return Reading(
                 Timecode.fromFrameCount(count, rate.first, rate.second),
                 "rate+frames32 at $offset",
@@ -72,15 +74,13 @@ object TentacleParser {
             )
         }
 
-        // Layout C: hours, minutes, seconds, frames with no rate byte, which
-        // happens on older firmware. Twenty five is assumed and said out loud,
-        // because assuming a rate silently is how a day comes back at the
-        // wrong speed.
-        for (offset in 0..maxOf(0, data.size - 4)) {
-            val tc = readPlain(data, offset, 25.0, false) ?: continue
-            return Reading(tc, "hhmmssff at $offset, rate assumed 25", raw)
-        }
-
+        // There was a third layout here that read four bytes as a time with
+        // no rate byte to check them against. It had to go: with nothing to
+        // validate, it scans a payload until some four bytes happen to look
+        // like a clock, and almost every payload contains four such bytes. It
+        // turned a parser that refuses what it cannot read into one that
+        // always answers, which is the exact failure this file exists to
+        // avoid. A rate byte is what makes a reading trustworthy.
         return null
     }
 

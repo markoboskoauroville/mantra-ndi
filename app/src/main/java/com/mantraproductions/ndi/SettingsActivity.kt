@@ -120,6 +120,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
         binding.rowWaveform.setOnClickListener { pickWaveform() }
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
+        binding.rowTimecode.setOnClickListener { manageTimecode() }
         binding.rowProfile.setOnClickListener { pickProfile() }
         binding.rowSourceName.setOnClickListener { editSourceName() }
         binding.rowBitDepth.setOnClickListener { pickBitDepth() }
@@ -209,6 +210,7 @@ class SettingsActivity : AppCompatActivity() {
             binding.rowCamera to system,
             binding.rowDetect to system,
             binding.rowNetwork to system,
+            binding.rowTimecode to system,
             binding.rowKeys to system,
             binding.rowAbout to system
         )
@@ -246,6 +248,11 @@ class SettingsActivity : AppCompatActivity() {
         binding.valueTimecode.text =
             if (prefs.timecodeEnabled) "Listening for a Tentacle over Bluetooth"
             else "Off"
+        binding.valueTimecode.text = if (prefs.timecodeEnabled) {
+            "Listening for a Tentacle"
+        } else {
+            "Off"
+        }
         binding.valueFocusTiming.text = buildString {
             append("Hold ").append(prefs.focusHoldMs / 1000.0).append("s, rack ")
             append(if (prefs.focusRampMs == 0L) "instant" else "${prefs.focusRampMs / 1000.0}s")
@@ -395,6 +402,89 @@ class SettingsActivity : AppCompatActivity() {
                 refresh()
             }
             .show()
+    }
+
+    /**
+     * Timecode, and the one honest thing to do about a format nobody publishes.
+     *
+     * Everything above the radio is built and checked: the SMPTE arithmetic,
+     * drop frame, the clock that keeps running between broadcasts, the display,
+     * and the ALE an edit imports. The byte layout inside the advertisement is
+     * licensed rather than documented, so rather than guess it, the app
+     * captures what a real device actually sends. Send that capture over and
+     * the parser is a short function.
+     */
+    private fun manageTimecode() {
+        val sync = TentacleSync(this)
+        val lines = StringBuilder()
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Timecode")
+            .setMessage(
+                if (prefs.timecodeEnabled) "Listening. Anything found appears below."
+                else "Off."
+            )
+            .setPositiveButton(if (prefs.timecodeEnabled) "Turn off" else "Turn on") { _, _ ->
+                prefs.timecodeEnabled = !prefs.timecodeEnabled
+                if (prefs.timecodeEnabled) requestBluetooth()
+                refresh()
+            }
+            .setNeutralButton("Capture a device") { _, _ -> captureTentacle() }
+            .setNegativeButton("Close", null)
+            .create()
+        dialog.show()
+    }
+
+    private fun captureTentacle() {
+        requestBluetooth()
+        val sync = TentacleSync(this)
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Listening for a Tentacle")
+            .setMessage("Fifteen seconds. Keep the device close and powered.")
+            .setCancelable(false)
+            .create()
+        progress.show()
+
+        sync.listener = object : TentacleSync.Listener {
+            override fun onTimecode(timecode: Timecode, atNanos: Long) = Unit
+            override fun onDeviceSeen(name: String, rssi: Int) {
+                runOnUiThread { progress.setMessage("Seen: " + name) }
+            }
+            override fun onRaw(name: String, manufacturerId: Int, bytes: ByteArray) = Unit
+            override fun onError(message: String) {
+                runOnUiThread { progress.setMessage(message) }
+            }
+        }
+        sync.start()
+
+        binding.root.postDelayed({
+            sync.stop()
+            progress.dismiss()
+            val report = sync.captureReport()
+            val target = MediaStoreOutput.writeText(
+                this, "MantraNDI_tentacle_capture.txt", report
+            )
+            AlertDialog.Builder(this)
+                .setTitle("Tentacle capture")
+                .setMessage(
+                    report.take(1200) +
+                        (if (target != null) "\n\nSaved to " + target.shortLocation else "")
+                )
+                .setPositiveButton("Close", null)
+                .show()
+        }, 15_000)
+    }
+
+    private fun requestBluetooth() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this, arrayOf(android.Manifest.permission.BLUETOOTH_SCAN), 77
+            )
+        } else {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 77
+            )
+        }
     }
 
     private fun runNetworkTest() {

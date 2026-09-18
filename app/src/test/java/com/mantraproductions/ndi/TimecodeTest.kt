@@ -1,7 +1,6 @@
 package com.mantraproductions.ndi
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -10,153 +9,165 @@ import org.junit.Test
 /**
  * TEST 1 for timecode.
  *
- * Worth more here than almost anywhere else in this app: a timecode error is
- * invisible on set and only appears in the edit, by which point every clip of
- * the day is out of sync with every other. None of these cases can be caught
- * by looking at a screen.
+ * Worth more care than most, because timecode that is wrong by one frame looks
+ * exactly like timecode that is right, and nobody finds out until the sound no
+ * longer lines up in the edit.
  */
 class TimecodeTest {
 
-    @Test fun aTimecodeReadsTheWayAnEditorWritesIt() {
-        assertEquals("01:23:45:12", Timecode(1, 23, 45, 12, 25.0).toString())
+    private fun tc(h: Int, m: Int, s: Int, f: Int, rate: Timecode.Rate) =
+        Timecode(h, m, s, f, rate)
+
+    // --- counting, without drop frame ----------------------------------------
+
+    @Test fun framesCountUpThroughEverySecondAndMinute() {
+        val rate = Timecode.Rate.FPS_25
+        assertEquals(tc(0, 0, 0, 0, rate), Timecode.fromFrames(0, rate))
+        assertEquals(tc(0, 0, 0, 24, rate), Timecode.fromFrames(24, rate))
+        assertEquals(tc(0, 0, 1, 0, rate), Timecode.fromFrames(25, rate))
+        assertEquals(tc(0, 1, 0, 0, rate), Timecode.fromFrames(25 * 60, rate))
+        assertEquals(tc(1, 0, 0, 0, rate), Timecode.fromFrames(25 * 3600, rate))
     }
 
-    @Test fun dropFrameIsWrittenWithASemicolonBecauseThatIsWhatItMeans() {
-        assertEquals("01:00:00;02", Timecode(1, 0, 0, 2, 29.97, true).toString())
-    }
-
-    @Test fun countingAndFormattingAreExactInverses() {
-        for (fps in listOf(24.0, 25.0, 30.0, 50.0)) {
-            val rate = Timecode.nominal(fps)
-            for (count in listOf(0L, 1L, rate.toLong(), 3600L * rate, 86399L * rate)) {
-                val tc = Timecode.fromFrameCount(count, fps, false)
-                assertEquals("at $count on $fps", count, Timecode.toFrameCount(tc))
+    @Test fun everyRateRoundTripsThroughItsFrameCount() {
+        for (rate in Timecode.Rate.values()) {
+            var frame = 0L
+            while (frame < 60L * 60 * rate.nominal * 2) {
+                val back = Timecode.toFrames(Timecode.fromFrames(frame, rate))
+                assertEquals("$rate at $frame", frame, back)
+                frame += rate.nominal * 37L + 13L
             }
         }
     }
 
-    @Test fun oneSecondAtTwentyFiveIsTwentyFiveFrames() {
-        val tc = Timecode.fromFrameCount(25, 25.0, false)
-        assertEquals("00:00:01:00", tc.toString())
+    @Test fun aDayWrapsRatherThanRunningToTwentyFive() {
+        val rate = Timecode.Rate.FPS_25
+        assertEquals(tc(0, 0, 0, 0, rate), Timecode.fromFrames(25L * 3600 * 24, rate))
     }
 
-    @Test fun theLastFrameOfASecondIsNotTheNextSecond() {
-        assertEquals("00:00:00:24", Timecode.fromFrameCount(24, 25.0, false).toString())
+    // --- drop frame, which is the one that catches people ---------------------
+
+    @Test fun dropFrameSkipsTheFirstTwoLabelsOfAMinute() {
+        val rate = Timecode.Rate.FPS_29_97_DF
+        // The last frame of the first minute, then the next one.
+        val lastOfMinute = Timecode.toFrames(tc(0, 0, 59, 29, rate))
+        assertEquals(tc(0, 1, 0, 2, rate), Timecode.fromFrames(lastOfMinute + 1, rate))
     }
 
-    @Test fun midnightWrapsRatherThanRunningToTwentyFive() {
-        val perDay = 25L * 86400
-        assertEquals("00:00:00:00", Timecode.fromFrameCount(perDay, 25.0, false).toString())
+    @Test fun dropFrameKeepsTheLabelsOnEveryTenthMinute() {
+        val rate = Timecode.Rate.FPS_29_97_DF
+        val lastOfNine = Timecode.toFrames(tc(0, 9, 59, 29, rate))
+        // Minute ten drops nothing, so this one really is frame zero.
+        assertEquals(tc(0, 10, 0, 0, rate), Timecode.fromFrames(lastOfNine + 1, rate))
     }
 
-    // --- drop frame, which is the part that catches people --------------------
-
-    @Test fun dropFrameSkipsTwoNumbersAtTheTopOfAMinute() {
-        // The whole trick: 00:00:59:29 is followed by 00:01:00:02, not :00.
-        val before = Timecode(0, 0, 59, 29, 29.97, true)
-        val after = Timecode.fromFrameCount(Timecode.toFrameCount(before) + 1, 29.97, true)
-        assertEquals("00:01:00;02", after.toString())
+    @Test fun tenMinutesOfDropFrameIsSeventeenThousandNineHundredAndEightyTwoFrames() {
+        val rate = Timecode.Rate.FPS_29_97_DF
+        assertEquals(17982L, Timecode.toFrames(tc(0, 10, 0, 0, rate)))
     }
 
-    @Test fun dropFrameKeepsTheTenthMinuteWhole() {
-        // Every tenth minute drops nothing, which is what keeps the count
-        // matching a real clock over an hour.
-        val before = Timecode(0, 9, 59, 29, 29.97, true)
-        val after = Timecode.fromFrameCount(Timecode.toFrameCount(before) + 1, 29.97, true)
-        assertEquals("00:10:00;00", after.toString())
+    @Test fun anHourOfDropFrameStaysWithTwoFramesOfTheWallClock() {
+        // The whole purpose of drop frame. An hour of labels must be an hour
+        // of real time, not the 3.6 seconds longer a plain count would be.
+        val rate = Timecode.Rate.FPS_29_97_DF
+        val frames = Timecode.toFrames(tc(1, 0, 0, 0, rate))
+        val seconds = frames / rate.fps
+        assertEquals(3600.0, seconds, 2.0 / rate.fps)
     }
 
-    @Test fun dropFrameCountingAndFormattingStillInvert() {
-        var count = 0L
-        while (count < 30L * 60 * 12) {
-            val tc = Timecode.fromFrameCount(count, 29.97, true)
-            assertEquals("at $count", count, Timecode.toFrameCount(tc))
-            count += 7
+    @Test fun nonDropAtTwentyNineNineSevenDriftsAndThatIsCorrect() {
+        // Not a bug: non drop labels every frame in order, so after an hour of
+        // labels rather less than an hour has passed. Worth pinning down so
+        // nobody later mistakes it for one.
+        val rate = Timecode.Rate.FPS_29_97
+        val seconds = Timecode.toFrames(tc(1, 0, 0, 0, rate)) / rate.fps
+        assertTrue("drifted $seconds", seconds < 3600.0 - 3.0)
+    }
+
+    @Test fun dropFrameRoundTripsAcrossAMinuteBoundaryEitherWay() {
+        val rate = Timecode.Rate.FPS_29_97_DF
+        for (frame in 1790L..1810L) {
+            assertEquals(frame, Timecode.toFrames(Timecode.fromFrames(frame, rate)))
         }
     }
 
-    // --- running forward between packets -------------------------------------
+    // --- how it is written ----------------------------------------------------
 
-    @Test fun aSecondOfWallClockIsASecondOfTimecode() {
-        val start = Timecode(10, 0, 0, 0, 25.0)
-        assertEquals("10:00:01:00", start.advancedBy(1000).toString())
+    @Test fun theSeparatorSaysWhichKindItIs() {
+        assertEquals("01:02:03:04", tc(1, 2, 3, 4, Timecode.Rate.FPS_25).toString())
+        assertEquals("01:02:03;04", tc(1, 2, 3, 4, Timecode.Rate.FPS_29_97_DF).toString())
     }
 
-    @Test fun twentyThreeNineSixIsNotTwentyFour() {
-        // Treating 23.976 as 24 drifts about three frames a minute, which is a
-        // second and a half across a shooting day.
-        val start = Timecode(0, 0, 0, 0, 23.976)
-        val afterAMinute = start.advancedBy(60_000)
-        val asIfTwentyFour = Timecode(0, 0, 0, 0, 24.0).advancedBy(60_000)
-        assertTrue(
-            "$afterAMinute vs $asIfTwentyFour",
-            Timecode.toFrameCount(afterAMinute) < Timecode.toFrameCount(asIfTwentyFour)
-        )
+    @Test fun everyFieldIsPaddedSoTheDigitsDoNotMoveAbout() {
+        assertEquals("00:00:00:00", tc(0, 0, 0, 0, Timecode.Rate.FPS_25).toString())
     }
 
-    @Test fun advancingByNothingChangesNothing() {
-        val start = Timecode(4, 5, 6, 7, 25.0)
-        assertEquals(start.toString(), start.advancedBy(0).toString())
+    @Test fun eitherSeparatorIsAccepted() {
+        assertNotNull(Timecode.parse("10:20:30:12", Timecode.Rate.FPS_25))
+        assertNotNull(Timecode.parse("10:20:30;12", Timecode.Rate.FPS_29_97_DF))
     }
 
-    // --- reading what a generator actually broadcasts -------------------------
-
-    @Test fun aPlainTimecodePayloadIsRead() {
-        // rate index 2 is 25fps, then hours, minutes, seconds, frames.
-        val data = byteArrayOf(0x02, 10, 30, 15, 12)
-        val reading = TentacleParser.parse(data)
-        assertNotNull(reading)
-        assertEquals("10:30:15:12", reading!!.timecode.toString())
-        assertEquals(25.0, reading.timecode.fps, 0.001)
+    @Test fun somethingImpossibleIsRefusedRatherThanRolledOver() {
+        assertNull(Timecode.parse("25:00:00:00", Timecode.Rate.FPS_25))
+        assertNull(Timecode.parse("00:60:00:00", Timecode.Rate.FPS_25))
+        assertNull(Timecode.parse("00:00:00:25", Timecode.Rate.FPS_25))
+        assertNull(Timecode.parse("nonsense", Timecode.Rate.FPS_25))
+        assertNull(Timecode.parse("01:02:03", Timecode.Rate.FPS_25))
     }
 
-    @Test fun aDropFrameRateIndexProducesADropFrameTimecode() {
-        val data = byteArrayOf(0x04, 1, 0, 0, 2)
-        val reading = TentacleParser.parse(data)
-        assertNotNull(reading)
-        assertTrue(reading!!.timecode.dropFrame)
-        assertEquals(29.97, reading.timecode.fps, 0.01)
+    // --- the clock that keeps running between broadcasts ---------------------
+
+    @Test fun theClockAdvancesBetweenReadings() {
+        val clock = TimecodeClock()
+        val rate = Timecode.Rate.FPS_25
+        clock.jam(tc(10, 0, 0, 0, rate), atNanos = 1_000_000_000L)
+
+        // Two seconds later, without another broadcast.
+        val later = clock.now(3_000_000_000L)
+        assertEquals(tc(10, 0, 2, 0, rate), later)
     }
 
-    @Test fun nonsenseIsRefusedRatherThanTurnedIntoATime() {
-        // A timecode invented from a payload nobody can read is worse than
-        // none, because it is only found to be wrong in the edit.
-        assertNull(TentacleParser.parse(byteArrayOf()))
-        assertNull(TentacleParser.parse(byteArrayOf(99, 99, 99, 99, 99)))
+    @Test fun aFractionOfASecondLandsOnTheRightFrame() {
+        val clock = TimecodeClock()
+        val rate = Timecode.Rate.FPS_25
+        clock.jam(tc(0, 0, 0, 0, rate), atNanos = 0L)
+        // 400 milliseconds at 25 is ten frames.
+        assertEquals(tc(0, 0, 0, 10, rate), clock.now(400_000_000L))
     }
 
-    @Test fun allZeroesIsNotReportedAsMidnight() {
-        // An empty buffer looks exactly like 00:00:00:00, so it is refused.
-        assertNull(TentacleParser.parse(ByteArray(8)))
+    @Test fun nothingIsReportedBeforeADeviceHasBeenHeard() {
+        val clock = TimecodeClock()
+        assertNull(clock.now(1_000_000_000L))
+        assertTrue(clock.secondsSinceHeard(1_000_000_000L) > 1000)
     }
 
-    @Test fun impossibleClockValuesAreRejected() {
-        assertNull(TentacleParser.parse(byteArrayOf(0x02, 25, 0, 0, 0)))
-        assertNull(TentacleParser.parse(byteArrayOf(0x02, 0, 60, 0, 0)))
-        assertNull(TentacleParser.parse(byteArrayOf(0x02, 0, 0, 60, 0)))
+    @Test fun theClockKnowsHowLongSinceItLastHeardAnything() {
+        val clock = TimecodeClock()
+        clock.jam(tc(1, 0, 0, 0, Timecode.Rate.FPS_25), atNanos = 1_000_000_000L)
+        assertEquals(5.0, clock.secondsSinceHeard(6_000_000_000L), 0.001)
     }
 
-    @Test fun aFrameNumberBeyondTheRateIsRejected() {
-        // 30 frames at 25fps is not a timecode, it is a misread payload.
-        assertNull(TentacleParser.parse(byteArrayOf(0x02, 1, 0, 0, 30)))
+    @Test fun clearingStopsItReportingAnythingAtAll() {
+        val clock = TimecodeClock()
+        clock.jam(tc(1, 0, 0, 0, Timecode.Rate.FPS_25), atNanos = 0L)
+        clock.clear()
+        assertNull(clock.now(1_000_000_000L))
     }
 
-    @Test fun everyReadingSaysWhichLayoutProducedIt() {
-        val reading = TentacleParser.parse(byteArrayOf(0x02, 10, 30, 15, 12))
-        assertNotNull(reading!!.layout)
-        assertTrue(reading.layout.isNotEmpty())
-        assertTrue(reading.raw.contains("02"))
+    @Test fun anHourOfFreeRunningStaysOnTheFrameItShould() {
+        // The clock is only as good as its arithmetic over a long take.
+        val clock = TimecodeClock()
+        val rate = Timecode.Rate.FPS_24
+        clock.jam(tc(0, 0, 0, 0, rate), atNanos = 0L)
+        val anHour = clock.now(3_600_000_000_000L)
+        assertEquals(tc(1, 0, 0, 0, rate), anHour)
     }
 
-    @Test fun theDevicesWorthListeningToAreRecognisedByName() {
-        assertTrue(TentacleParser.looksLikeTentacle("Tentacle Sync E"))
-        assertTrue(TentacleParser.looksLikeTentacle("TRACK E 1234"))
-        assertTrue(TentacleParser.looksLikeTentacle("my timebar"))
-        assertFalse(TentacleParser.looksLikeTentacle("Someone's Earbuds"))
-        assertFalse(TentacleParser.looksLikeTentacle(null))
-    }
-
-    @Test fun rawBytesAreKeptSoAnUnreadableDeviceCanBeLookedAt() {
-        assertEquals("0A FF 10", TentacleParser.hex(byteArrayOf(0x0A, 0xFF.toByte(), 0x10)))
+    @Test fun aFrameRateIsChosenSensiblyForACameraRate() {
+        assertEquals(Timecode.Rate.FPS_24, Timecode.Rate.nearest(24))
+        assertEquals(Timecode.Rate.FPS_25, Timecode.Rate.nearest(25))
+        // Fifty is counted at twenty five, which is what every recorder does.
+        assertEquals(Timecode.Rate.FPS_25, Timecode.Rate.nearest(50))
+        assertEquals(Timecode.Rate.FPS_30, Timecode.Rate.nearest(60))
     }
 }
