@@ -113,6 +113,11 @@ class AppSettings(context: Context) {
         get() = prefs.getLong(KEY_RAMP, 2000)
         set(value) = prefs.edit().putLong(KEY_RAMP, value).apply()
 
+    /** Listen for a Tentacle and show its timecode. */
+    var timecodeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TIMECODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_TIMECODE, value).apply()
+
     var monitorLutName: String?
         get() = prefs.getString(KEY_LUT, null)
         set(value) = prefs.edit().putString(KEY_LUT, value).apply()
@@ -129,6 +134,7 @@ class AppSettings(context: Context) {
         const val KEY_MODE = "app_mode"
         const val KEY_HOLD = "focus_hold"
         const val KEY_RAMP = "focus_ramp"
+        const val KEY_TIMECODE = "timecode"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
         const val KEY_REMOTE = "remote_mode"

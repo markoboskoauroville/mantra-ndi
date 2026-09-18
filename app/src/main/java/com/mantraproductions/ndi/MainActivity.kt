@@ -74,6 +74,9 @@ class MainActivity : AppCompatActivity() {
     private var balanceBase: FloatArray? = null
     private var lastAppliedMode: AppMode? = null
 
+    /** The generator in the room, if there is one. */
+    private val timecode by lazy { TimecodeSource(applicationContext) }
+
     /** Applied together, since one tone curve carries all three. */
     private var gradeDirty = false
 
@@ -92,6 +95,7 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             try {
                 refreshLiveIndicators()
+                refreshTimecode()
                 refreshVectorscope()
                 refreshWaveform()
             } catch (e: Throwable) {
@@ -229,6 +233,7 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         if (orientationWatcher.canDetectOrientation()) orientationWatcher.enable()
+        if (appSettings.timecodeEnabled) startTimecode()
         pump.start()
         requestPermissionsThenBind()
         ui.post(tick)
@@ -268,6 +273,7 @@ class MainActivity : AppCompatActivity() {
             // Never registered, which happens if onStart bailed early.
         }
         focusDirector.stop()
+        timecode.stop()
         orientationWatcher.disable()
         pump.stop()
         ui.removeCallbacks(tick)
@@ -406,6 +412,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun startTimecode() {
+        // The scan permission is asked for only when timecode is wanted, since
+        // a camera that demands Bluetooth before it will open is a camera
+        // nobody trusts.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionLauncher.launch(arrayOf(Manifest.permission.BLUETOOTH_SCAN))
+            return
+        }
+        timecode.listener = object : TimecodeSource.Listener {
+            override fun onTimecode(tc: Timecode, deviceName: String) = Unit
+            override fun onLost() = Unit
+            override fun onRawSeen(deviceName: String, hex: String, parsed: String?) {
+                TimecodeLog.record(deviceName, hex, parsed)
+            }
+        }
+        if (!timecode.start()) say("Bluetooth is off, so there is no timecode")
+    }
+
+    /**
+     * Ten times a second, which is enough for a display at arm's length and
+     * far cheaper than the frame rate it is counting.
+     */
+    private fun refreshTimecode() {
+        if (!appSettings.timecodeEnabled) {
+            binding.timecodeText.visibility = View.GONE
+            return
+        }
+        binding.timecodeText.visibility = View.VISIBLE
+        val now = timecode.now()
+        if (now == null) {
+            binding.timecodeText.text = "--:--:--:--"
+            binding.timecodeText.setTextColor(android.graphics.Color.parseColor("#7C8894"))
+        } else {
+            binding.timecodeText.text = now.toString()
+            binding.timecodeText.setTextColor(android.graphics.Color.parseColor("#12C46A"))
+        }
+    }
+
     private fun refreshStreamButton() {
         val streaming = service?.isStreaming == true
         binding.streamButton.ringColor =
@@ -430,6 +478,14 @@ class MainActivity : AppCompatActivity() {
             svc.stopRecording()
             say("Saved to DCIM/${MediaStoreOutput.FOLDER}")
         } else if (svc.startRecording()) {
+            // Written beside the file rather than guessed at later: the start
+            // timecode is the one number that makes a clip line up with every
+            // other camera, and it is unrecoverable once the take is over.
+            timecode.now()?.let { tc ->
+                svc.lastRecordingPath?.let { path ->
+                    TimecodeLog.writeSidecar(path, tc, timecode.deviceName)
+                }
+            }
             say("Recording", transient = false)
         } else {
             say("Go live first")

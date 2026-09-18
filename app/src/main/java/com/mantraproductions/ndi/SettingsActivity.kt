@@ -116,6 +116,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        binding.rowTimecode.setOnClickListener { manageTimecode() }
         binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
         binding.rowWaveform.setOnClickListener { pickWaveform() }
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
@@ -196,6 +197,9 @@ class SettingsActivity : AppCompatActivity() {
             binding.rowFocusBox to hasLens,
             binding.rowAiFocus to hasLens,
             binding.rowFocusTiming to local,
+            // Timecode is about what this phone records, so it belongs where
+            // this phone is the camera.
+            binding.rowTimecode to local,
 
             // Scopes read pixels, so anywhere there are pixels.
             binding.rowWaveform to hasPicture,
@@ -239,6 +243,9 @@ class SettingsActivity : AppCompatActivity() {
             group.visibility = if (anyVisible) android.view.View.VISIBLE else android.view.View.GONE
         }
 
+        binding.valueTimecode.text =
+            if (prefs.timecodeEnabled) "Listening for a Tentacle over Bluetooth"
+            else "Off"
         binding.valueFocusTiming.text = buildString {
             append("Hold ").append(prefs.focusHoldMs / 1000.0).append("s, rack ")
             append(if (prefs.focusRampMs == 0L) "instant" else "${prefs.focusRampMs / 1000.0}s")
@@ -326,6 +333,36 @@ class SettingsActivity : AppCompatActivity() {
      * is a snap, which is the right answer for anybody who wants the phone to
      * behave like a phone.
      */
+    /**
+     * Tentacle devices broadcast and never connect, so this only listens and
+     * several cameras can share one generator. The raw advertisement is shown
+     * because the byte layout is not published: if a device is heard and not
+     * understood, the bytes are the thing that fixes it.
+     */
+    private fun manageTimecode() {
+        AlertDialog.Builder(this)
+            .setTitle("Timecode")
+            .setMessage(
+                (if (prefs.timecodeEnabled) "On.\n\n" else "Off.\n\n") +
+                    "A Tentacle broadcasts continuously and nothing needs\n" +
+                    "pairing. Recordings get a sidecar with the start\n" +
+                    "timecode beside them.\n\nLast heard:\n\n" +
+                    TimecodeLog.report()
+            )
+            .setPositiveButton(if (prefs.timecodeEnabled) "Turn off" else "Turn on") { _, _ ->
+                prefs.timecodeEnabled = !prefs.timecodeEnabled
+                refresh()
+            }
+            .setNeutralButton("Save report") { _, _ ->
+                val target = MediaStoreOutput.writeText(
+                    this, "MantraNDI_timecode.txt", TimecodeLog.report()
+                )
+                toast(if (target == null) "Could not write it" else "Saved to " + target.shortLocation)
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun pickFocusTiming() {
         val options = listOf(0L, 500L, 1000L, 2000L, 3000L)
         val labels = options.map { if (it == 0L) "Instant" else "${it / 1000.0}s" }

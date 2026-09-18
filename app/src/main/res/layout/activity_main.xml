@@ -73,6 +73,22 @@
         app:layout_constraintStart_toStartOf="@id/preview"
         app:layout_constraintEnd_toEndOf="@id/preview" />
 
+    <!-- Big enough to read at arm's length, which is where a phone on a rig
+         is. Amber while free running, green once a generator is heard. -->
+    <TextView
+        android:id="@+id/timecodeText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="14dp"
+        android:layout_marginTop="12dp"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.06"
+        android:textColor="#12C46A"
+        android:textSize="17sp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/vuHairline"
+        app:layout_constraintEnd_toStartOf="@id/controlRow" />
+
     <TextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
