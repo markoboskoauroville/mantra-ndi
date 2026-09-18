@@ -1103,8 +1103,14 @@ class MainActivity : AppCompatActivity() {
     private fun setUpVectorscope() {
         binding.vectorscope.onBalanceMoved = { du, dv ->
             val controls = service?.controls
-            val base = controls?.heldGains ?: controls?.lastAwbGains
-            if (controls != null && base != null) {
+            if (controls != null) {
+                // Neutral is a valid starting point. Waiting for the camera to
+                // have reported gains meant a drag did nothing at all on a
+                // camera that had not been asked to balance yet, which read as
+                // the scope being broken.
+                val base = controls.heldGains
+                    ?: controls.lastAwbGains
+                    ?: floatArrayOf(1f, 1f, 1f)
                 controls.applyBalanceGains(Mechanism.gainsFromChromaOffset(base, du, dv))
             }
         }
@@ -1163,10 +1169,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideVectorscope() {
+        // The setting is cleared first. The refresh runs ten times a second
+        // and would otherwise re-open the scope on the very next tick, which
+        // is exactly what made it impossible to close.
+        appSettings.vectorscopeVisible = false
+        binding.vectorscope.reset()
         binding.vectorscope.visibility = View.GONE
         binding.controlRow.visibility = View.VISIBLE
         binding.focusSquare.visibility = View.VISIBLE
-        appSettings.vectorscopeVisible = false
         say("Balance locked")
     }
 

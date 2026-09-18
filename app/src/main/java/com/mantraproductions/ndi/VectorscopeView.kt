@@ -49,17 +49,32 @@ class VectorscopeView @JvmOverloads constructor(
     var onBalanceMoved: ((Float, Float) -> Unit)? = null
     var onBalanceReleased: (() -> Unit)? = null
 
-    /** Long press anywhere on the scope closes it and gives the screen back. */
+    /** Two taps: close and give the screen back. */
     var onDismiss: (() -> Unit)? = null
 
-    private var pressStart = 0L
-    private var lastTapAt = 0L
-    private var movedWhilePressed = false
-
-    /** Double tap: back to no correction at all. */
+    /** One tap: balance back to whatever the camera itself decided. */
     var onResetBalance: (() -> Unit)? = null
-    private val holdToDismiss = Runnable {
-        if (!movedWhilePressed) onDismiss?.invoke()
+
+    /**
+     * Taps are counted, and the count is shown.
+     *
+     * The previous version cancelled its long press on any ACTION_MOVE, and a
+     * finger on glass always produces one, so nothing ever fired and the scope
+     * could not be closed at all. Movement is now measured against a slop
+     * threshold rather than merely detected, and the gestures are counted taps
+     * rather than a hold, because a count can be displayed and a hold cannot:
+     * the operator sees 1 and knows a second tap closes it.
+     */
+    private var tapCount = 0
+    private var downX = 0f
+    private var downY = 0f
+    private var dragging = false
+
+    private val tapWindow = Runnable {
+        // A tap that stood alone was a reset.
+        if (tapCount == 1) onResetBalance?.invoke()
+        tapCount = 0
+        invalidate()
     }
 
     private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -104,7 +119,15 @@ class VectorscopeView @JvmOverloads constructor(
     fun reset() {
         offsetU = 0f
         offsetV = 0f
+        tapCount = 0
+        removeCallbacks(tapWindow)
         invalidate()
+    }
+
+    private companion object {
+        /** Beyond this it is a drag; within it, a wandering finger. */
+        const val TOUCH_SLOP = 14f
+        const val TAP_WINDOW_MS = 450L
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -161,11 +184,14 @@ class VectorscopeView @JvmOverloads constructor(
         val handleY = cy - offsetV * radius
         canvas.drawCircle(handleX, handleY, 13f * density, handlePaint)
 
-        labelPaint.color = Color.parseColor("#7C8894")
+        // The count, so a gesture in progress is visible rather than guessed at.
+        labelPaint.color = if (tapCount > 0) FaderView.AMBER else Color.parseColor("#7C8894")
         canvas.drawText(
-            if (offsetU == 0f && offsetV == 0f) "LONG PRESS TO CLOSE"
-            else "DOUBLE TAP TO RESET, LONG PRESS TO CLOSE",
-            cx, height - 10f * density, labelPaint
+            when (tapCount) {
+                0 -> "ONE TAP RESETS, TWO TAPS CLOSE"
+                else -> "TAP 1   TAP AGAIN TO CLOSE"
+            },
+            cx, height - 12f * density, labelPaint
         )
     }
 
@@ -176,38 +202,52 @@ class VectorscopeView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                pressStart = System.currentTimeMillis()
-                movedWhilePressed = false
-                postDelayed(holdToDismiss, 700)
+                downX = event.x
+                downY = event.y
+                dragging = false
                 parent?.requestDisallowInterceptTouchEvent(true)
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
-                // Any real movement is a balance move, not a dismissal.
-                movedWhilePressed = true
-                removeCallbacks(holdToDismiss)
-                offsetU = ((event.x - cx) / radius).coerceIn(-1f, 1f)
-                offsetV = ((cy - event.y) / radius).coerceIn(-1f, 1f)
-                onBalanceMoved?.invoke(offsetU, offsetV)
-                invalidate()
+                // Only real movement is movement. A thumb always wanders a few
+                // pixels and treating that as a drag is what jammed this view.
+                if (!dragging &&
+                    (Math.abs(event.x - downX) > TOUCH_SLOP * density ||
+                        Math.abs(event.y - downY) > TOUCH_SLOP * density)
+                ) {
+                    dragging = true
+                    removeCallbacks(tapWindow)
+                    tapCount = 0
+                }
+                if (dragging) {
+                    offsetU = ((event.x - cx) / radius).coerceIn(-1f, 1f)
+                    offsetV = ((cy - event.y) / radius).coerceIn(-1f, 1f)
+                    onBalanceMoved?.invoke(offsetU, offsetV)
+                    invalidate()
+                }
                 return true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                removeCallbacks(holdToDismiss)
                 parent?.requestDisallowInterceptTouchEvent(false)
-                if (movedWhilePressed) {
+                if (dragging) {
+                    dragging = false
                     onBalanceReleased?.invoke()
+                    return true
+                }
+
+                tapCount++
+                removeCallbacks(tapWindow)
+                if (tapCount >= 2) {
+                    tapCount = 0
+                    invalidate()
+                    onDismiss?.invoke()
                 } else {
-                    val now = System.currentTimeMillis()
-                    if (now - lastTapAt < 320) {
-                        reset()
-                        onResetBalance?.invoke()
-                        lastTapAt = 0
-                    } else {
-                        lastTapAt = now
-                    }
+                    // Long enough to be a second tap, short enough that a
+                    // single one does not feel ignored.
+                    postDelayed(tapWindow, TAP_WINDOW_MS)
+                    invalidate()
                 }
                 return true
             }
