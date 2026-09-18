@@ -390,6 +390,12 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
 
     private var pendingFocusResult: ((Boolean) -> Unit)? = null
 
+    /** The lens, in dioptres, exactly where asked. Used to drive a rack. */
+    fun setFocusDistance(dioptres: Float): Boolean = source.setCustomRequest { builder ->
+        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+        builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, dioptres.coerceAtLeast(0f))
+    }
+
     fun setFocusFraction(fraction: Float): Boolean {
         val closest = characteristics()
             ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f

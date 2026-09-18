@@ -618,6 +618,82 @@ object Mechanism {
         return out
     }
 
+    // --- how sharp the frame is, where it matters -----------------------------
+
+    /**
+     * Sharpness over a region, by how fast brightness changes across it.
+     *
+     * A sharp edge is a large difference between neighbouring pixels; a soft
+     * one is a small difference. Summing the square of those differences gives
+     * a number that peaks exactly where focus does, which is what every
+     * contrast detect system has used since the first one.
+     *
+     * Measured only inside the focus box, because sharpness over a whole frame
+     * is dominated by whatever happens to be nearest the camera rather than by
+     * the thing being focused on.
+     *
+     * @param bounds left, top, right, bottom as fractions of the frame
+     */
+    fun sharpness(argb: IntArray, width: Int, height: Int, bounds: FloatArray): Double {
+        if (width <= 2 || height <= 2) return 0.0
+        val x0 = (bounds[0] * width).toInt().coerceIn(0, width - 2)
+        val y0 = (bounds[1] * height).toInt().coerceIn(0, height - 2)
+        val x1 = (bounds[2] * width).toInt().coerceIn(x0 + 1, width - 1)
+        val y1 = (bounds[3] * height).toInt().coerceIn(y0 + 1, height - 1)
+
+        var total = 0.0
+        var counted = 0
+        var y = y0
+        while (y < y1) {
+            val row = y * width
+            var x = x0
+            while (x < x1) {
+                val index = row + x
+                if (index + 1 >= argb.size) break
+                val a = luma(argb[index])
+                val b = luma(argb[index + 1])
+                val d = a - b
+                total += d * d
+                counted++
+                x++
+            }
+            y++
+        }
+        // Normalised, so a bigger box does not read as a sharper one.
+        return if (counted == 0) 0.0 else total / counted
+    }
+
+    private fun luma(p: Int): Double {
+        val r = (p shr 16) and 0xFF
+        val g = (p shr 8) and 0xFF
+        val b = p and 0xFF
+        return 0.299 * r + 0.587 * g + 0.114 * b
+    }
+
+    /**
+     * Has focus drifted far enough to be worth moving for?
+     *
+     * Sharpness wanders with the light and with anything that moves in frame,
+     * so a small drop is not a reason to touch the lens. A quarter down from
+     * what it was when focus was set is a real change; less than that and the
+     * right answer is to leave it alone, which is most of the time.
+     */
+    fun focusHasDrifted(reference: Double, current: Double, tolerance: Double = 0.75): Boolean =
+        reference > 0.0 && current < reference * tolerance
+
+    /**
+     * Where the lens should be partway through a rack.
+     *
+     * Eased rather than linear: a rack that starts and stops abruptly reads as
+     * a mistake, and the same move with soft ends reads as a decision. This is
+     * the shape a focus puller's hand makes.
+     */
+    fun rackPosition(from: Float, to: Float, progress: Float): Float {
+        val t = progress.coerceIn(0f, 1f)
+        val eased = t * t * (3f - 2f * t)
+        return from + (to - from) * eased
+    }
+
     // --- the waveform ---------------------------------------------------------
 
     /**

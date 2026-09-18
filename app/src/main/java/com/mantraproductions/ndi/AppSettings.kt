@@ -93,6 +93,16 @@ class AppSettings(context: Context) {
             ?: AppMode.LOCAL
         set(value) = prefs.edit().putString(KEY_MODE, value.name).apply()
 
+    /** How long focus holds before it even looks, in milliseconds. */
+    var focusHoldMs: Long
+        get() = prefs.getLong(KEY_HOLD, 2000)
+        set(value) = prefs.edit().putLong(KEY_HOLD, value).apply()
+
+    /** How long a rack takes. Zero is a snap. */
+    var focusRampMs: Long
+        get() = prefs.getLong(KEY_RAMP, 2000)
+        set(value) = prefs.edit().putLong(KEY_RAMP, value).apply()
+
     var monitorLutName: String?
         get() = prefs.getString(KEY_LUT, null)
         set(value) = prefs.edit().putString(KEY_LUT, value).apply()
@@ -107,6 +117,8 @@ class AppSettings(context: Context) {
         const val KEY_GROQ = "groq_key"
         const val KEY_WAVEFORM = "waveform"
         const val KEY_MODE = "app_mode"
+        const val KEY_HOLD = "focus_hold"
+        const val KEY_RAMP = "focus_ramp"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
         const val KEY_REMOTE = "remote_mode"

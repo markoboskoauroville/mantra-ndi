@@ -663,6 +663,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.focusSquare.onMoved = { x, y ->
             focusDirector.target = x to y
+            focusDirector.bounds = binding.focusSquare.normalisedBounds()
             binding.focusSquare.state = FocusSquareView.State.IDLE
         }
         // A tap on the box means focus here. Dragging moves it, tapping fires
@@ -1383,12 +1384,17 @@ class MainActivity : AppCompatActivity() {
      * waveform, and coarser loses the alignment that makes it worth overlaying.
      */
     private fun refreshWaveform() {
-        val channels = appSettings.waveformChannels
-        if (channels.isEmpty()) {
-            binding.waveform.visibility = View.GONE
-            return
+        // The same sampled frame feeds focus, so measuring sharpness costs
+        // nothing beyond the arithmetic.
+        wavePixels?.let { pixels ->
+            focusDirector.currentSharpness =
+                Mechanism.sharpness(pixels, 240, 135, binding.focusSquare.normalisedBounds())
         }
-        binding.waveform.visibility = View.VISIBLE
+        focusDirector.holdMs = appSettings.focusHoldMs
+        focusDirector.rampMs = appSettings.focusRampMs
+
+        val channels = appSettings.waveformChannels
+        binding.waveform.visibility = if (channels.isEmpty()) View.GONE else View.VISIBLE
         if (!binding.preview.isAvailable) return
 
         val now = System.currentTimeMillis()
@@ -1407,6 +1413,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        if (channels.isEmpty()) return
         val traces = channels.associateWith { channel ->
             Mechanism.waveform(pixels, 240, 135, bins = 128, channel = channel.index)
         }

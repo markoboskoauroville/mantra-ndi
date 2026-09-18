@@ -110,6 +110,11 @@
                 <TextView android:id="@+id/valueAiFocus" style="@style/MantraSettingsValue" />
             </LinearLayout>
 
+            <LinearLayout android:id="@+id/rowFocusTiming" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Focus hold and rack" />
+                <TextView android:id="@+id/valueFocusTiming" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
             <LinearLayout android:id="@+id/rowWaveform" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Waveform" />
                 <TextView android:id="@+id/valueWaveform" style="@style/MantraSettingsValue" />

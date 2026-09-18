@@ -116,6 +116,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
         binding.rowWaveform.setOnClickListener { pickWaveform() }
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
         binding.rowSource.setOnClickListener { pickCameraSource() }
@@ -164,6 +165,10 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowBitDepth.visibility = binding.rowProfile.visibility
         binding.rowSourceName.visibility = binding.rowProfile.visibility
 
+        binding.valueFocusTiming.text = buildString {
+            append("Hold ").append(prefs.focusHoldMs / 1000.0).append("s, rack ")
+            append(if (prefs.focusRampMs == 0L) "instant" else "${prefs.focusRampMs / 1000.0}s")
+        }
         binding.valueWaveform.text = prefs.waveformChannels.let { set ->
             if (set.isEmpty()) "Off" else set.joinToString(", ") { it.label }
         }
@@ -252,6 +257,25 @@ class SettingsActivity : AppCompatActivity() {
      * questions and a colourist wants whichever of them the shot needs, often
      * two at once.
      */
+    /**
+     * Two numbers, because they are two decisions. How long focus is left
+     * alone, and how long it takes to move once it is not. Zero on the second
+     * is a snap, which is the right answer for anybody who wants the phone to
+     * behave like a phone.
+     */
+    private fun pickFocusTiming() {
+        val options = listOf(0L, 500L, 1000L, 2000L, 3000L)
+        val labels = options.map { if (it == 0L) "Instant" else "${it / 1000.0}s" }
+
+        choose("Hold before checking", labels.drop(1)) { index ->
+            prefs.focusHoldMs = options.drop(1)[index]
+            choose("Rack duration", labels) { rampIndex ->
+                prefs.focusRampMs = options[rampIndex]
+                refresh()
+            }
+        }
+    }
+
     private fun pickWaveform() {
         val all = Mechanism.WaveformChannel.values()
         val chosen = prefs.waveformChannels.toMutableSet()
