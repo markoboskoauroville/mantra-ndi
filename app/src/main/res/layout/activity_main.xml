@@ -52,6 +52,19 @@
         app:layout_constraintStart_toStartOf="@id/preview"
         app:layout_constraintEnd_toEndOf="@id/preview" />
 
+    <!-- Column for column with the image, so a part of the frame and its
+         trace are at the same horizontal position. -->
+    <com.mantraproductions.ndi.WaveformView
+        android:id="@+id/waveform"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:alpha="0.55"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/preview"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview" />
+
     <com.mantraproductions.ndi.HairlineVuView
         android:id="@+id/vuHairline"
         android:layout_width="0dp"

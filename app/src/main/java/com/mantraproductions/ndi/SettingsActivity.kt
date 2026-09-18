@@ -102,6 +102,22 @@ class SettingsActivity : AppCompatActivity() {
         profileStore = ProfileStore(this)
         identity = SourceIdentity(this)
 
+        listOf(
+            binding.modeLocal to AppMode.LOCAL,
+            binding.modeRemote to AppMode.REMOTE,
+            binding.modeMonitor to AppMode.MONITOR
+        ).forEach { (tab, mode) ->
+            tab.setOnClickListener {
+                prefs.appMode = mode
+                // Remote and local are two settings that used to disagree; the
+                // mode is now the single place either is decided.
+                prefs.remoteMode = mode == AppMode.REMOTE
+                refresh()
+            }
+        }
+
+        binding.rowWaveform.setOnClickListener { pickWaveform() }
+        binding.rowNetwork.setOnClickListener { runNetworkTest() }
         binding.rowSource.setOnClickListener { pickCameraSource() }
         binding.rowProfile.setOnClickListener { pickProfile() }
         binding.rowSourceName.setOnClickListener { editSourceName() }
@@ -127,6 +143,31 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
+        val mode = prefs.appMode
+        listOf(
+            binding.modeLocal to AppMode.LOCAL,
+            binding.modeRemote to AppMode.REMOTE,
+            binding.modeMonitor to AppMode.MONITOR
+        ).forEach { (tab, which) ->
+            val selected = which == mode
+            tab.setTextColor(
+                android.graphics.Color.parseColor(if (selected) "#E7A44C" else "#7C8894")
+            )
+            tab.alpha = if (selected) 1f else 0.7f
+        }
+        binding.modeDetail.text = mode.detail
+
+        // Rows that mean nothing in this mode are hidden rather than left to
+        // be pressed and do nothing.
+        binding.rowProfile.visibility =
+            if (mode == AppMode.MONITOR) android.view.View.GONE else android.view.View.VISIBLE
+        binding.rowBitDepth.visibility = binding.rowProfile.visibility
+        binding.rowSourceName.visibility = binding.rowProfile.visibility
+
+        binding.valueWaveform.text = prefs.waveformChannels.let { set ->
+            if (set.isEmpty()) "Off" else set.joinToString(", ") { it.label }
+        }
+
         binding.valueSource.text = if (prefs.remoteMode) {
             "Remote: ${prefs.remoteSource ?: "none picked"}"
         } else {
@@ -188,7 +229,7 @@ class SettingsActivity : AppCompatActivity() {
             }
             toast("Looking for cameras")
             kotlin.concurrent.thread(name = "remote-scan") {
-                NdiFinder.start()
+                NdiFinder.start(applicationContext)
                 val found = NdiFinder.sources(timeoutMs = 3000)
                 NdiFinder.stop()
                 runOnUiThread {
@@ -202,6 +243,71 @@ class SettingsActivity : AppCompatActivity() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Checkmarks, not a mode. A luma trace and a parade answer different
+     * questions and a colourist wants whichever of them the shot needs, often
+     * two at once.
+     */
+    private fun pickWaveform() {
+        val all = Mechanism.WaveformChannel.values()
+        val chosen = prefs.waveformChannels.toMutableSet()
+        val checked = BooleanArray(all.size) { all[it] in chosen }
+
+        AlertDialog.Builder(this)
+            .setTitle("Waveform")
+            .setMultiChoiceItems(all.map { it.label }.toTypedArray(), checked) { _, which, on ->
+                if (on) chosen.add(all[which]) else chosen.remove(all[which])
+            }
+            .setPositiveButton("Done") { _, _ ->
+                prefs.waveformChannels = chosen
+                refresh()
+            }
+            .setNeutralButton("Off") { _, _ ->
+                prefs.waveformChannels = emptySet()
+                refresh()
+            }
+            .show()
+    }
+
+    private fun runNetworkTest() {
+        val waiting = AlertDialog.Builder(this)
+            .setTitle("NDI network test")
+            .setMessage("Listening for six seconds.")
+            .setCancelable(false)
+            .create()
+        waiting.show()
+
+        kotlin.concurrent.thread(name = "ndi-network-test") {
+            val report = NetworkTest.run(applicationContext)
+            runOnUiThread {
+                waiting.dismiss()
+                val view = android.widget.ScrollView(this).apply {
+                    addView(android.widget.TextView(this@SettingsActivity).apply {
+                        text = report
+                        typeface = android.graphics.Typeface.MONOSPACE
+                        textSize = 10f
+                        setTextColor(android.graphics.Color.parseColor("#CFD8DC"))
+                        setPadding(36, 26, 36, 26)
+                    })
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("NDI network test")
+                    .setView(view)
+                    .setPositiveButton("Close", null)
+                    .setNeutralButton("Save") { _, _ ->
+                        val name = "MantraNDI_network_" +
+                            android.os.Build.MODEL.replace(' ', '_') + ".txt"
+                        val target = MediaStoreOutput.writeText(this, name, report)
+                        toast(
+                            if (target == null) "Could not write it"
+                            else "Saved to " + target.shortLocation
+                        )
+                    }
+                    .show()
             }
         }
     }

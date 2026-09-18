@@ -92,6 +92,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 refreshLiveIndicators()
                 refreshVectorscope()
+                refreshWaveform()
             } catch (e: Throwable) {
                 android.util.Log.w("MainActivity", "indicator refresh", e)
             }
@@ -1370,6 +1371,49 @@ class MainActivity : AppCompatActivity() {
         say("Balance locked")
     }
 
+    private var waveBitmap: android.graphics.Bitmap? = null
+    private var wavePixels: IntArray? = null
+    private var lastWaveAt = 0L
+
+    /**
+     * The trace, from the same preview the scope reads.
+     *
+     * Two hundred and forty columns across, which is one trace column per
+     * roughly five screen pixels: finer than that is detail nobody reads off a
+     * waveform, and coarser loses the alignment that makes it worth overlaying.
+     */
+    private fun refreshWaveform() {
+        val channels = appSettings.waveformChannels
+        if (channels.isEmpty()) {
+            binding.waveform.visibility = View.GONE
+            return
+        }
+        binding.waveform.visibility = View.VISIBLE
+        if (!binding.preview.isAvailable) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastWaveAt < 200) return
+        lastWaveAt = now
+
+        val bitmap = waveBitmap
+            ?: android.graphics.Bitmap.createBitmap(240, 135, android.graphics.Bitmap.Config.ARGB_8888)
+                .also { waveBitmap = it }
+        val pixels = wavePixels ?: IntArray(240 * 135).also { wavePixels = it }
+
+        try {
+            binding.preview.getBitmap(bitmap) ?: return
+            bitmap.getPixels(pixels, 0, 240, 0, 0, 240, 135)
+        } catch (e: Exception) {
+            return
+        }
+
+        val traces = channels.associateWith { channel ->
+            Mechanism.waveform(pixels, 240, 135, bins = 128, channel = channel.index)
+        }
+        binding.waveform.channels = channels
+        binding.waveform.setTraces(traces, columns = 240, bins = 128)
+    }
+
     private fun refreshVectorscope() {
         val wanted = appSettings.vectorscopeVisible
         if (wanted && binding.vectorscope.visibility != View.VISIBLE) showVectorscope()
@@ -1434,7 +1478,7 @@ class MainActivity : AppCompatActivity() {
     private fun warnIfNameTaken(name: String) {
         if (!NdiFinder.available) return
         thread(name = "ndi-name-check") {
-            NdiFinder.start()
+            NdiFinder.start(applicationContext)
             val existing = NdiFinder.sources(timeoutMs = 1200)
             NdiFinder.stop()
             if (SourceIdentity.clashesWith(name, existing)) {

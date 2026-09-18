@@ -8,11 +8,41 @@ object NdiFinder {
 
     val available: Boolean get() = NdiSender.available
 
-    fun start(): Boolean = if (available) nativeStart() else false
+    private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
+
+    /**
+     * Discovery needs the multicast lock, and this is where it was missing.
+     *
+     * NDI finds sources by mDNS, which is UDP multicast, and Android's wifi
+     * driver drops multicast frames unless something holds a MulticastLock.
+     * The lock was only taken when a stream started, so a phone that was
+     * merely looking was listening to a filtered socket and heard nothing.
+     * Two phones on one network could both be sending and neither could see
+     * the other, which is exactly the symptom.
+     *
+     * The lock belongs to whoever is listening, so the finder takes its own.
+     */
+    fun start(context: android.content.Context): Boolean {
+        if (!available) return false
+        if (multicastLock == null) {
+            val wifi = context.applicationContext
+                .getSystemService(android.content.Context.WIFI_SERVICE)
+                    as android.net.wifi.WifiManager
+            multicastLock = wifi.createMulticastLock("ndi-finder").apply {
+                setReferenceCounted(true)
+                acquire()
+            }
+        }
+        return nativeStart()
+    }
 
     fun stop() {
+        multicastLock?.let { if (it.isHeld) it.release() }
+        multicastLock = null
         if (available) nativeStop()
     }
+
+    val holdsMulticastLock: Boolean get() = multicastLock?.isHeld == true
 
     /**
      * Waits up to [timeoutMs] for the source list to change, then returns the

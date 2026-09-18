@@ -618,6 +618,66 @@ object Mechanism {
         return out
     }
 
+    // --- the waveform ---------------------------------------------------------
+
+    /**
+     * A waveform, column for column with the picture.
+     *
+     * The scale down the side matters far less than the alignment across it.
+     * A waveform is read by looking at a part of the frame and then at the
+     * same horizontal position on the trace, so column x of the trace has to
+     * be column x of the image and nothing else. Keeping the widths equal and
+     * drawing it over the picture is what makes that true by construction
+     * rather than by careful arithmetic.
+     *
+     * @param channel 0 red, 1 green, 2 blue, 3 luma
+     * @return counts, column major, [column * bins + bin], bin 0 is black
+     */
+    fun waveform(
+        argb: IntArray,
+        width: Int,
+        height: Int,
+        bins: Int = 128,
+        channel: Int = 3,
+        rowStride: Int = 2
+    ): IntArray {
+        val out = IntArray(width * bins)
+        if (width <= 0 || height <= 0) return out
+
+        var y = 0
+        while (y < height) {
+            val row = y * width
+            var x = 0
+            while (x < width) {
+                val index = row + x
+                if (index >= argb.size) break
+                val p = argb[index]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val value = when (channel) {
+                    0 -> r
+                    1 -> g
+                    2 -> b
+                    else -> ((0.299 * r) + (0.587 * g) + (0.114 * b)).toInt()
+                }
+                val bin = (value * (bins - 1) / 255).coerceIn(0, bins - 1)
+                out[x * bins + bin]++
+                x++
+            }
+            y += rowStride
+        }
+        return out
+    }
+
+    /** Which traces are drawn. A set rather than a mode, so any combination works. */
+    enum class WaveformChannel(val index: Int, val label: String) {
+        LUMA(3, "Luma"),
+        RED(0, "Red"),
+        GREEN(1, "Green"),
+        BLUE(2, "Blue")
+    }
+
     // --- three way colour, applied in the camera ------------------------------
 
     /**

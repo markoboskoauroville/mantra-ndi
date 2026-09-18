@@ -81,7 +81,7 @@ class MonitorActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (NdiFinder.available) {
-            NdiFinder.start()
+            NdiFinder.start(applicationContext)
             refreshSources()
         }
     }

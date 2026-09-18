@@ -3,6 +3,20 @@ package com.mantraproductions.ndi
 import android.content.Context
 
 /** Everything the settings screen owns, and the fader the operator last used. */
+/**
+ * What the app is doing, which decides what the settings below it mean.
+ *
+ * Three jobs that share one screen: shooting here, driving a camera somewhere
+ * else, and watching without shooting at all. Half the settings are
+ * meaningless in two of the three, so the mode comes first and the rest
+ * follows from it.
+ */
+enum class AppMode(val label: String, val detail: String) {
+    LOCAL("Local", "This phone is the camera"),
+    REMOTE("Remote", "Drive a camera over NDI"),
+    MONITOR("Monitor", "Watch a source, no camera")
+}
+
 class AppSettings(context: Context) {
 
     private val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
@@ -64,6 +78,21 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_GROQ, null)?.takeIf { it.isNotBlank() }
         set(value) = prefs.edit().putString(KEY_GROQ, value?.trim()).apply()
 
+    /** Which waveform traces are drawn; any combination, or none for off. */
+    var waveformChannels: Set<Mechanism.WaveformChannel>
+        get() = prefs.getStringSet(KEY_WAVEFORM, emptySet())
+            ?.mapNotNull { name ->
+                Mechanism.WaveformChannel.values().firstOrNull { it.name == name }
+            }?.toSet() ?: emptySet()
+        set(value) = prefs.edit()
+            .putStringSet(KEY_WAVEFORM, value.map { it.name }.toSet()).apply()
+
+    /** Local camera, a camera over the network, or a monitor with no camera. */
+    var appMode: AppMode
+        get() = AppMode.values().firstOrNull { it.name == prefs.getString(KEY_MODE, null) }
+            ?: AppMode.LOCAL
+        set(value) = prefs.edit().putString(KEY_MODE, value.name).apply()
+
     var monitorLutName: String?
         get() = prefs.getString(KEY_LUT, null)
         set(value) = prefs.edit().putString(KEY_LUT, value).apply()
@@ -76,6 +105,8 @@ class AppSettings(context: Context) {
         const val KEY_VECTORSCOPE = "vectorscope"
         const val KEY_BOX = "focus_box"
         const val KEY_GROQ = "groq_key"
+        const val KEY_WAVEFORM = "waveform"
+        const val KEY_MODE = "app_mode"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
         const val KEY_REMOTE = "remote_mode"

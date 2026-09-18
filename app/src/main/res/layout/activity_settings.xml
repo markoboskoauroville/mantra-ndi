@@ -22,6 +22,34 @@
             android:textColor="#ECEFF1"
             android:textSize="30sp" />
 
+        <!-- The mode decides what everything below it means -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/settings_group">
+
+            <TextView android:id="@+id/modeLocal" style="@style/MantraModeTab"
+                android:text="Local" />
+
+            <TextView android:id="@+id/modeRemote" style="@style/MantraModeTab"
+                android:text="Remote" />
+
+            <TextView android:id="@+id/modeMonitor" style="@style/MantraModeTab"
+                android:text="Monitor" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/modeDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginBottom="14dp"
+            android:textColor="#7C8894"
+            android:textSize="12sp" />
+
         <!-- Capture -->
         <LinearLayout style="@style/MantraSettingsGroup">
 
@@ -80,6 +108,17 @@
             <LinearLayout android:id="@+id/rowAiFocus" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="AI focus key" />
                 <TextView android:id="@+id/valueAiFocus" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowWaveform" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Waveform" />
+                <TextView android:id="@+id/valueWaveform" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowNetwork" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="NDI network test" />
+                <TextView style="@style/MantraSettingsValue"
+                    android:text="Why two phones cannot see each other" />
             </LinearLayout>
 
             <LinearLayout android:id="@+id/rowHistogram" style="@style/MantraSettingsRow">
