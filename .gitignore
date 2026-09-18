@@ -25,3 +25,4 @@ app/build/
 .cxx/
 *.apk
 *.aab
+signing/

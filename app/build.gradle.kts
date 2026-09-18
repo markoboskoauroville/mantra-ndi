@@ -10,6 +10,16 @@ plugins {
 // automatically on the next run.
 val ndiSdkPresent = file("src/main/cpp/ndi/include/Processing.NDI.Lib.h").exists()
 
+// versioning.md: the version is written once, in gradle.properties.
+val appVersion = (project.findProperty("appVersion") as String).toInt()
+
+// android-app.md §3: one permanent key for the life of the app. A different key
+// is a different app to Android, and every install after it is an uninstall
+// first. CI decodes it from secrets; without them a build is unsigned and the
+// workflow says so rather than quietly producing an uninstallable APK.
+val keystoreFile = rootProject.file("signing/mantra-ndi.p12")
+val keystorePassword: String? = System.getenv("SIGNING_PASSWORD")
+
 android {
     namespace = "com.mantraproductions.ndi"
     compileSdk = 35
@@ -22,8 +32,8 @@ android {
         applicationId = "com.mantraproductions.ndi"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersion
+        versionName = appVersion.toString()
 
         buildConfigField("boolean", "NDI_SDK_PRESENT", ndiSdkPresent.toString())
 
@@ -55,9 +65,29 @@ android {
         }
     }
 
+    signingConfigs {
+        create("mantra") {
+            if (keystoreFile.exists() && keystorePassword != null) {
+                storeFile = keystoreFile
+                storePassword = keystorePassword
+                keyAlias = "mantrandi"
+                keyPassword = keystorePassword
+                storeType = "PKCS12"
+            }
+        }
+    }
+
     buildTypes {
+        val signing = if (keystoreFile.exists() && keystorePassword != null) {
+            signingConfigs.getByName("mantra")
+        } else null
+
+        debug {
+            signingConfig = signing
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signing
         }
     }
 
@@ -80,6 +110,8 @@ kotlin {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")

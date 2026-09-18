@@ -35,33 +35,19 @@ class SourceIdentity(context: Context) {
 
     companion object {
         private const val KEY_NAME = "name"
-        const val MAX_LENGTH = 40
+        const val MAX_LENGTH = Mechanism.MAX_NAME_LENGTH
 
         /**
          * NDI names travel through mDNS and get parsed by a lot of other
          * software, so keep them to plain characters and a sane length.
          */
-        fun sanitize(raw: String): String {
-            val cleaned = raw.trim()
-                .replace(Regex("[^A-Za-z0-9 ._()-]"), "")
-                .replace(Regex("\\s+"), " ")
-            return when {
-                cleaned.isEmpty() -> "Mantra Cam"
-                cleaned.length > MAX_LENGTH -> cleaned.take(MAX_LENGTH).trim()
-                else -> cleaned
-            }
-        }
+        fun sanitize(raw: String): String = Mechanism.sanitizeSourceName(raw)
 
         /**
          * NDI advertises sources as "MACHINE (Source Name)", so a name collision
          * shows up as the same text inside the brackets. Compares that part.
          */
-        fun clashesWith(candidate: String, existingSources: List<String>): Boolean {
-            val target = sanitize(candidate).lowercase()
-            return existingSources.any { full ->
-                val inner = full.substringAfter('(', full).substringBeforeLast(')').trim()
-                inner.lowercase() == target || full.trim().lowercase() == target
-            }
-        }
+        fun clashesWith(candidate: String, existingSources: List<String>): Boolean =
+            Mechanism.nameClashes(candidate, existingSources)
     }
 }

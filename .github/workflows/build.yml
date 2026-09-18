@@ -10,18 +10,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The NDI Advanced SDK is confidential under its licence, so it lives in
-      # a private repo rather than here. Without the secret the workflow still
-      # succeeds, just producing a camera-only APK with NDI disabled.
+      - name: Read the version
+        id: version
+        run: |
+          V=$(grep -oP '^appVersion=\K\d+' gradle.properties)
+          echo "v=$V" >> $GITHUB_OUTPUT
+          echo "Building v$V"
+
+      - name: Gates over the source
+        run: python3 scripts/verify.py
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # android-app.md §3: one permanent key for the life of the app.
+      - name: Restore the signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::No signing key. An unsigned or differently signed APK cannot update an install."
+            exit 1
+          fi
+          mkdir -p signing
+          echo "$KEYSTORE_B64" | base64 -d > signing/mantra-ndi.p12
+          echo "Key restored, $(stat -c%s signing/mantra-ndi.p12) bytes"
+
       - name: Fetch NDI Advanced SDK
-        id: sdk
-        continue-on-error: true
         env:
           SDK_TOKEN: ${{ secrets.NDI_SDK_TOKEN }}
         run: |
           if [ -z "$SDK_TOKEN" ]; then
-            echo "No NDI_SDK_TOKEN set, building without NDI"
-            exit 0
+            echo "::error::No NDI SDK token, this would build an app that cannot send or receive."
+            exit 1
           fi
           git clone --depth 1 \
             "https://x-access-token:$SDK_TOKEN@github.com/markoboskoauroville/mantra-ndi-sdk.git" \
@@ -30,12 +53,6 @@ jobs:
           cp /tmp/ndi-sdk/include/*.h app/src/main/cpp/ndi/include/
           cp /tmp/ndi-sdk/lib/arm64-v8a/libndi_advanced.so app/src/main/jniLibs/arm64-v8a/
           rm -rf /tmp/ndi-sdk
-          echo "NDI SDK in place"
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
 
       - name: Accept SDK licences
         run: |
@@ -43,7 +60,6 @@ jobs:
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
 
       - name: Install NDK and CMake
-        if: hashFiles('app/src/main/cpp/ndi/include/Processing.NDI.Lib.h') != ''
         run: |
           SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
           "$SDKMANAGER" --install "ndk;27.0.12077973" "cmake;3.22.1"
@@ -52,21 +68,76 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Assemble debug APK
+      # Test 1 of the four: the mechanism, alone.
+      - name: Test 1, the mechanism
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: gradle testDebugUnitTest --stacktrace
+
+      - name: Assemble signed APK
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: gradle assembleDebug --stacktrace
 
-      - name: Confirm NDI was linked in
+      # Gates over the artefact the person will actually receive.
+      - name: Gates over the artefact
         run: |
-          if unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -q libndi_advanced.so; then
-            echo "NDI_BUILD=full" >> $GITHUB_ENV
-            echo "APK contains the NDI runtime"
-          else
-            echo "NDI_BUILD=camera-only" >> $GITHUB_ENV
-            echo "APK built without NDI"
-          fi
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          V=${{ steps.version.outputs.v }}
+
+          unzip -l "$APK" | grep -q libndi_advanced.so \
+            || { echo "::error::NDI runtime missing from the APK"; exit 1; }
+          unzip -l "$APK" | grep -q libndi_bridge.so \
+            || { echo "::error::JNI bridge missing from the APK"; exit 1; }
+          echo "PASS  the NDI runtime and the bridge are both inside"
+
+          # Signed, and signed with the key this app has always used.
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK" > /tmp/certs.txt \
+            || { echo "::error::APK is not signed"; exit 1; }
+          FINGERPRINT=$(grep -m1 -oP 'SHA-256 digest: \K[0-9a-f]+' /tmp/certs.txt)
+          echo "PASS  signed, certificate $FINGERPRINT"
+          echo "$FINGERPRINT" > fingerprint.txt
+
+          # The three numbers must agree: gradle.properties, the manifest, the filename.
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)
+          "$AAPT" dump badging "$APK" > /tmp/badging.txt
+          CODE=$(grep -oP "versionCode='\K\d+" /tmp/badging.txt)
+          NAME=$(grep -oP "versionName='\K[^']+" /tmp/badging.txt)
+          [ "$CODE" = "$V" ] && [ "$NAME" = "$V" ] \
+            || { echo "::error::version mismatch: properties=$V code=$CODE name=$NAME"; exit 1; }
+          echo "PASS  all three numbers read $V"
+
+          # versioning.md §2: the number is written at both ends of the filename.
+          cp "$APK" "$V-mantra-ndi-v$V.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mantra-ndi-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: mantra-ndi-v${{ steps.version.outputs.v }}
+          path: ${{ steps.version.outputs.v }}-mantra-ndi-v${{ steps.version.outputs.v }}.apk
           if-no-files-found: error
+
+      # The artefact is not delivered until it is downloadable without a token.
+      - name: Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=${{ steps.version.outputs.v }}
+          FILE="$V-mantra-ndi-v$V.apk"
+          gh release delete "v$V" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "v$V" "$FILE" \
+            --title "v$V" \
+            --notes "Mantra NDI v$V. Signed with the permanent key, so it updates over any earlier build carrying the same key.
+
+          Certificate: $(cat fingerprint.txt)
+
+          Powered by NDI. NDI is a registered trademark of Vizrt NDI AB."
+
+          # versioning.md §4: keep the last two, remove the rest.
+          gh release list --limit 100 --json tagName --jq '.[].tagName' \
+            | grep -E '^v[0-9]+$' | sort -t v -k2 -n -r | tail -n +3 \
+            | while read -r old; do
+                echo "removing $old"
+                gh release delete "$old" --yes --cleanup-tag 2>/dev/null || true
+              done

@@ -217,35 +217,8 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
      * COLOR_CORRECTION_GAINS expects.
      */
     private fun kelvinToGains(kelvin: Int): RggbChannelVector {
-        val t = kelvin.coerceIn(KELVIN_MIN, KELVIN_MAX) / 100.0
-
-        val red = if (t <= 66) 255.0
-        else (329.698727446 * Math.pow(t - 60, -0.1332047592)).coerceIn(0.0, 255.0)
-
-        val green = if (t <= 66) (99.4708025861 * Math.log(t) - 161.1195681661).coerceIn(0.0, 255.0)
-        else (288.1221695283 * Math.pow(t - 60, -0.0755148492)).coerceIn(0.0, 255.0)
-
-        val blue = when {
-            t >= 66 -> 255.0
-            t <= 19 -> 0.0
-            else -> (138.5177312231 * Math.log(t - 10) - 305.0447927307).coerceIn(0.0, 255.0)
-        }
-
-        // Guard against a zero channel before inverting.
-        val r = red.coerceAtLeast(1.0)
-        val g = green.coerceAtLeast(1.0)
-        val b = blue.coerceAtLeast(1.0)
-
-        var rGain = (255.0 / r).toFloat()
-        var gGain = (255.0 / g).toFloat()
-        var bGain = (255.0 / b).toFloat()
-
-        val smallest = minOf(rGain, gGain, bGain)
-        rGain /= smallest
-        gGain /= smallest
-        bGain /= smallest
-
-        return RggbChannelVector(rGain, gGain, gGain, bGain)
+        val (r, g, b) = Mechanism.kelvinToGains(kelvin).let { Triple(it[0], it[1], it[2]) }
+        return RggbChannelVector(r, g, g, b)
     }
 
     private fun characteristics(): CameraCharacteristics? = try {
@@ -255,8 +228,8 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
     }
 
     companion object {
-        const val KELVIN_MIN = 2000
-        const val KELVIN_MAX = 10000
+        const val KELVIN_MIN = Mechanism.KELVIN_MIN
+        const val KELVIN_MAX = Mechanism.KELVIN_MAX
 
         private val IDENTITY_TRANSFORM = ColorSpaceTransform(
             intArrayOf(

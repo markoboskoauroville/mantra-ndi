@@ -124,6 +124,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun setUpDrawer() {
         binding.settingsButton.setOnClickListener { toggleSettings() }
+        // The settings ring doubles as the audio meter, so nothing extra sits
+        // on the frame just to show level.
+        binding.settingsButton.showsLevel = true
     }
 
     /** The same ring opens and closes; nothing else on screen changes role. */
@@ -242,7 +245,7 @@ class MainActivity : AppCompatActivity() {
         }
         controls?.exposureTimeRange()?.let {
             val ns = progressToShutter(binding.shutterFader.progress, it.lower, it.upper)
-            binding.shutterFader.valueText = "1/${(1_000_000_000.0 / ns).roundToInt()}"
+            binding.shutterFader.valueText = "1/${Mechanism.shutterDenominator(ns)}"
         }
     }
 
@@ -254,10 +257,8 @@ class MainActivity : AppCompatActivity() {
         binding.zoomFader.valueText = String.format("%.1fx", zoom)
     }
 
-    private fun progressToShutter(progress: Int, min: Long, max: Long): Long {
-        val fraction = (progress / 200.0).let { it * it }
-        return (min + fraction * (max - min)).toLong().coerceIn(min, max)
-    }
+    private fun progressToShutter(progress: Int, min: Long, max: Long): Long =
+        Mechanism.shutterFromProgress(progress, 200, min, max)
 
     private fun applyWhiteBalance() {
         val kelvin = ProControls.KELVIN_MIN + binding.wbFader.progress
@@ -306,7 +307,7 @@ class MainActivity : AppCompatActivity() {
     /** Ten times a second, cheap enough and keeps the meter feeling live. */
     private fun refreshLiveIndicators() {
         val svc = service ?: return
-        binding.vuMeter.setLevel(svc.audioLevel)
+        binding.settingsButton.level = Mechanism.rmsToMeterFraction(svc.audioLevel)
 
         binding.recordButton.ringColor =
             if (svc.isRecording) CircleButtonView.RECORDING else CircleButtonView.IDLE

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import kotlin.math.min
@@ -42,9 +43,33 @@ class CircleButtonView @JvmOverloads constructor(
             }
         }
 
+    /**
+     * Audio level, 0..1, drawn as an arc around the same ring.
+     *
+     * It begins at the bottom of the circle and travels all the way round, so
+     * full scale arrives back where it started. Nothing new appears on screen
+     * to show audio: the control you already look at simply fills.
+     */
+    var level: Float = 0f
+        set(value) {
+            val clamped = value.coerceIn(0f, 1f)
+            if (field != clamped) {
+                field = clamped
+                invalidate()
+            }
+        }
+
+    /** Set false on the ring that is not metering. */
+    var showsLevel: Boolean = false
+
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
     }
+    private val levelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val levelRect = RectF()
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
     }
@@ -82,6 +107,21 @@ class CircleButtonView @JvmOverloads constructor(
             ringColor
         }
         canvas.drawCircle(cx, cy, radius, ringPaint)
+
+        if (showsLevel && level > 0.005f) {
+            levelPaint.strokeWidth = ringPaint.strokeWidth
+            // Amber through most of the travel, red as it closes on the top of
+            // the scale, which is also where the arc meets its own start.
+            levelPaint.color = when {
+                level > 0.94f -> Color.parseColor("#FF3B2F")
+                level > 0.82f -> Color.parseColor("#FFB300")
+                else -> Color.parseColor("#E7A44C")
+            }
+            levelRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
+            // 90 degrees is the bottom of the circle on this canvas; sweeping
+            // negative runs anticlockwise so the arc climbs the left side first.
+            canvas.drawArc(levelRect, 90f, -360f * level, false, levelPaint)
+        }
     }
 
     override fun setPressed(pressed: Boolean) {
