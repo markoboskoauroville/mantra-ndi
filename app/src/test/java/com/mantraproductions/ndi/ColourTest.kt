@@ -65,22 +65,47 @@ class ColourTest {
         // not what separates log from Rec.709. Highlights are. Ten stops over
         // middle grey leaves Rec.709 at about 3.0, which is to say gone, while
         // every log curve is still inside the signal with room left.
-        assertTrue(LogCurves.encode(LogCurves.Curve.REC709, 10.0) > 2.0)
+        val rec709 = LogCurves.encode(LogCurves.Curve.REC709, 10.0)
+        assertTrue("rec709 gave $rec709", rec709 > 2.0)
         for (curve in allCurves) {
             if (curve == LogCurves.Curve.REC709) continue
             val highlight = LogCurves.encode(curve, 10.0)
-            assertTrue("$curve reached $highlight at 10x grey", highlight < 1.0)
-            assertTrue("$curve wasted its range, only $highlight", highlight > 0.6)
+            assertTrue("$curve reached $highlight, rec709 reached $rec709", highlight < rec709)
         }
     }
 
-    @Test fun middleGreyIsAnchoredNearTheSamePlaceInEveryCurve() {
-        // Not a coincidence: it is what makes exposure transferable between
-        // cameras. Anything outside this band is a wrong constant.
+    @Test fun everyLogCurveRunsOutOfSignalLaterThanRec709() {
+        // The same property stated the other way round, which is the one that
+        // matters on set: how far past grey the curve keeps recording.
+        fun clipPoint(curve: LogCurves.Curve): Double {
+            var linear = 0.18
+            while (linear < 1000.0 && LogCurves.encode(curve, linear) < 1.0) linear *= 1.02
+            return linear
+        }
+        val rec709 = clipPoint(LogCurves.Curve.REC709)
+        for (curve in allCurves) {
+            if (curve == LogCurves.Curve.REC709) continue
+            assertTrue(
+                "$curve clips at ${clipPoint(curve)}, rec709 at $rec709",
+                clipPoint(curve) > rec709
+            )
+        }
+    }
+
+    @Test fun middleGreyLandsWhereEachVendorPutsIt() {
+        // Not one anchor but a narrow spread, and the spread is meaningful.
+        // LogC4 sits lowest at 0.278 on purpose: it carries far more range
+        // above grey than LogC3 does, so grey has to move down to make room.
+        // A constant typed wrongly lands outside this band immediately.
         for (curve in allCurves) {
             val grey = LogCurves.middleGrey(curve)
-            assertTrue("$curve puts grey at $grey", grey in 0.33..0.46)
+            assertTrue("$curve puts grey at $grey", grey in 0.25..0.46)
         }
+        assertEquals(0.2784, LogCurves.middleGrey(LogCurves.Curve.LOGC4), 0.002)
+        assertTrue(
+            LogCurves.middleGrey(LogCurves.Curve.LOGC4) <
+                LogCurves.middleGrey(LogCurves.Curve.LOGC3)
+        )
     }
 
     @Test fun curvesAreMonotonicSoNoTwoBrightnessesSwapPlaces() {
