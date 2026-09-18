@@ -48,6 +48,22 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_REMOTE_SOURCE, null)
         set(value) = prefs.edit().putString(KEY_REMOTE_SOURCE, value).apply()
 
+    /** Small, medium, large or the whole frame. Set here, not by tapping. */
+    var focusBoxSize: FocusSquareView.Size
+        get() = FocusSquareView.Size.values()
+            .firstOrNull { it.name == prefs.getString(KEY_BOX, null) }
+            ?: FocusSquareView.Size.MEDIUM
+        set(value) = prefs.edit().putString(KEY_BOX, value.name).apply()
+
+    /**
+     * Kept on the device and never in the build. The APK is published, and
+     * anything compiled into it can be read out of it by anybody who downloads
+     * it, so a key belongs in the phone's own storage and nowhere else.
+     */
+    var groqApiKey: String?
+        get() = prefs.getString(KEY_GROQ, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_GROQ, value?.trim()).apply()
+
     var monitorLutName: String?
         get() = prefs.getString(KEY_LUT, null)
         set(value) = prefs.edit().putString(KEY_LUT, value).apply()
@@ -58,6 +74,8 @@ class AppSettings(context: Context) {
         const val KEY_TEN_BIT = "ten_bit"
         const val KEY_HISTOGRAM = "histogram"
         const val KEY_VECTORSCOPE = "vectorscope"
+        const val KEY_BOX = "focus_box"
+        const val KEY_GROQ = "groq_key"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
         const val KEY_REMOTE = "remote_mode"

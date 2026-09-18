@@ -72,6 +72,16 @@
         <!-- Display -->
         <LinearLayout style="@style/MantraSettingsGroup">
 
+            <LinearLayout android:id="@+id/rowFocusBox" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Focus box size" />
+                <TextView android:id="@+id/valueFocusBox" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowAiFocus" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="AI focus key" />
+                <TextView android:id="@+id/valueAiFocus" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
             <LinearLayout android:id="@+id/rowHistogram" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Vectorscope" />
                 <TextView android:id="@+id/valueHistogram" style="@style/MantraSettingsValue" />

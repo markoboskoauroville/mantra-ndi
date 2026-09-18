@@ -96,6 +96,8 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowCamera.setOnClickListener { showCameraCapabilities() }
         binding.rowDetect.setOnClickListener { showFullReport() }
         binding.rowKeys.setOnClickListener { showKeys() }
+        binding.rowFocusBox.setOnClickListener { pickFocusBox() }
+        binding.rowAiFocus.setOnClickListener { editApiKey() }
 
         refresh()
     }
@@ -126,6 +128,17 @@ class SettingsActivity : AppCompatActivity() {
         }
         binding.valueStabilisation.text = if (prefs.stabilisation) "On" else "Off"
         binding.valueCamera.text = capabilitySummary()
+        binding.valueFocusBox.text = when (prefs.focusBoxSize) {
+            FocusSquareView.Size.SMALL -> "Small"
+            FocusSquareView.Size.MEDIUM -> "Medium"
+            FocusSquareView.Size.LARGE -> "Large"
+            FocusSquareView.Size.FULL -> "Full screen"
+        }
+        binding.valueAiFocus.text = if (prefs.groqApiKey == null) {
+            "Not set. Long press the focus box to name what to focus on"
+        } else {
+            "Key stored on this phone only"
+        }
         binding.valueKeys.text = if (KeyService.isEnabled(this)) {
             "On. Volume rocker drives the camera"
         } else {
@@ -170,6 +183,40 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun pickFocusBox() {
+        val sizes = FocusSquareView.Size.values()
+        choose("Focus box size", listOf("Small", "Medium", "Large", "Full screen")) { index ->
+            prefs.focusBoxSize = sizes[index]
+            refresh()
+        }
+    }
+
+    /**
+     * Typed in, never built in. This app's releases are public, and a key
+     * compiled into an APK can be read straight back out of it by anybody who
+     * downloads one.
+     */
+    private fun editApiKey() {
+        val input = android.widget.EditText(this).apply {
+            setText(prefs.groqApiKey.orEmpty())
+            hint = "Groq API key"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("AI focus key")
+            .setMessage("Stored on this phone only. It is never included in a build.")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                prefs.groqApiKey = input.text.toString()
+                refresh()
+            }
+            .setNeutralButton("Clear") { _, _ ->
+                prefs.groqApiKey = null
+                refresh()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun pickProfile() {

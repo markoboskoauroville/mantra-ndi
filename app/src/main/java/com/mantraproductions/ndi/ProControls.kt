@@ -320,10 +320,29 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
         return true
     }
 
-    /** Freezes focus wherever it just landed, so nothing hunts during a take. */
-    fun lockFocusHere(): Boolean = source.setCustomRequest { builder ->
-        builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
-        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+    /**
+     * Freezes focus where autofocus just put it.
+     *
+     * This is where it was going wrong. Switching AF_MODE to OFF does not mean
+     * "stay here"; it means "the lens position is now whatever
+     * LENS_FOCUS_DISTANCE says", and that key still held the value from before
+     * the search. So the box went yellow, found focus, went green, and the
+     * lens immediately snapped back to where it had been. It looked like the
+     * lock was being ignored. It was being obeyed, on a stale number.
+     *
+     * The distance autofocus actually reached arrives in the same capture
+     * result that reports the lock, so it is written into the request in the
+     * same breath as turning AF off.
+     */
+    fun lockFocusHere(): Boolean {
+        val reached = lastFocusDistance
+        return source.setCustomRequest { builder ->
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+            if (reached != null) {
+                builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, reached)
+            }
+        }
     }
 
     private var pendingFocusResult: ((Boolean) -> Unit)? = null

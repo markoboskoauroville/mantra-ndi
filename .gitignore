@@ -26,3 +26,6 @@ app/build/
 *.apk
 *.aab
 signing/
+groq*
+*api*.txt
+gsk_*

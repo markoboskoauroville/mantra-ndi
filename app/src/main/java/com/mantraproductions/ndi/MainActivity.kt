@@ -228,6 +228,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        binding.focusSquare.boxSize = appSettings.focusBoxSize
         applyCameraSource()
         // Settings may have changed the profile while we were away.
         val picked = profileStore.selected()
@@ -586,9 +587,14 @@ class MainActivity : AppCompatActivity() {
         // A tap on the box means focus here. Dragging moves it, tapping fires
         // it, and a long press cycles its size, so the box is the whole focus
         // interface and the circle only says which mode it is in.
+        // Long press the box: ask what is in the frame and focus by name.
+        binding.focusSquare.setOnLongClickListener {
+            askVisionForSubjects()
+            true
+        }
         binding.focusSquare.onTapped = {
-            if (focusDirector.mode == FocusDirector.Mode.MANUAL) focusDirector.focusHereAndHold()
-            else binding.focusSquare.cycleSize()
+            // One gesture, one meaning: a tap on the box focuses there.
+            focusDirector.focusHereAndHold()
         }
 
         // One press puts every control back on automatic at once.
@@ -924,10 +930,6 @@ class MainActivity : AppCompatActivity() {
             refreshFocusButton()
             say(if (next == FocusDirector.Mode.AUTO) "Focus checking every 2s" else "Focus locked")
         }
-        binding.focusModeButton.setOnLongClickListener {
-            binding.focusSquare.cycleSize()
-            true
-        }
         refreshFocusButton()
 
         binding.settingsButton.setOnClickListener { toggleVerticalPanel() }
@@ -973,6 +975,49 @@ class MainActivity : AppCompatActivity() {
             android.util.Log.e("MainActivity", "Could not set up $what", e)
             say("$what unavailable")
         }
+    }
+
+    /**
+     * The other way to aim focus: the model lists what it sees, the operator
+     * picks the thing they meant, and the box goes there. Faster than aiming a
+     * rectangle at a face across a road, and it is the same focus afterwards.
+     */
+    private fun askVisionForSubjects() {
+        val key = appSettings.groqApiKey
+        if (key == null) {
+            say("Add a Groq key in settings for AI focus")
+            return
+        }
+        if (!binding.preview.isAvailable) return
+
+        val frame = binding.preview.getBitmap(640, 360)
+        if (frame == null) {
+            say("No frame to look at")
+            return
+        }
+
+        say("Looking at the frame", transient = false)
+        VisionFocus.findSubjects(
+            apiKey = key,
+            frame = frame,
+            onResult = { subjects ->
+                runOnUiThread {
+                    say("Pick a subject")
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("Focus on")
+                        .setItems(subjects.map { it.label }.toTypedArray()) { _, which ->
+                            val picked = subjects[which]
+                            binding.focusSquare.moveTo(picked.x, picked.y)
+                            focusDirector.target = picked.x to picked.y
+                            focusDirector.focusHereAndHold()
+                            say("Focusing on ${picked.label}")
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            },
+            onError = { message -> runOnUiThread { say(message) } }
+        )
     }
 
     private fun refreshFocusButton() {

@@ -43,26 +43,24 @@ class FocusSquareView @JvmOverloads constructor(
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val rect = RectF()
-    /** Small, middle, large. Tapping the box steps through them. */
-    enum class Size(val halfDp: Float) { SMALL(30f), MEDIUM(50f), LARGE(78f) }
+    /**
+     * Chosen in settings rather than by tapping. Cycling it from the box made
+     * one gesture mean three things, which on a shoot is one too many. Full
+     * screen means exactly that: focus on everything and let the camera decide,
+     * which is the right answer for a wide landscape.
+     */
+    enum class Size(val halfDp: Float) { SMALL(26f), MEDIUM(48f), LARGE(76f), FULL(-1f) }
 
     var boxSize: Size = Size.MEDIUM
         set(value) { field = value; invalidate() }
 
-    private val half get() = boxSize.halfDp * density
+    private val half: Float
+        get() = if (boxSize == Size.FULL) minOf(width, height) * 0.46f
+                else boxSize.halfDp * density
 
     init {
         // Not clickable: an unclaimed touch has to fall through to the image.
         isClickable = false
-    }
-
-    /** Steps the box through its three sizes. */
-    fun cycleSize() {
-        boxSize = when (boxSize) {
-            Size.SMALL -> Size.MEDIUM
-            Size.MEDIUM -> Size.LARGE
-            Size.LARGE -> Size.SMALL
-        }
     }
 
     fun moveTo(x: Float, y: Float) {
@@ -85,6 +83,12 @@ class FocusSquareView @JvmOverloads constructor(
             (centreX + w / 2).coerceIn(0f, 1f),
             (centreY + h / 2).coerceIn(0f, 1f)
         )
+    }
+
+    private companion object {
+        /** Long enough to be a decision, short enough not to feel stuck. */
+        const val HOLD_TO_DRAG_MS = 260L
+        const val FAR_SLOP = 44f
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -119,7 +123,24 @@ class FocusSquareView @JvmOverloads constructor(
 
     private var grabbed = false
     private var pressStart = 0L
-    private var moved = false
+    private var dragging = false
+    private var downX = 0f
+    private var downY = 0f
+
+    /**
+     * Dragging has to be asked for.
+     *
+     * A tap that wanders a few pixels is still a tap: a thumb on glass always
+     * moves a little, and treating that as a drag meant the box slid away
+     * instead of focusing. Focusing happens far more often than moving the
+     * box, so the rarer gesture is the one made deliberate. Hold for a moment
+     * and it becomes a drag; let go before that and it was a tap, however much
+     * the finger wandered.
+     */
+    private val holdToDrag = Runnable {
+        dragging = true
+        state = State.IDLE
+    }
 
     /** Fired on a tap that was not a drag: the caller decides what focus means. */
     var onTapped: (() -> Unit)? = null
@@ -141,29 +162,41 @@ class FocusSquareView @JvmOverloads constructor(
                 grabbed = Math.abs(event.x - cx) <= reach && Math.abs(event.y - cy) <= reach
                 if (!grabbed) return false
                 pressStart = System.currentTimeMillis()
-                moved = false
+                downX = event.x
+                downY = event.y
+                dragging = false
+                postDelayed(holdToDrag, HOLD_TO_DRAG_MS)
                 parent?.requestDisallowInterceptTouchEvent(true)
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
                 if (!grabbed) return false
-                val travelled = Math.abs(event.x - width * centreX) > 6f * density ||
-                        Math.abs(event.y - height * centreY) > 6f * density
-                if (travelled) moved = true
-                moveTo(event.x / width, event.y / height)
-                if (moved) state = State.IDLE
-                onMoved?.invoke(centreX, centreY)
+                // A long, deliberate sweep is a drag even without the wait.
+                if (!dragging &&
+                    (Math.abs(event.x - downX) > FAR_SLOP * density ||
+                        Math.abs(event.y - downY) > FAR_SLOP * density)
+                ) {
+                    removeCallbacks(holdToDrag)
+                    dragging = true
+                }
+                if (dragging) {
+                    moveTo(event.x / width, event.y / height)
+                    state = State.IDLE
+                    onMoved?.invoke(centreX, centreY)
+                }
                 return true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
+                removeCallbacks(holdToDrag)
                 val wasGrabbed = grabbed
+                val wasDragging = dragging
                 grabbed = false
-                if (wasGrabbed && !moved && System.currentTimeMillis() - pressStart < 400) {
-                    onTapped?.invoke()
-                }
+                dragging = false
+                // Anything that was not a drag was a tap, however wobbly.
+                if (wasGrabbed && !wasDragging) onTapped?.invoke()
                 return wasGrabbed
             }
         }

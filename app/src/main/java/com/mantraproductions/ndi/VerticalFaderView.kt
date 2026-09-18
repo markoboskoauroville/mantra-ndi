@@ -150,7 +150,17 @@ class VerticalFaderView @JvmOverloads constructor(
         val span = bottom - top
         val dim = if (automatic) 0.35f else 1f
 
-        canvas.drawText(label.uppercase(), cx, 20f * density, labelPaint)
+        // Written along the track rather than above it, turned a quarter so it
+        // reads as if the phone were on its side. The heading then costs no
+        // vertical room at all, which is what was pushing it into the buttons,
+        // and a full word like SHUTTER fits where three letters used to.
+        canvas.save()
+        canvas.rotate(-90f, cx, (top + bottom) / 2f)
+        labelPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            label.uppercase(), cx, (top + bottom) / 2f - 13f * density, labelPaint
+        )
+        canvas.restore()
 
         // Drawn as rings, the same shape and weight as every other control in
         // this app, so a thumb finds them without the eye leaving the frame.
