@@ -60,15 +60,26 @@ class ColourTest {
         assertEquals(0.391, LogCurves.middleGrey(LogCurves.Curve.LOGC3), 0.003)
     }
 
-    @Test fun everyLogCurveLiftsMiddleGreyAboveRec709() {
-        // The whole point of log: grey sits higher so the shadows get code values.
-        val rec709 = LogCurves.middleGrey(LogCurves.Curve.REC709)
+    @Test fun everyLogCurveHoldsHighlightsThatRec709Throws() {
+        // Grey is anchored near 0.41 in all of them, deliberately, so grey is
+        // not what separates log from Rec.709. Highlights are. Ten stops over
+        // middle grey leaves Rec.709 at about 3.0, which is to say gone, while
+        // every log curve is still inside the signal with room left.
+        assertTrue(LogCurves.encode(LogCurves.Curve.REC709, 10.0) > 2.0)
         for (curve in allCurves) {
             if (curve == LogCurves.Curve.REC709) continue
-            assertTrue(
-                "$curve grey ${LogCurves.middleGrey(curve)} vs rec709 $rec709",
-                LogCurves.middleGrey(curve) < rec709
-            )
+            val highlight = LogCurves.encode(curve, 10.0)
+            assertTrue("$curve reached $highlight at 10x grey", highlight < 1.0)
+            assertTrue("$curve wasted its range, only $highlight", highlight > 0.6)
+        }
+    }
+
+    @Test fun middleGreyIsAnchoredNearTheSamePlaceInEveryCurve() {
+        // Not a coincidence: it is what makes exposure transferable between
+        // cameras. Anything outside this band is a wrong constant.
+        for (curve in allCurves) {
+            val grey = LogCurves.middleGrey(curve)
+            assertTrue("$curve puts grey at $grey", grey in 0.33..0.46)
         }
     }
 
@@ -97,13 +108,25 @@ class ColourTest {
 
     @Test fun convertingACurveToItselfChangesNothing() {
         for (curve in allCurves) {
+            // Below a curve's own black there is no scene light to represent,
+            // so conversion clamps. Start at the signal black actually maps to.
+            val black = LogCurves.encode(curve, 0.0)
             for (i in 0..20) {
-                val signal = i / 20.0
+                val signal = black + (1.0 - black) * i / 20.0
                 assertEquals(
                     "$curve at $signal", signal,
                     LogCurves.convert(curve, curve, signal), 0.001
                 )
             }
+        }
+    }
+
+    @Test fun signalsBelowBlackClampRatherThanProducingNonsense() {
+        // LogC4 encodes negative scene values, so a signal under its black is
+        // legal input and must come back inside the range, not as a NaN.
+        for (curve in allCurves) {
+            val v = LogCurves.convert(curve, LogCurves.Curve.REC709, 0.0)
+            assertTrue("$curve gave $v", v.isFinite() && v in 0.0..1.0)
         }
     }
 
@@ -247,14 +270,28 @@ class ColourTest {
     }
 
     @Test fun samplingSparselyGivesTheSameShapeAsSamplingEverything() {
-        // A gradient, read fully and read every twelfth pixel.
+        // Scene-like content, not a synthetic ramp: a perfect ramp aliases
+        // against any fixed stride and would be testing arithmetic, not the
+        // sampling decision. Compared in eighths, which is the resolution
+        // anybody reads a histogram at.
         val w = 480
         val h = 480
-        val luma = ByteArray(w * h) { ((it % w) * 255 / w).toByte() }
-        val full = Histogram.normalise(Histogram.fromLuma(luma, w, h, stride = 1))
-        val sparse = Histogram.normalise(Histogram.fromLuma(luma, w, h, stride = 12))
-        for (i in full.indices) {
-            assertEquals("bucket $i", full[i], sparse[i], 0.2f)
+        val random = java.util.Random(42)
+        val luma = ByteArray(w * h) { (random.nextInt(256)).toByte() }
+        val full = Histogram.fromLuma(luma, w, h, stride = 1)
+        val sparse = Histogram.fromLuma(luma, w, h, stride = 12)
+
+        fun eighths(buckets: IntArray): FloatArray {
+            val total = buckets.sum().toFloat()
+            val groups = FloatArray(8)
+            buckets.forEachIndexed { i, v -> groups[i * 8 / buckets.size] += v / total }
+            return groups
+        }
+
+        val a = eighths(full)
+        val b = eighths(sparse)
+        for (i in a.indices) {
+            assertEquals("eighth $i", a[i], b[i], 0.02f)
         }
     }
 
@@ -264,10 +301,15 @@ class ColourTest {
         assertEquals(0f, Histogram.clippedHighlights(IntArray(Histogram.BUCKETS)), 0.0001f)
     }
 
-    @Test fun middleGreyMarkerMovesWithTheCurve() {
-        val rec = Histogram.middleGreyBucket(LogCurves.Curve.REC709)
-        val slog = Histogram.middleGreyBucket(LogCurves.Curve.SLOG3)
-        assertTrue("log grey $slog should sit below rec709 grey $rec", slog < rec)
-        assertTrue(slog in 0 until Histogram.BUCKETS)
+    @Test fun middleGreyMarkerLandsInsideTheHistogram() {
+        for (curve in allCurves) {
+            val bucket = Histogram.middleGreyBucket(curve)
+            assertTrue("$curve marked bucket $bucket", bucket in 1 until Histogram.BUCKETS - 1)
+        }
+        // LogC3 sits lowest of the set, so the marker must be able to move.
+        assertTrue(
+            Histogram.middleGreyBucket(LogCurves.Curve.LOGC3) <
+                Histogram.middleGreyBucket(LogCurves.Curve.VLOG)
+        )
     }
 }
