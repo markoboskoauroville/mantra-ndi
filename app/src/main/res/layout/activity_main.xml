@@ -82,8 +82,8 @@
         android:paddingHorizontal="8dp"
         android:layout_marginEnd="6dp"
         android:layout_marginBottom="10dp"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/recordButton"
@@ -120,43 +120,31 @@
         app:layout_constraintEnd_toStartOf="@id/controlRow">
 
         <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aIso" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vIso" style="@style/MantraFader" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aShutter" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vShutter" style="@style/MantraFader" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aWhiteBalance" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vWhiteBalance" style="@style/MantraFader" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aFocus" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vFocus" style="@style/MantraFader" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aZoom" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vZoom" style="@style/MantraFader" />
         </LinearLayout>
 
         <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aGain" style="@style/MantraAuto" />
             <com.mantraproductions.ndi.VerticalFaderView
                 android:id="@+id/vGain" style="@style/MantraFader" />
         </LinearLayout>
@@ -164,7 +152,10 @@
         <!-- Video Auto, last in the row so it sits nearest the hand. -->
         <LinearLayout style="@style/MantraColumn">
             <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/autoAllButton" style="@style/MantraAuto" />
+                android:id="@+id/autoAllButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="4dp" />
         </LinearLayout>
 
     </LinearLayout>

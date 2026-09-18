@@ -533,38 +533,29 @@ class MainActivity : AppCompatActivity() {
         binding.vGain.showsCentre = true
         binding.vGain.progress = gainProgress
         binding.vGain.onChange = { gainProgress = it; applyGain() }
-        binding.aGain.symbol = "A"
-        binding.aGain.ringColor = CircleButtonView.IDLE
-        binding.aGain.setOnClickListener {
-            gainProgress = 50
-            applyGain()
-            refreshVerticalPanel()
-            say("Gain back to unity")
-        }
-
         binding.vFocus.label = "FOCUS"
         binding.vFocus.max = 100
         binding.vFocus.onChange = { focusProgress = it; pushFocus() }
         binding.vFocus.onRelease = { pump.flush() }
         binding.vFocus.onTouchedWhileAutomatic = { leaveAuto(null) }
 
-        // An A over each column. Pressing it asks the camera what it would
-        // choose, drops that value onto the fader, and stays manual. It is a
-        // recommendation, not a mode: the operator keeps the control and starts
-        // from somewhere sensible instead of from wherever the fader was left.
+        // The A circles are gone from the columns. Snapping a control back to
+        // what the camera detected is a two second press on the control
+        // itself, which is one less thing on the frame and a bigger target
+        // than any button could be.
         listOf(
-            binding.aIso to Mechanism.Param.ISO,
-            binding.aShutter to Mechanism.Param.SHUTTER,
-            binding.aWhiteBalance to Mechanism.Param.WHITE_BALANCE,
-            binding.aZoom to Mechanism.Param.ZOOM
-        ).forEach { (button, which) ->
-            button.symbol = "A"
-            button.ringColor = CircleButtonView.IDLE
-            button.setOnClickListener { suggestFor(which, button) }
+            binding.vIso to Mechanism.Param.ISO,
+            binding.vShutter to Mechanism.Param.SHUTTER,
+            binding.vWhiteBalance to Mechanism.Param.WHITE_BALANCE,
+            binding.vZoom to Mechanism.Param.ZOOM
+        ).forEach { (fader, which) -> fader.onSnapToAuto = { snapToAuto(which) } }
+        binding.vFocus.onSnapToAuto = { focusOnSquare() }
+        binding.vGain.onSnapToAuto = {
+            gainProgress = 50
+            applyGain()
+            refreshVerticalPanel()
+            say("Gain back to unity")
         }
-        binding.aFocus.symbol = "A"
-        binding.aFocus.ringColor = CircleButtonView.IDLE
-        binding.aFocus.setOnClickListener { focusOnSquare() }
 
         binding.focusSquare.onMoved = { _, _ ->
             binding.focusSquare.state = FocusSquareView.State.IDLE
@@ -612,9 +603,20 @@ class MainActivity : AppCompatActivity() {
         manualExposure = false
         manualWhiteBalance = false
         manualFocus = false
-        say("Auto, finding exposure")
-        // Give the routine a moment to settle, then take its answer.
-        ui.postDelayed({ seedFromCamera(); refreshVerticalPanel() }, 900)
+        say("Auto, re-reading the scene")
+        // Everything is re-detected, not merely handed back: the whole point
+        // of pressing this is that the last answers were wrong.
+        ui.postDelayed({
+            seedFromCamera()
+            controls.holdMeasuredWhiteBalance()?.let {
+                manualWhiteBalance = true
+                kelvinProgress = Mechanism.progressForKelvin(controls.heldKelvin, 100)
+            }
+            manualExposure = true
+            pushExposure()
+            refreshVerticalPanel()
+            say("Everything set from the camera")
+        }, 1100)
     }
 
     private fun leaveAuto(which: Mechanism.Param?) {
@@ -694,7 +696,11 @@ class MainActivity : AppCompatActivity() {
             Mechanism.Param.WHITE_BALANCE -> {
                 kelvinProgress = progress
                 if (manualWhiteBalance) {
-                    pump.setKelvin(Mechanism.kelvinFromProgress(progress, 100))
+                    // Shifts the camera's own measurement warmer or cooler
+                    // rather than substituting a textbook answer for it.
+                    service?.controls?.nudgeWhiteBalanceTo(
+                        Mechanism.kelvinFromProgress(progress, 100)
+                    )
                 }
             }
             Mechanism.Param.ZOOM -> { zoomProgress = progress; pushZoom(progress) }
@@ -706,6 +712,50 @@ class MainActivity : AppCompatActivity() {
      * Runs the camera's own routine for one moment, takes the number it
      * arrives at, and hands control straight back.
      */
+    /**
+     * Puts one control back where the camera would have it: run the camera's
+     * own routine for a moment, take the answer, stay manual.
+     */
+    private fun snapToAuto(which: Mechanism.Param) {
+        val controls = service?.controls ?: return
+        when (which) {
+            Mechanism.Param.ISO, Mechanism.Param.SHUTTER -> {
+                controls.setAutoExposure()
+                say("Reading the scene")
+                ui.postDelayed({
+                    seedFromCamera()
+                    manualExposure = true
+                    pushExposure()
+                    refreshVerticalPanel()
+                    say("Set from the camera")
+                }, 800)
+            }
+
+            Mechanism.Param.WHITE_BALANCE -> {
+                controls.setAutoWhiteBalance()
+                say("Balancing")
+                ui.postDelayed({
+                    val held = controls.holdMeasuredWhiteBalance()
+                    if (held == null) {
+                        say("This camera does not report its balance")
+                        controls.setAutoWhiteBalance()
+                    } else {
+                        manualWhiteBalance = true
+                        kelvinProgress = Mechanism.progressForKelvin(controls.heldKelvin, 100)
+                        say("Balanced at ${controls.heldKelvin}K")
+                    }
+                    refreshVerticalPanel()
+                }, 1000)
+            }
+
+            Mechanism.Param.ZOOM -> {
+                zoomProgress = 0
+                pushZoom(0)
+                refreshVerticalPanel()
+            }
+        }
+    }
+
     private fun suggestFor(which: Mechanism.Param, button: CircleButtonView) {
         val controls = service?.controls ?: return
         button.busy = true
@@ -761,10 +811,9 @@ class MainActivity : AppCompatActivity() {
         (link as? RemoteLink)?.let { remote ->
             binding.focusSquare.visibility = View.VISIBLE
             binding.focusSquare.state = FocusSquareView.State.SEEKING
-            binding.aFocus.busy = true
+            binding.focusSquare.state = FocusSquareView.State.SEEKING
             remote.focusAtPoint(binding.focusSquare.centreX, binding.focusSquare.centreY)
             ui.postDelayed({
-                binding.aFocus.busy = false
                 binding.focusSquare.state = FocusSquareView.State.LOCKED
                 say("Asked ${remote.label} to focus there")
             }, 1200)
@@ -775,11 +824,10 @@ class MainActivity : AppCompatActivity() {
             binding.focusSquare.visibility = View.VISIBLE
         }
         binding.focusSquare.state = FocusSquareView.State.SEEKING
-        binding.aFocus.busy = true
+        binding.focusSquare.state = FocusSquareView.State.SEEKING
 
         val started = controls.focusOnRegion(binding.focusSquare.normalisedBounds()) { focused ->
             runOnUiThread {
-                binding.aFocus.busy = false
                 binding.focusSquare.state =
                     if (focused) FocusSquareView.State.LOCKED else FocusSquareView.State.FAILED
                 if (focused) {
@@ -797,7 +845,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (!started) {
-            binding.aFocus.busy = false
             binding.focusSquare.state = FocusSquareView.State.FAILED
             say("This camera has no focus control")
         }

@@ -317,6 +317,121 @@ object Mechanism {
         return ((low + high) / 2).coerceIn(KELVIN_MIN, KELVIN_MAX)
     }
 
+    /**
+     * Constrains an illuminant estimate to the light sources that exist.
+     *
+     * This is the step that separates a camera from a textbook. Grey world and
+     * its relatives assume the average of a scene is neutral, and a scene that
+     * is mostly grass, mostly sky or mostly a wooden bench breaks that
+     * assumption completely: the estimate chases the dominant object and the
+     * correction cancels the actual colour of the world.
+     *
+     * Real illuminants do not wander. Daylight, tungsten, fluorescent and LED
+     * all sit on or near the Planckian locus, because that is what a hot body
+     * radiates and what lamp makers copy. So the fix used across the industry
+     * is to refuse any estimate off that curve: take whatever the statistics
+     * suggest, find the colour temperature whose gains point most nearly the
+     * same way, and use that instead. The estimate can be wrong by some
+     * hundreds of Kelvin. It can no longer be green.
+     *
+     * @return the constrained temperature in Kelvin
+     */
+    fun constrainToPlanckian(red: Float, green: Float, blue: Float): Int {
+        if (red <= 0f || green <= 0f || blue <= 0f) return KELVIN_WORKING_CENTRE
+        // Work in gains normalised on green, which is how a sensor expresses
+        // an illuminant and what removes exposure from the comparison.
+        val targetR = red / green
+        val targetB = blue / green
+
+        var best = KELVIN_WORKING_CENTRE
+        var bestError = Double.MAX_VALUE
+        var k = KELVIN_MIN
+        while (k <= KELVIN_MAX) {
+            val candidate = kelvinToGains(k)
+            val cr = candidate[0] / candidate[1]
+            val cb = candidate[2] / candidate[1]
+            // Angular-ish error in the two ratios, in log space so a factor of
+            // two costs the same whichever direction it goes.
+            val error = sq(ln(cr / targetR)) + sq(ln(cb / targetB))
+            if (error < bestError) {
+                bestError = error
+                best = k
+            }
+            k += 50
+        }
+        return best
+    }
+
+    private fun sq(x: Double) = x * x
+
+    /**
+     * Shades of grey: the Minkowski norm of each channel.
+     *
+     * p = 1 is the mean, which is grey world and is the one that fails. p at
+     * infinity is the brightest pixel, which is white patch and fails
+     * differently. Around 6 has been the practical answer in the literature
+     * for twenty years, because it leans towards the bright, near neutral
+     * parts of a frame without letting a single specular highlight decide.
+     */
+    fun shadesOfGrey(samples: List<Triple<Double, Double, Double>>, p: Double = 6.0): FloatArray {
+        if (samples.isEmpty()) return floatArrayOf(1f, 1f, 1f)
+        var sr = 0.0
+        var sg = 0.0
+        var sb = 0.0
+        for ((r, g, b) in samples) {
+            sr += r.pow(p)
+            sg += g.pow(p)
+            sb += b.pow(p)
+        }
+        val n = samples.size.toDouble()
+        val nr = (sr / n).pow(1.0 / p)
+        val ng = (sg / n).pow(1.0 / p)
+        val nb = (sb / n).pow(1.0 / p)
+        // Gains are the inverse of the illuminant, normalised on green.
+        if (nr <= 0.0 || ng <= 0.0 || nb <= 0.0) return floatArrayOf(1f, 1f, 1f)
+        return floatArrayOf((ng / nr).toFloat(), 1f, (ng / nb).toFloat())
+    }
+
+    /**
+     * Moves a measured set of gains from one temperature to another without
+     * discarding the measurement.
+     *
+     * The gains a camera reports are specific to its sensor and its scene. If
+     * the operator then asks for 5000K, recomputing gains from a black body
+     * curve throws all of that away and hands the sensor a textbook answer.
+     * Applying the ratio between two curve points instead keeps the camera's
+     * own measurement and shifts it by exactly the amount asked for.
+     */
+    fun shiftGains(measured: FloatArray, fromKelvin: Int, toKelvin: Int): FloatArray {
+        if (measured.size < 3) return measured
+        val from = kelvinToGains(fromKelvin)
+        val to = kelvinToGains(toKelvin)
+        val out = FloatArray(3)
+        for (i in 0..2) {
+            val ratio = if (from[i] > 0f) to[i] / from[i] else 1f
+            out[i] = (measured[i] * ratio).coerceAtLeast(0.05f)
+        }
+        // Renormalise so the smallest gain is 1.0, which is what the camera
+        // expects and what keeps exposure unchanged by a colour move.
+        val smallest = minOf(out[0], out[1], out[2])
+        if (smallest > 0f) for (i in 0..2) out[i] /= smallest
+        return out
+    }
+
+    /**
+     * Temporal smoothing with a dead zone.
+     *
+     * A balance that re-solves every frame visibly breathes, and a cut between
+     * two breathing shots cannot be graded. Cameras hold the last answer until
+     * the new one differs enough to be real, then move gradually.
+     *
+     * @return the temperature to actually use this frame
+     */
+    fun smoothKelvin(current: Int, measured: Int, deadZone: Int = 250, step: Double = 0.25): Int {
+        if (Math.abs(measured - current) < deadZone) return current
+        return (current + (measured - current) * step).toInt()
+    }
+
     // --- audio gain -----------------------------------------------------------
 
     /** Gain in dB from a fader, centred on unity so the middle changes nothing. */

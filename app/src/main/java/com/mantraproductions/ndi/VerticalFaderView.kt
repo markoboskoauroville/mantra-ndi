@@ -104,14 +104,28 @@ class VerticalFaderView @JvmOverloads constructor(
         textSize = 13f * density
     }
 
-    private val endZone get() = 46f * density
+    /**
+     * Big ends. A professional adjusting to the last detail presses these far
+     * more than they drag, so they are sized like the auto circles that used
+     * to sit above the column rather than like a typographic plus.
+     */
+    private val endZone get() = 62f * density
+
+    /** Long press anywhere on the track to snap back to the detected value. */
+    var onSnapToAuto: (() -> Unit)? = null
     private val trackTop get() = endZone + 18f * density
     private val trackBottom get() = height - endZone - 22f * density
 
+    private var pressStart = 0L
     private var dragStartY = 0f
     private var dragStartProgress = 0
     private var dragging = false
     private var repeatDirection = 0
+
+    private val snapRunnable = Runnable {
+        dragging = false
+        onSnapToAuto?.invoke()
+    }
 
     private val repeater = object : Runnable {
         override fun run() {
@@ -130,9 +144,23 @@ class VerticalFaderView @JvmOverloads constructor(
 
         canvas.drawText(label.uppercase(), cx, 20f * density, labelPaint)
 
-        signPaint.color = withAlpha(if (automatic) Color.parseColor("#7C8894") else accent, 255)
-        canvas.drawText("+", cx, endZone - 8f * density, signPaint)
-        canvas.drawText("\u2212", cx, height - 10f * density, signPaint)
+        // Drawn as rings, the same shape and weight as every other control in
+        // this app, so a thumb finds them without the eye leaving the frame.
+        val ringRadius = 21f * density
+        val plusY = endZone / 2f + 4f * density
+        val minusY = height - endZone / 2f - 2f * density
+        val signColour = withAlpha(if (automatic) Color.parseColor("#7C8894") else accent, 255)
+
+        signPaint.color = signColour
+        signPaint.style = Paint.Style.STROKE
+        signPaint.strokeWidth = 2.2f * density
+        canvas.drawCircle(cx, plusY, ringRadius, signPaint)
+        canvas.drawCircle(cx, minusY, ringRadius, signPaint)
+
+        signPaint.style = Paint.Style.FILL
+        signPaint.textSize = 26f * density
+        canvas.drawText("+", cx, plusY + 9f * density, signPaint)
+        canvas.drawText("\u2212", cx, minusY + 9f * density, signPaint)
 
         trackPaint.strokeWidth = 3f * density
         canvas.drawLine(cx, top, cx, bottom, trackPaint)
@@ -195,6 +223,11 @@ class VerticalFaderView @JvmOverloads constructor(
                         dragging = true
                         dragStartY = event.y
                         dragStartProgress = progress
+                        pressStart = System.currentTimeMillis()
+                        // Two seconds of stillness on the track means "put this
+                        // back where the camera had it", which is the reset
+                        // that needs no button anywhere on screen.
+                        postDelayed(snapRunnable, 2000)
                     }
                 }
                 parent?.requestDisallowInterceptTouchEvent(true)
@@ -208,6 +241,8 @@ class VerticalFaderView @JvmOverloads constructor(
                 // Up is more, so the sign is inverted against screen coordinates.
                 val delta = -(event.y - dragStartY) / span * max
                 if (abs(event.y - dragStartY) > 4f * density) {
+                    // Any real movement cancels the long press.
+                    removeCallbacks(snapRunnable)
                     progress = (dragStartProgress + delta).toInt()
                     onChange?.invoke(progress)
                 }
@@ -215,6 +250,7 @@ class VerticalFaderView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(snapRunnable)
                 stopRepeating()
                 if (dragging) {
                     dragging = false

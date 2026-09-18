@@ -149,19 +149,48 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
      */
     fun holdMeasuredWhiteBalance(): FloatArray? {
         val gains = lastAwbGains ?: return null
-        val applied = source.setCustomRequest { builder ->
-            builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
-            builder.set(
-                CaptureRequest.COLOR_CORRECTION_MODE,
-                CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
-            )
-            builder.set(
-                CaptureRequest.COLOR_CORRECTION_GAINS,
-                RggbChannelVector(gains[0], gains[1], gains[1], gains[2])
-            )
-            builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, IDENTITY_TRANSFORM)
-        }
-        return if (applied) gains else null
+        heldGains = gains
+        heldKelvin = lastAwbKelvin
+        return if (applyGains(gains)) gains else null
+    }
+
+    /**
+     * Applies gains together with the matrix the camera reported, which is the
+     * half that was missing. Falls back to identity only when the camera has
+     * never reported one, and that case is worth knowing about because it is
+     * where colour will be approximate.
+     */
+    private fun applyGains(gains: FloatArray): Boolean = source.setCustomRequest { builder ->
+        builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+        builder.set(
+            CaptureRequest.COLOR_CORRECTION_MODE,
+            CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
+        )
+        builder.set(
+            CaptureRequest.COLOR_CORRECTION_GAINS,
+            RggbChannelVector(gains[0], gains[1], gains[1], gains[2])
+        )
+        builder.set(
+            CaptureRequest.COLOR_CORRECTION_TRANSFORM,
+            lastAwbTransform ?: IDENTITY_TRANSFORM
+        )
+    }
+
+    /** The measurement this camera is currently holding, and its temperature. */
+    @Volatile var heldGains: FloatArray? = null
+        private set
+    @Volatile var heldKelvin: Int = Mechanism.KELVIN_WORKING_CENTRE
+        private set
+
+    /**
+     * Asking for a temperature shifts the measurement rather than replacing
+     * it, so the camera keeps its own reading of the room and the operator
+     * only moves it warmer or cooler.
+     */
+    fun nudgeWhiteBalanceTo(kelvin: Int): Boolean {
+        val base = heldGains ?: lastAwbGains ?: return setManualWhiteBalance(kelvin)
+        val shifted = Mechanism.shiftGains(base, heldKelvin, kelvin)
+        return applyGains(shifted)
     }
 
     /**
@@ -327,6 +356,25 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
     @Volatile var lastAwbGains: FloatArray? = null
         private set
 
+    /**
+     * The colour matrix the camera was using when it made those gains.
+     *
+     * This is what was wrong, and it is why manual white balance came out
+     * green. Gains and matrix are two halves of one answer: the gains say what
+     * the light was, and the matrix converts that sensor's particular idea of
+     * red, green and blue into real colour. Substituting an identity matrix
+     * throws away the sensor calibration and leaves a cast no temperature can
+     * fix, because the cast is not a temperature.
+     *
+     * So both halves are captured and both are re-applied together.
+     */
+    @Volatile var lastAwbTransform: android.hardware.camera2.params.ColorSpaceTransform? = null
+        private set
+
+    /** The temperature the measured gains correspond to, on the Planckian locus. */
+    @Volatile var lastAwbKelvin: Int = Mechanism.KELVIN_WORKING_CENTRE
+        private set
+
     init {
         source.setCustomOnCaptureCompletedCallback { _, _, result ->
             lastIso = result.get(CaptureResult.SENSOR_SENSITIVITY)
@@ -335,8 +383,14 @@ class ProControls(private val source: Camera2Source, private val cameraManager: 
             result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { g ->
                 // Two greens are reported; they are the same reference, so one
                 // is enough and averaging them costs nothing.
-                lastAwbGains = floatArrayOf(g.red, (g.greenEven + g.greenOdd) / 2f, g.blue)
+                val gains = floatArrayOf(g.red, (g.greenEven + g.greenOdd) / 2f, g.blue)
+                lastAwbGains = gains
+                // Constrained to a real illuminant rather than believed as is,
+                // so a scene full of grass cannot report itself as magenta.
+                val measured = Mechanism.constrainToPlanckian(gains[0], gains[1], gains[2])
+                lastAwbKelvin = Mechanism.smoothKelvin(lastAwbKelvin, measured)
             }
+            result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let { lastAwbTransform = it }
 
             // A focus request answers through the capture result, not a
             // callback, so the state is watched until it settles either way.
