@@ -33,6 +33,16 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_STABILISATION, false)
         set(value) = prefs.edit().putBoolean(KEY_STABILISATION, value).apply()
 
+    /** Whether the controls drive this phone's camera or one on the network. */
+    var remoteMode: Boolean
+        get() = prefs.getBoolean(KEY_REMOTE, false)
+        set(value) = prefs.edit().putBoolean(KEY_REMOTE, value).apply()
+
+    /** Which NDI source the remote controls are pointed at. */
+    var remoteSource: String?
+        get() = prefs.getString(KEY_REMOTE_SOURCE, null)
+        set(value) = prefs.edit().putString(KEY_REMOTE_SOURCE, value).apply()
+
     var monitorLutName: String?
         get() = prefs.getString(KEY_LUT, null)
         set(value) = prefs.edit().putString(KEY_LUT, value).apply()
@@ -44,5 +54,7 @@ class AppSettings(context: Context) {
         const val KEY_HISTOGRAM = "histogram"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
+        const val KEY_REMOTE = "remote_mode"
+        const val KEY_REMOTE_SOURCE = "remote_source"
     }
 }

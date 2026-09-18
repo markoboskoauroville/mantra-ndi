@@ -47,6 +47,41 @@ class MechanismTest {
         assertFalse(Mechanism.nameClashes("Wide", emptyList()))
     }
 
+    // --- recordings named after the camera that shot them -------------------
+
+    @Test fun aRecordingCarriesTheCameraName() {
+        assertEquals(
+            "CAM_A_20260918_143000.mp4",
+            Mechanism.recordingFileName("CAM A", "20260918_143000")
+        )
+    }
+
+    @Test fun renamingTheCameraRenamesTheNextTake() {
+        val first = Mechanism.recordingFileName("Wide", "20260918_143000")
+        val second = Mechanism.recordingFileName("Tele", "20260918_143500")
+        assertTrue(first.startsWith("Wide_"))
+        assertTrue(second.startsWith("Tele_"))
+    }
+
+    @Test fun aFileNameNeverCarriesSomethingAFileSystemWillRefuse() {
+        for (raw in listOf("CAM/A", "cam:1", "a*b?c", "  spaced  out  ")) {
+            val name = Mechanism.fileSafeName(raw)
+            assertFalse(name, name.any { it in "/\\:*?\"<>| " })
+            assertTrue(name.isNotEmpty())
+        }
+    }
+
+    @Test fun anUnusableNameFallsBackRatherThanProducingADotFile() {
+        assertEquals("MantraNDI", Mechanism.fileSafeName(""))
+        assertEquals("MantraNDI", Mechanism.fileSafeName("///"))
+        assertEquals("MantraNDI", Mechanism.fileSafeName("..."))
+    }
+
+    @Test fun theExtensionIsNotDuplicatedIntoTheName() {
+        val name = Mechanism.recordingFileName("CAM A", "20260918_143000")
+        assertEquals(1, name.count { it == '.' })
+    }
+
     // --- exposure -----------------------------------------------------------
 
     @Test fun shutterEndsLandOnTheLimits() {

@@ -62,6 +62,14 @@ class MainActivity : AppCompatActivity() {
     private var gainProgress = 50
 
     private val pump = ControlPump()
+
+    /**
+     * Where the controls land. Local drives this phone's sensor; remote sends
+     * the same intentions to a camera on the network. Nothing else in this
+     * screen knows the difference.
+     */
+    private var link: CameraLink? = null
+    private var remoteEngine: MonitorEngine? = null
     private val ui = Handler(Looper.getMainLooper())
     private val clearStatus = Runnable { binding.statusText.text = defaultStatus() }
     private val tick = object : Runnable {
@@ -159,11 +167,11 @@ class MainActivity : AppCompatActivity() {
                     3 -> 90f
                     else -> 0f
                 }
+                // The layout is fixed landscape, so the glyphs stay fixed too.
+                // A hamburger turned on its side in a interface that did not
+                // turn just reads as broken.
                 if (iconRotation == rotation) return
                 iconRotation = rotation
-                listOf(
-                    binding.recordButton, binding.settingsButton, binding.gearButton
-                ).forEach { it.animate().rotation(rotation).setDuration(180).start() }
             }
         }
     }
@@ -199,6 +207,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        applyCameraSource()
         // Settings may have changed the profile while we were away.
         val picked = profileStore.selected()
         if (picked.name != activeProfile?.name) {
@@ -209,6 +218,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        remoteEngine?.stop()
+        remoteEngine = null
         KeyService.cameraInForeground = false
         try {
             unregisterReceiver(keyReceiver)
@@ -292,6 +303,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleRecording() {
+        val remote = link as? RemoteLink
+        if (remote != null) {
+            val recording = remote.state?.recording == true
+            if (recording) remote.stopRecording() else remote.startRecording()
+            say(if (recording) "Asked ${remote.label} to stop" else "Asked ${remote.label} to record")
+            return
+        }
         val svc = service ?: return
         // A clean frame is the point of recording, so the controls go away.
         if (!svc.isRecording && binding.verticalPanel.visibility == View.VISIBLE) {
@@ -496,14 +514,21 @@ class MainActivity : AppCompatActivity() {
             binding.vZoom to Mechanism.Param.ZOOM
         )
         faders.forEach { (fader, which) ->
-            fader.label = which.label
+            // Short labels: a column is 62dp and "SHUTTER" is wider than that,
+            // which is how the headings ended up overlapping each other.
+            fader.label = when (which) {
+                Mechanism.Param.ISO -> "ISO"
+                Mechanism.Param.SHUTTER -> "SHUT"
+                Mechanism.Param.WHITE_BALANCE -> "WB"
+                Mechanism.Param.ZOOM -> "ZOOM"
+            }
             fader.onChange = { onVerticalMoved(which, it) }
             fader.onRelease = { pump.flush() }
             fader.onTouchedWhileAutomatic = { leaveAuto(which) }
             fader.setOnTouchListener { _, _ -> focusedColumn = which; false }
         }
 
-        binding.vGain.label = "Gain"
+        binding.vGain.label = "GAIN"
         binding.vGain.max = 100
         binding.vGain.showsCentre = true
         binding.vGain.progress = gainProgress
@@ -517,7 +542,7 @@ class MainActivity : AppCompatActivity() {
             say("Gain back to unity")
         }
 
-        binding.vFocus.label = "Focus"
+        binding.vFocus.label = "FOCUS"
         binding.vFocus.max = 100
         binding.vFocus.onChange = { focusProgress = it; pushFocus() }
         binding.vFocus.onRelease = { pump.flush() }
@@ -836,6 +861,48 @@ class MainActivity : AppCompatActivity() {
             svc.tally and 2 != 0 -> TallyBorderView.State.PREVIEW
             else -> TallyBorderView.State.CONNECTED
         }
+    }
+
+    /**
+     * Local or remote, decided in settings and applied here. Remote points the
+     * monitor at the chosen source, shows the red frame, and swaps the control
+     * link; everything else on this screen is unchanged, which is the point.
+     */
+    private fun applyCameraSource() {
+        val wantRemote = appSettings.remoteMode && appSettings.remoteSource != null
+        if (wantRemote == (link?.isRemote == true) && link != null) return
+
+        remoteEngine?.stop()
+        remoteEngine = null
+
+        if (!wantRemote) {
+            binding.remoteBorder.visibility = View.GONE
+            service?.controls?.let { link = LocalLink(it) }
+            return
+        }
+
+        val source = appSettings.remoteSource ?: return
+        val remote = RemoteLink(source)
+        link = remote
+        binding.remoteBorder.sourceName = source
+        binding.remoteBorder.visibility = View.VISIBLE
+        say("Remote: $source", transient = false)
+
+        if (!surfaceReady) return
+        val engine = MonitorEngine(
+            surface = binding.preview.holder.surface,
+            onStatus = { message -> runOnUiThread { say(message) } },
+            onCameraState = { state ->
+                remote.state = state
+                runOnUiThread { refreshVerticalPanel() }
+            }
+        )
+        engine.start(source)
+        remoteEngine = engine
+        // Ask the camera to describe itself so the faders map to its ranges.
+        binding.root.postDelayed({
+            NdiReceiver.sendCommand(CameraCommand(requestState = true))
+        }, 1500)
     }
 
     // --- plumbing -----------------------------------------------------------

@@ -78,6 +78,7 @@ class SettingsActivity : AppCompatActivity() {
         profileStore = ProfileStore(this)
         identity = SourceIdentity(this)
 
+        binding.rowSource.setOnClickListener { pickCameraSource() }
         binding.rowProfile.setOnClickListener { pickProfile() }
         binding.rowSourceName.setOnClickListener { editSourceName() }
         binding.rowBitDepth.setOnClickListener { pickBitDepth() }
@@ -100,6 +101,11 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
+        binding.valueSource.text = if (prefs.remoteMode) {
+            "Remote: ${prefs.remoteSource ?: "none picked"}"
+        } else {
+            "Local, this phone"
+        }
         binding.valueProfile.text = profileStore.selected().let {
             "${it.name}, ${it.width}x${it.height} at ${it.fps}"
         }
@@ -123,6 +129,42 @@ class SettingsActivity : AppCompatActivity() {
         binding.valueAbout.text = "Mantra NDI v${BuildConfig.VERSION_NAME}" +
                 if (BuildConfig.NDI_SDK_PRESENT) "" else ", built without the NDI SDK"
         binding.valueLoadLut.text = prefs.monitorLutName ?: "None loaded"
+    }
+
+    /**
+     * Local or remote. Remote asks the network who is out there rather than
+     * making the operator type a name, because the whole point of NDI is that
+     * the sources announce themselves.
+     */
+    private fun pickCameraSource() {
+        choose("Camera", listOf("Local, this phone", "Remote, over NDI")) { index ->
+            if (index == 0) {
+                prefs.remoteMode = false
+                refresh()
+                return@choose
+            }
+            if (!NdiFinder.available) {
+                toast("This build has no NDI SDK, so there is nothing to find")
+                return@choose
+            }
+            toast("Looking for cameras")
+            kotlin.concurrent.thread(name = "remote-scan") {
+                NdiFinder.start()
+                val found = NdiFinder.sources(timeoutMs = 3000)
+                NdiFinder.stop()
+                runOnUiThread {
+                    if (found.isEmpty()) {
+                        toast("No sources found. Same network as the camera?")
+                    } else {
+                        choose("Which camera", found) { pick ->
+                            prefs.remoteSource = found[pick]
+                            prefs.remoteMode = true
+                            refresh()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun pickProfile() {

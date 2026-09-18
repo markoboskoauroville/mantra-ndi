@@ -4,21 +4,29 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#05070A">
+    android:background="#000000">
 
-    <!-- Given the frame's own shape, so the view ends where the image ends.
-         Anything anchored to it is then on the picture rather than on a black
-         bar beside it. -->
+    <!-- The image, letterboxed to its own shape. Everything else is anchored
+         to this view rather than to the window, so nothing lands on a black
+         bar beside the picture. -->
     <SurfaceView
         android:id="@+id/preview"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintDimensionRatio="H,16:9"
+        app:layout_constraintDimensionRatio="16:9"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintWidth_max="wrap" />
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.mantraproductions.ndi.TallyBorderView
+        android:id="@+id/tallyBorder"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="@id/preview"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview" />
 
     <com.mantraproductions.ndi.FocusSquareView
         android:id="@+id/focusSquare"
@@ -30,234 +38,153 @@
         app:layout_constraintStart_toStartOf="@id/preview"
         app:layout_constraintEnd_toEndOf="@id/preview" />
 
-    <com.mantraproductions.ndi.TallyBorderView
-        android:id="@+id/tallyBorder"
+    <!-- Remote frame. Constrained to start BELOW the meter, so no drawing
+         order, animation or later edit can put it over the audio. -->
+    <com.mantraproductions.ndi.RemoteBorderView
+        android:id="@+id/remoteBorder"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/vuHairline"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview" />
 
-    <!-- Audio as a hairline across the very top. Costs no room, hides nothing,
-         and is the tell that the camera is still running. -->
     <com.mantraproductions.ndi.HairlineVuView
         android:id="@+id/vuHairline"
         android:layout_width="0dp"
         android:layout_height="2dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintTop_toTopOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview" />
 
     <TextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="18dp"
-        android:layout_marginTop="14dp"
-        android:letterSpacing="0.14"
+        android:layout_margin="14dp"
+        android:letterSpacing="0.12"
         android:text="IDLE"
         android:textAllCaps="true"
         android:textColor="#8C99A6"
         android:textSize="11sp"
         app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="@id/preview" />
 
-
-    <!-- Tap the image: every manual control at once, in columns -->
-    <LinearLayout
-        android:id="@+id/verticalPanel"
-        android:layout_width="wrap_content"
-        android:layout_height="0dp"
-        android:orientation="horizontal"
-        android:visibility="gone"
-        android:layout_marginTop="18dp"
-        android:layout_marginBottom="14dp"
-        android:layout_marginEnd="6dp"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview">
-
-        <LinearLayout
-            android:layout_width="58dp"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center_horizontal">
-
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aIso"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:layout_marginTop="6dp" />
-
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vIso"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="58dp"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center_horizontal">
-
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aShutter"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:layout_marginTop="6dp" />
-
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vShutter"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="58dp"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center_horizontal">
-
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aWhiteBalance"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:layout_marginTop="6dp" />
-
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vWhiteBalance"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="58dp"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center_horizontal">
-
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aFocus"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:layout_marginTop="6dp" />
-
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vFocus"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="58dp"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center_horizontal">
-
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aZoom"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:layout_marginTop="6dp" />
-
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vZoom"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="58dp"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center_horizontal">
-
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/aGain"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:layout_marginTop="6dp" />
-
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vGain"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-        </LinearLayout>
-
-    </LinearLayout>
-
-    <!-- Video Auto: the same circle as every other auto, because it is one.
-         Two letters rather than a word, so it takes a control's width. -->
-    <com.mantraproductions.ndi.CircleButtonView
-        android:id="@+id/autoAllButton"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:layout_marginEnd="8dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/verticalPanel"
-        app:layout_constraintEnd_toStartOf="@id/verticalPanel" />
-
-    <!-- The action stack: right edge, gear at the bottom, record at the top,
-         so the hand never crosses the frame to reach anything. -->
+    <!-- Right edge: record on top, menu, gear at the bottom. The hand reaches
+         one column and never crosses the frame. -->
     <LinearLayout
         android:id="@+id/controlRow"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
-        android:paddingHorizontal="10dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        android:paddingHorizontal="8dp"
+        android:layout_marginEnd="6dp"
+        android:layout_marginBottom="10dp"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview">
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/recordButton"
-            android:layout_width="62dp"
-            android:layout_height="62dp"
-            android:layout_marginBottom="16dp" />
+            android:layout_width="58dp"
+            android:layout_height="58dp"
+            android:layout_marginBottom="14dp" />
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/settingsButton"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginBottom="16dp" />
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_marginBottom="14dp" />
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/gearButton"
-            android:layout_width="46dp"
-            android:layout_height="46dp"
-            android:layout_marginBottom="14dp" />
+            android:layout_width="44dp"
+            android:layout_height="44dp" />
 
     </LinearLayout>
 
-    <!-- Adjusting state: one fader, replacing the rings entirely -->
+    <!-- The control columns, ending where the action column begins so the two
+         never share a pixel. -->
+    <LinearLayout
+        android:id="@+id/verticalPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        android:layout_marginTop="34dp"
+        android:layout_marginBottom="16dp"
+        android:layout_marginEnd="4dp"
+        app:layout_constraintTop_toTopOf="@id/preview"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintEnd_toStartOf="@id/controlRow">
+
+        <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aIso" style="@style/MantraAuto" />
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vIso" style="@style/MantraFader" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aShutter" style="@style/MantraAuto" />
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vShutter" style="@style/MantraFader" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aWhiteBalance" style="@style/MantraAuto" />
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vWhiteBalance" style="@style/MantraFader" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aFocus" style="@style/MantraAuto" />
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vFocus" style="@style/MantraFader" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aZoom" style="@style/MantraAuto" />
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vZoom" style="@style/MantraFader" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/aGain" style="@style/MantraAuto" />
+            <com.mantraproductions.ndi.VerticalFaderView
+                android:id="@+id/vGain" style="@style/MantraFader" />
+        </LinearLayout>
+
+        <!-- Video Auto, last in the row so it sits nearest the hand. -->
+        <LinearLayout style="@style/MantraColumn">
+            <com.mantraproductions.ndi.CircleButtonView
+                android:id="@+id/autoAllButton" style="@style/MantraAuto" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- One fader at a time, reached by holding the menu button. -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/paramBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:paddingVertical="6dp"
+        android:layout_marginBottom="10dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
         app:layout_constraintEnd_toStartOf="@id/controlRow">
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/paramCycleButton"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
             android:layout_marginStart="14dp"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -266,7 +193,7 @@
         <com.mantraproductions.ndi.FaderView
             android:id="@+id/paramFader"
             android:layout_width="0dp"
-            android:layout_height="78dp"
+            android:layout_height="74dp"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toEndOf="@id/paramCycleButton"
@@ -274,9 +201,9 @@
 
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/paramCloseButton"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:layout_marginEnd="14dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="10dp"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />

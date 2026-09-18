@@ -25,6 +25,11 @@
         <!-- Capture -->
         <LinearLayout style="@style/MantraSettingsGroup">
 
+            <LinearLayout android:id="@+id/rowSource" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Camera" />
+                <TextView android:id="@+id/valueSource" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
             <LinearLayout android:id="@+id/rowProfile" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Capture profile" />
                 <TextView android:id="@+id/valueProfile" style="@style/MantraSettingsValue" />

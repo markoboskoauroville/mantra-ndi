@@ -45,6 +45,28 @@ object Mechanism {
         }
     }
 
+    /**
+     * A recording's name, taken from what the camera calls itself.
+     *
+     * On a multi camera shoot the filename is the only thing that survives the
+     * card reader, so it has to say which camera shot it. Rename the camera and
+     * the next take is named accordingly; takes already on disk keep the name
+     * they were shot under, which is the point of naming them at all.
+     */
+    fun recordingFileName(sourceName: String, timestamp: String, extension: String = "mp4"): String {
+        val safe = fileSafeName(sourceName)
+        return "${safe}_$timestamp.$extension"
+    }
+
+    /** Spaces and anything a file system or an NLE might trip on. */
+    fun fileSafeName(raw: String): String {
+        val cleaned = sanitizeSourceName(raw)
+            .replace(' ', '_')
+            .replace(Regex("[^A-Za-z0-9._-]"), "")
+            .trim('_', '.', '-')
+        return cleaned.ifEmpty { "MantraNDI" }
+    }
+
     // --- exposure -----------------------------------------------------------
 
     /**

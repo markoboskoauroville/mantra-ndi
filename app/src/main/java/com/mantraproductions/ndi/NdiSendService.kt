@@ -355,7 +355,11 @@ class NdiSendService : Service() {
         // uninstall would take it along.
         val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
             .format(java.util.Date())
-        val name = "MantraNDI_$stamp.mp4"
+        // Named after the camera, because on a multi camera shoot the filename
+        // is the only thing that survives the card reader.
+        val name = Mechanism.recordingFileName(
+            currentSourceName ?: SourceIdentity(applicationContext).name, stamp
+        )
         val dir = java.io.File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
             MediaStoreOutput.FOLDER
