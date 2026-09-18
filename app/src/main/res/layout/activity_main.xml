@@ -114,6 +114,14 @@
             android:layout_height="58dp"
             android:layout_marginBottom="14dp" />
 
+        <!-- Going live had been a long press on the record ring, which is
+             discoverable only to whoever wrote it. It is a button now. -->
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/streamButton"
+            android:layout_width="54dp"
+            android:layout_height="54dp"
+            android:layout_marginBottom="14dp" />
+
         <com.mantraproductions.ndi.CircleButtonView
             android:id="@+id/settingsButton"
             android:layout_width="50dp"

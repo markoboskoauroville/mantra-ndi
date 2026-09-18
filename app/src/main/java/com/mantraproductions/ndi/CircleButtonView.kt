@@ -152,6 +152,15 @@ class CircleButtonView @JvmOverloads constructor(
          */
         val RECORD_IDLE: Int = Color.parseColor("#8E1B12")
         val RECORDING: Int = Color.parseColor("#FF4436")
+
+        /**
+         * Streaming is green, and dark until it is. The same idea as record:
+         * the colour says what the button does, its brightness says whether it
+         * is doing it, and the two live actions are then told apart at a
+         * glance without reading anything.
+         */
+        val STREAM_IDLE: Int = Color.parseColor("#0F6B3E")
+        val STREAMING: Int = Color.parseColor("#12C46A")
         val ACTIVE: Int = FaderView.AMBER
     }
 }

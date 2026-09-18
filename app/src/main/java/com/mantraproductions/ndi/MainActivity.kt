@@ -332,6 +332,40 @@ class MainActivity : AppCompatActivity() {
         fader.step(direction)
     }
 
+    /**
+     * Live on the network, which is a different decision from recording and
+     * now has its own button rather than a hidden long press.
+     *
+     * The two are independent on purpose. A camera can be live and not
+     * recording, which is most of a broadcast, or recording and not live,
+     * which is most of a shoot, and neither should imply the other.
+     */
+    private fun toggleStreaming() {
+        val svc = service ?: return
+        if (link?.isRemote == true) {
+            say("Remote mode: the far camera streams, not this one")
+            return
+        }
+        if (svc.isStreaming) {
+            svc.stopStreaming()
+            say("Off air", transient = false)
+        } else {
+            val name = SourceIdentity.sanitize(identity.name)
+            warnIfNameTaken(name)
+            startForegroundService(Intent(this, NdiSendService::class.java))
+            svc.startStreaming(name) { error -> runOnUiThread { say(error) } }
+            say("Live as $name", transient = false)
+        }
+        refreshStreamButton()
+    }
+
+    private fun refreshStreamButton() {
+        val streaming = service?.isStreaming == true
+        binding.streamButton.ringColor =
+            if (streaming) CircleButtonView.STREAMING else CircleButtonView.STREAM_IDLE
+        binding.streamButton.glow = streaming
+    }
+
     private fun toggleRecording() {
         val remote = link as? RemoteLink
         if (remote != null) {
@@ -1027,6 +1061,9 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
+        binding.streamButton.centerText = "NDI"
+        binding.streamButton.setOnClickListener { toggleStreaming() }
+
         binding.recordButton.setOnClickListener {
             val svc = service ?: return@setOnClickListener
             if (svc.isRecording) {
@@ -1039,8 +1076,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Long press the record ring to start or stop the NDI stream, so the
-        // bottom row stays two rings and a gear.
+        // Kept as a shortcut for a hand that already knows it, but the button
+        // above is the way it is meant to be found.
         binding.recordButton.setOnLongClickListener {
             val svc = service ?: return@setOnLongClickListener true
             if (svc.isStreaming) {
@@ -1205,6 +1242,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.recordButton.ringColor =
             if (svc.isRecording) CircleButtonView.RECORDING else CircleButtonView.RECORD_IDLE
+        refreshStreamButton()
         binding.recordButton.glow = svc.isRecording
         binding.recordButton.centerText =
             if (svc.isRecording) Mechanism.recordLabel(svc.recordingElapsedSeconds) else ""
