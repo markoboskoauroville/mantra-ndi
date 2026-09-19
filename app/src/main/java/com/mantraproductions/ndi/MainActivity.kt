@@ -557,8 +557,8 @@ class MainActivity : AppCompatActivity() {
         }
         binding.timecodeText.visibility = View.VISIBLE
         binding.timecodeLabel.visibility = View.VISIBLE
-        binding.timecodeText.textSize = appSettings.timecodeTextSize.toFloat()
-        binding.timecodeLabel.textSize = (appSettings.timecodeTextSize * 0.55f)
+        binding.timecodeText.textSize = appSettings.timecodeSize.toFloat()
+        binding.timecodeLabel.textSize = (appSettings.timecodeSize * 0.55f)
             .coerceAtLeast(8f)
 
         val nanos = android.os.SystemClock.elapsedRealtimeNanos()

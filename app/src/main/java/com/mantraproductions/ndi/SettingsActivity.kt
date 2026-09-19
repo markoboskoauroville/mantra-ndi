@@ -353,6 +353,57 @@ class SettingsActivity : AppCompatActivity() {
      * The two things that stop a long take: the screen sleeping, and Android
      * deciding a phone that nobody is touching has nothing to do.
      */
+    /**
+     * Which clock this phone is, and how it looks.
+     *
+     * A master stamps its timecode onto every NDI frame it sends, so anything
+     * receiving that source is on its clock without decoding anything extra.
+     * A follower takes whatever it is given. Neither needs hardware.
+     */
+    private fun manageLtc() {
+        val roles = listOf(
+            LtcEngine.Role.OFF to "Off, internal clock only",
+            LtcEngine.Role.MASTER to "Master, be the clock",
+            LtcEngine.Role.FOLLOW to "Follow, listen for a clock"
+        )
+        choose("Timecode role", roles.map { it.second }) { index ->
+            prefs.ltcRole = roles[index].first
+            if (prefs.ltcRole == LtcEngine.Role.FOLLOW) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this, arrayOf(android.Manifest.permission.RECORD_AUDIO), 78
+                )
+            }
+            refresh()
+        }
+    }
+
+    /** How the clock is drawn, separately from what kind of clock it is. */
+    private fun pickTimecodeDisplay() {
+        choose(
+            "Timecode display",
+            listOf(
+                if (prefs.showTimecode) "Hide it" else "Show it",
+                "Text size, now ${prefs.timecodeSize}",
+                "Frame rate, now ${prefs.ltcRate.label}"
+            )
+        ) { index ->
+            when (index) {
+                0 -> { prefs.showTimecode = !prefs.showTimecode; refresh() }
+                1 -> choose("Text size", listOf("12", "14", "16", "20", "24", "30", "36")) { p ->
+                    prefs.timecodeSize = listOf(12, 14, 16, 20, 24, 30, 36)[p]
+                    refresh()
+                }
+                2 -> {
+                    val rates = Timecode.Rate.values().toList()
+                    choose("Frame rate", rates.map { it.label }) { r ->
+                        prefs.ltcRate = rates[r]
+                        refresh()
+                    }
+                }
+            }
+        }
+    }
+
     private fun manageScreenAndBattery() {
         val exempt = PowerPolicy.isExempt(this)
         choose(
@@ -392,7 +443,9 @@ class SettingsActivity : AppCompatActivity() {
                     "timecode beside them.\n\nLast heard:\n\n" +
                     TimecodeLog.report()
             )
-            .setPositiveButton(if (prefs.timecodeEnabled) "Turn off" else "Turn on") { _, _ ->
+            .setNeutralButton("Role") { _, _ -> manageLtc() }
+            .setPositiveButton("Display") { _, _ -> pickTimecodeDisplay() }
+            .setNegativeButton(if (prefs.timecodeEnabled) "Bluetooth off" else "Bluetooth on") { _, _ ->
                 prefs.timecodeEnabled = !prefs.timecodeEnabled
                 refresh()
             }
