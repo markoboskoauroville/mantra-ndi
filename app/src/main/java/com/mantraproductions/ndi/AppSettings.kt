@@ -148,6 +148,27 @@ class AppSettings(context: Context) {
         get() = prefs.getInt(KEY_RECORD_MBPS, 40)
         set(value) = prefs.edit().putInt(KEY_RECORD_MBPS, value.coerceIn(4, 200)).apply()
 
+    /** Top edge or bottom edge of the picture. */
+    var timecodeAtTop: Boolean
+        get() = prefs.getBoolean(KEY_TC_TOP, true)
+        set(value) = prefs.edit().putBoolean(KEY_TC_TOP, value).apply()
+
+    /** The half transparent plate a broadcast burn-in has. */
+    var timecodePlate: Boolean
+        get() = prefs.getBoolean(KEY_TC_PLATE, true)
+        set(value) = prefs.edit().putBoolean(KEY_TC_PLATE, value).apply()
+
+    /**
+     * Which device's clock to follow.
+     *
+     * Needed once more than one device can generate: two cameras following two
+     * different masters look identical if all you show is a running number.
+     * Null means take whatever arrives.
+     */
+    var timecodeSource: String?
+        get() = prefs.getString(KEY_TC_SOURCE, null)
+        set(value) = prefs.edit().putString(KEY_TC_SOURCE, value).apply()
+
     var showTimecode: Boolean
         get() = prefs.getBoolean(KEY_SHOW_TC, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_TC, value).apply()
@@ -166,18 +187,6 @@ class AppSettings(context: Context) {
     var keepScreenOn: Boolean
         get() = prefs.getBoolean(KEY_KEEP_AWAKE, true)
         set(value) = prefs.edit().putBoolean(KEY_KEEP_AWAKE, value).apply()
-
-    /**
-     * How large the clock is drawn, in sp.
-     *
-     * A setting rather than a constant because the right size depends on how
-     * far the phone is from the eye. On a gimbal at arm's length it needs to
-     * be large; clamped to the camera operator's own monitor it can be small
-     * and leave the frame alone.
-     */
-    var timecodeSizeSp: Int
-        get() = prefs.getInt(KEY_TC_SIZE, 16)
-        set(value) = prefs.edit().putInt(KEY_TC_SIZE, value.coerceIn(10, 48)).apply()
 
     /** Whether the battery prompt has been shown, so it is asked once, not nagged. */
     var batteryAsked: Boolean
@@ -211,6 +220,9 @@ class AppSettings(context: Context) {
         const val KEY_KEEP_AWAKE = "keep_awake"
         const val KEY_TC_SIZE = "timecode_size"
         const val KEY_SHOW_TC = "show_timecode"
+        const val KEY_TC_TOP = "timecode_top"
+        const val KEY_TC_PLATE = "timecode_plate"
+        const val KEY_TC_SOURCE = "timecode_source"
         const val KEY_CAMERA_ID = "camera_id"
         const val KEY_RECORD_MBPS = "record_mbps"
         const val KEY_BATTERY_ASKED = "battery_asked"

@@ -119,7 +119,6 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowLens.setOnClickListener { pickLens() }
         binding.rowRecording.setOnClickListener { pickRecording() }
         binding.rowScreen.setOnClickListener { manageScreenAndBattery() }
-        binding.rowTimecode.setOnClickListener { manageTimecode() }
         binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
         binding.rowWaveform.setOnClickListener { pickWaveform() }
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
@@ -252,13 +251,21 @@ class SettingsActivity : AppCompatActivity() {
             group.visibility = if (anyVisible) android.view.View.VISIBLE else android.view.View.GONE
         }
 
-        binding.valueTimecode.text =
-            if (prefs.timecodeEnabled) "Listening for a Tentacle over Bluetooth"
-            else "Off"
-        binding.valueTimecode.text = if (prefs.timecodeEnabled) {
-            "Listening for a Tentacle"
-        } else {
-            "Off"
+        binding.valueTimecode.text = buildString {
+            append(
+                when (prefs.ltcRole) {
+                    LtcEngine.Role.MASTER -> "Master at " + prefs.ltcRate.label
+                    LtcEngine.Role.FOLLOW -> "Following"
+                    LtcEngine.Role.OFF -> "Internal only"
+                }
+            )
+            if (prefs.showTimecode) {
+                append(", ").append(prefs.timecodeSize).append("sp ")
+                append(if (prefs.timecodeAtTop) "top" else "bottom")
+            } else {
+                append(", hidden")
+            }
+            prefs.timecodeSource?.let { append(", from ").append(it) }
         }
         binding.valueFocusTiming.text = buildString {
             append("Hold ").append(prefs.focusHoldMs / 1000.0).append("s, rack ")
@@ -382,12 +389,47 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     /** How the clock is drawn, separately from what kind of clock it is. */
+    /**
+     * Which device's clock to follow.
+     *
+     * Needed the moment more than one device can generate. Two cameras
+     * following two different masters look identical if all that is shown is a
+     * running number, and they stay identical until the edit.
+     */
+    private fun pickTimecodeSource() {
+        if (!NdiFinder.available) {
+            toast("This build has no NDI SDK")
+            return
+        }
+        val waiting = AlertDialog.Builder(this)
+            .setTitle("Looking for sources")
+            .setCancelable(false)
+            .create()
+        waiting.show()
+
+        kotlin.concurrent.thread(name = "tc-source-scan") {
+            NdiFinder.start(applicationContext)
+            val found = NdiFinder.sources(timeoutMs = 3000)
+            NdiFinder.stop()
+            runOnUiThread {
+                waiting.dismiss()
+                choose("Timecode from", listOf("Anything that arrives") + found) { index ->
+                    prefs.timecodeSource = if (index == 0) null else found[index - 1]
+                    refresh()
+                }
+            }
+        }
+    }
+
     private fun pickTimecodeDisplay() {
         choose(
             "Timecode display",
             listOf(
                 if (prefs.showTimecode) "Hide it" else "Show it",
                 "Text size, now ${prefs.timecodeSize}",
+                "Position, now " + (if (prefs.timecodeAtTop) "top" else "bottom"),
+                "Background, now " + (if (prefs.timecodePlate) "on" else "off"),
+                "Timecode from, now " + (prefs.timecodeSource ?: "anything"),
                 "Frame rate, now ${prefs.ltcRate.label}"
             )
         ) { index ->
@@ -397,7 +439,10 @@ class SettingsActivity : AppCompatActivity() {
                     prefs.timecodeSize = listOf(12, 14, 16, 20, 24, 30, 36)[p]
                     refresh()
                 }
-                2 -> {
+                2 -> { prefs.timecodeAtTop = !prefs.timecodeAtTop; refresh() }
+                3 -> { prefs.timecodePlate = !prefs.timecodePlate; refresh() }
+                4 -> pickTimecodeSource()
+                5 -> {
                     val rates = Timecode.Rate.values().toList()
                     choose("Frame rate", rates.map { it.label }) { r ->
                         prefs.ltcRate = rates[r]

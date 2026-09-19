@@ -87,19 +87,6 @@
 
     <!-- Big enough to read at arm's length, which is where a phone on a rig
          is. Amber while free running, green once a generator is heard. -->
-    <TextView
-        android:id="@+id/timecodeText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="14dp"
-        android:layout_marginTop="12dp"
-        android:fontFamily="monospace"
-        android:letterSpacing="0.06"
-        android:textColor="#12C46A"
-        android:textSize="17sp"
-        android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintEnd_toStartOf="@id/controlRow" />
 
     <!-- Read constantly during a take, so it sits where the eye already goes
          and is monospaced, because digits that shift width are unreadable at
@@ -107,17 +94,20 @@
 
     <!-- Three letters under the clock, so what kind of sync this is can be
          read at a glance rather than inferred from a colour alone. -->
-    <TextView
-        android:id="@+id/timecodeLabel"
+
+    <!-- Constrained to both top and bottom of the preview; whichever edge is
+         wanted is chosen at runtime by biasing it, so the position is a
+         setting rather than two layouts. -->
+    <com.mantraproductions.ndi.TimecodeView
+        android:id="@+id/timecodeView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:fontFamily="monospace"
-        android:textSize="9sp"
-        android:letterSpacing="0.22"
-        android:textColor="#8C99A6"
+        android:layout_margin="12dp"
         android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/timecodeText"
-        app:layout_constraintStart_toStartOf="@id/timecodeText" />
+        app:layout_constraintTop_toTopOf="@id/preview"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintVertical_bias="0.0" />
 
     <TextView
         android:id="@+id/statusText"

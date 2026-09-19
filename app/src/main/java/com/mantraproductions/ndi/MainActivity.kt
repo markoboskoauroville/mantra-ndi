@@ -594,41 +594,56 @@ class MainActivity : AppCompatActivity() {
      */
     private fun refreshTimecode() {
         if (!appSettings.showTimecode) {
-            binding.timecodeText.visibility = View.GONE
-            binding.timecodeLabel.visibility = View.GONE
+            binding.timecodeView.visibility = View.GONE
             return
         }
+        binding.timecodeView.visibility = View.VISIBLE
 
         val nanos = android.os.SystemClock.elapsedRealtimeNanos()
+        val wanted = appSettings.timecodeSource
 
         // A stamp on the incoming picture beats anything decoded separately:
         // it arrived attached to the frame, so it cannot have drifted from it.
-        val fromStream = remoteEngine?.lastTimecode100ns
+        // Only honoured when it came from the device that was asked for, or
+        // two cameras following two different masters look identical.
+        val watching = appSettings.remoteSource
+        val streamTc = remoteEngine
+            ?.takeIf { wanted == null || wanted == watching }
+            ?.lastTimecode100ns
             ?.takeIf { it > 0L }
             ?.let { Timecode.from100ns(it, appSettings.ltcRate) }
 
         val isMaster = appSettings.ltcRole == LtcEngine.Role.MASTER
-        val running = fromStream ?: ltcEngine.clock.now(nanos) ?: timecode.now()
+        val ltcTc = ltcEngine.clock.now(nanos)
+        val running = streamTc ?: ltcTc ?: timecode.now()
 
-        binding.timecodeText.visibility = View.VISIBLE
-        binding.timecodeLabel.visibility = View.VISIBLE
-        binding.timecodeText.textSize = appSettings.timecodeSizeSp.toFloat()
-        binding.timecodeLabel.textSize = (appSettings.timecodeSizeSp * 0.55f)
-            .coerceAtLeast(8f)
+        binding.timecodeView.sizeSp = appSettings.timecodeSize.toFloat()
+        binding.timecodeView.showBackground = appSettings.timecodePlate
+        binding.timecodeView.timecode = running?.toString() ?: "--:--:--:--"
 
-        binding.timecodeText.text = running?.toString() ?: "--:--:--:--"
-
-        val kind = when {
-            isMaster -> Triple("MST", MASTER_GREEN, 1f)
-            fromStream != null -> Triple("SYC", FOLLOW_WHITE, 1f)
-            ltcEngine.isLocked -> Triple("SYC", FOLLOW_WHITE, 1f)
-            else -> Triple("INT", INTERNAL_GREY, 0.75f)
+        binding.timecodeView.sync = when {
+            isMaster -> TimecodeView.Sync.MASTER
+            streamTc != null || ltcEngine.isLocked -> TimecodeView.Sync.FOLLOWING
+            else -> TimecodeView.Sync.INTERNAL
         }
-        binding.timecodeText.setTextColor(kind.second)
-        binding.timecodeText.alpha = kind.third
-        binding.timecodeLabel.text = kind.first
-        binding.timecodeLabel.setTextColor(kind.second)
-        binding.timecodeLabel.alpha = kind.third
+
+        binding.timecodeView.sourceName = when {
+            isMaster -> SourceIdentity.sanitize(identity.name)
+            streamTc != null -> watching.orEmpty()
+            ltcEngine.isLocked -> "LTC AUDIO"
+            wanted != null -> wanted + " ?"
+            else -> ""
+        }
+
+        // Position is a bias rather than two layouts, so switching it costs
+        // nothing and cannot leave the other one behind.
+        val params = binding.timecodeView.layoutParams
+                as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+        val bias = if (appSettings.timecodeAtTop) 0f else 1f
+        if (params.verticalBias != bias) {
+            params.verticalBias = bias
+            binding.timecodeView.layoutParams = params
+        }
     }
 
     private fun refreshStreamButton() {
