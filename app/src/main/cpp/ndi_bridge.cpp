@@ -40,6 +40,33 @@ std::mutex g_send_mutex;
 std::vector<uint8_t> g_video_extra;
 std::mutex g_extra_mutex;
 
+/**
+ * The timecode this sender stamps onto every frame.
+ *
+ * NDI carries a timecode on each frame in 100ns units, and a receiver reads it
+ * straight off the frame it just decoded. That is why it beats sending the
+ * clock alongside the picture: the number and the image arrive as one object,
+ * so there is nothing left to line up afterwards.
+ *
+ * Two values live here. The anchor is a real timecode in 100ns units, and
+ * anchor_pts is the encoder timestamp that was current when it was set. Every
+ * later frame is stamped at the anchor plus however far its own pts has moved,
+ * so the stamp advances with the video rather than with whenever the clock
+ * happened to be sampled.
+ *
+ * Zero means nothing has been set, and the encoder timestamp is reported as
+ * before, which is the honest answer for a source following no clock.
+ */
+std::mutex g_timecode_mutex;
+int64_t g_timecode_anchor = 0;
+int64_t g_timecode_anchor_pts = 0;
+
+static int64_t stamp_for(int64_t pts_100ns) {
+    std::lock_guard<std::mutex> lock(g_timecode_mutex);
+    if (g_timecode_anchor == 0) return pts_100ns;
+    return g_timecode_anchor + (pts_100ns - g_timecode_anchor_pts);
+}
+
 int g_width = 1920;
 int g_height = 1080;
 int g_fps_n = 30;
