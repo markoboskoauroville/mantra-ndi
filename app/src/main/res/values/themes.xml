@@ -38,6 +38,21 @@
 
     <!-- The tiny title above each card. Small, spaced and quiet: it is a
          signpost, not content. -->
+    <!-- A toggle in one of the two rails: text only, lit when on. -->
+    <style name="MantraRailToggle">
+        <item name="android:layout_width">52dp</item>
+        <item name="android:layout_height">30dp</item>
+        <item name="android:layout_marginVertical">2dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0.1</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">#6E7A86</item>
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
     <style name="MantraSectionTitle">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

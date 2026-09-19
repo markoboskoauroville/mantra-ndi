@@ -268,6 +268,7 @@ class MainActivity : AppCompatActivity() {
             applyCameraSource()
         }
         applyLogCurve()
+        refreshRail()
         applyScreenPolicy()
         applyPreviewEffects()
         refreshLutButton()
@@ -1440,6 +1441,8 @@ class MainActivity : AppCompatActivity() {
         // A tap says what it would do; a hold does it. An accidental tap that
         // kills a live stream is worse than an extra second of deliberation,
         // and these two sit beside buttons that are pressed constantly.
+        setUpOverlayRail()
+
         binding.killButton.setOnClickListener {
             say("Hold X to shut down completely")
         }
@@ -1455,14 +1458,6 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        binding.lutButton.setOnClickListener { toggleLut() }
-        binding.peakButton.setOnClickListener { togglePeaking() }
-        // Long press to change how faint an edge still counts, which is the
-        // only peaking setting anybody actually adjusts on set.
-        binding.peakButton.setOnLongClickListener {
-            cyclePeakSensitivity()
-            true
-        }
         binding.streamButton.centerText = "NDI"
         binding.streamButton.setOnClickListener { toggleStreaming() }
 
@@ -1714,34 +1709,88 @@ class MainActivity : AppCompatActivity() {
         refreshLutButton()
     }
 
-    private fun refreshLutButton() {
-        val curve = appSettings.logCurve
-        val available = PreviewEffects.supported && curve != LogCurves.Curve.REC709
-        val on = available && appSettings.previewLut
+    /**
+     * The left bar: everything drawn on the picture, each a toggle.
+     *
+     * Two bars rather than one column, because the column had grown past the
+     * bottom of the screen and the gear had gone off the end of it. Splitting
+     * by kind rather than by size also means a thumb learns where a thing is:
+     * what is drawn on the picture is on the left, what the camera does is on
+     * the right.
+     */
+    private fun setUpOverlayRail() {
+        binding.tglLut.setOnClickListener { toggleLut() }
+        binding.tglPeak.setOnClickListener { togglePeaking() }
+        binding.tglPeak.setOnLongClickListener { cyclePeakSensitivity(); true }
 
-        binding.lutButton.visibility = if (appSettings.appMode == AppMode.MONITOR) {
-            View.GONE
-        } else {
-            View.VISIBLE
+        binding.tglWave.setOnClickListener {
+            // Cycles off, luma, then the full parade, since those are the
+            // three anybody switches between while shooting.
+            appSettings.waveformChannels = when {
+                appSettings.waveformChannels.isEmpty() ->
+                    setOf(Mechanism.WaveformChannel.LUMA)
+                appSettings.waveformChannels.size == 1 -> setOf(
+                    Mechanism.WaveformChannel.RED,
+                    Mechanism.WaveformChannel.GREEN,
+                    Mechanism.WaveformChannel.BLUE
+                )
+                else -> emptySet()
+            }
+            applyPreviewEffects()
+            refreshRail()
         }
-        binding.lutButton.alpha = if (available) 1f else 0.35f
 
-        val peakOn = PreviewEffects.supported && appSettings.focusPeaking
-        binding.peakButton.visibility = binding.lutButton.visibility
-        binding.peakButton.alpha = if (PreviewEffects.supported) 1f else 0.35f
-        binding.peakButton.setTextColor(
-            if (peakOn) appSettings.peakColour.colour
-            else android.graphics.Color.parseColor("#6E7A86")
-        )
-        binding.lutButton.setTextColor(
-            android.graphics.Color.parseColor(if (on) "#12C46A" else "#6E7A86")
-        )
+        binding.tglScope.setOnClickListener {
+            appSettings.vectorscopeVisible = !appSettings.vectorscopeVisible
+            refreshVectorscope()
+            refreshRail()
+        }
+        binding.tglGrade.setOnClickListener { toggleGradePanel(); refreshRail() }
+        binding.tglFocusBox.setOnClickListener {
+            val showing = binding.focusSquare.visibility == View.VISIBLE
+            binding.focusSquare.visibility = if (showing) View.GONE else View.VISIBLE
+            refreshRail()
+        }
+        binding.tglBurn.setOnClickListener {
+            appSettings.showTimecode = !appSettings.showTimecode
+            refreshTimecode()
+            refreshRail()
+        }
     }
 
-    /**
-     * Three steps, because on set nobody wants a slider: too little and thin
-     * edges vanish, too much and grain lights up like a subject.
-     */
+    /** Lit means on. Nothing has to be turned off to find out what is on. */
+    private fun refreshRail() {
+        fun light(view: android.widget.TextView, on: Boolean, colour: String = "#12C46A") {
+            view.setTextColor(
+                android.graphics.Color.parseColor(if (on) colour else "#6E7A86")
+            )
+        }
+
+        val curve = appSettings.logCurve
+        val lutAvailable = PreviewEffects.supported && curve != LogCurves.Curve.REC709
+        binding.tglLut.alpha = if (lutAvailable) 1f else 0.35f
+        light(binding.tglLut, lutAvailable && appSettings.previewLut)
+
+        binding.tglPeak.alpha = if (PreviewEffects.supported) 1f else 0.35f
+        binding.tglPeak.setTextColor(
+            if (PreviewEffects.supported && appSettings.focusPeaking) appSettings.peakColour.colour
+            else android.graphics.Color.parseColor("#6E7A86")
+        )
+
+        light(binding.tglWave, appSettings.waveformChannels.isNotEmpty())
+        light(binding.tglScope, appSettings.vectorscopeVisible)
+        light(binding.tglGrade, binding.gradePanel.visibility == View.VISIBLE)
+        light(binding.tglFocusBox, binding.focusSquare.visibility == View.VISIBLE)
+        light(binding.tglBurn, appSettings.showTimecode)
+
+        // Nothing on the left bar means anything without a picture of our own.
+        val hasLens = appSettings.appMode != AppMode.MONITOR
+        binding.tglGrade.visibility = if (hasLens) View.VISIBLE else View.GONE
+        binding.tglFocusBox.visibility = binding.tglGrade.visibility
+    }
+
+    private fun refreshLutButton() = refreshRail()
+
     private fun cyclePeakSensitivity() {
         val steps = listOf(30, 50, 75)
         val next = steps.firstOrNull { it > appSettings.peakSensitivity } ?: steps.first()
