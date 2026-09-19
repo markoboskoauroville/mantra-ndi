@@ -76,6 +76,27 @@ object NdiSender {
     fun getTally(timeoutMs: Int = 1000): Int =
         if (available) nativeGetTally(timeoutMs) else -1
 
+    /**
+     * Stamps this source's frames with a real timecode.
+     *
+     * NDI carries a timecode on every frame, so a follower reads the master's
+     * clock off the picture it just decoded and there is nothing left to line
+     * up afterwards. That is why this beats sending the clock alongside.
+     *
+     * @param timecode100ns the clock now, in 100ns units since midnight
+     * @param atPtsUs the encoder timestamp current when it was read
+     *
+     * Both, because the two clocks tick independently. Anchoring the pair lets
+     * every later frame be stamped by how far its own timestamp has moved, so
+     * the stamp advances with the video rather than with whenever this was
+     * last called. Zero returns the source to reporting encoder time, which is
+     * the honest answer for a camera following no clock.
+     */
+    fun setTimecode(timecode100ns: Long, atPtsUs: Long) {
+        if (available) nativeSetTimecode(timecode100ns, atPtsUs)
+    }
+
+    private external fun nativeSetTimecode(timecode100ns: Long, atPtsUs: Long)
     private external fun nativeGetTally(timeoutMs: Int): Int
     private external fun nativeAddConnectionMetadata(xml: String)
     private external fun nativeCaptureMetadata(timeoutMs: Int): String?

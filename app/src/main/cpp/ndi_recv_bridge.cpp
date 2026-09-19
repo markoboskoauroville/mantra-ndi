@@ -168,7 +168,7 @@ Java_com_mantraproductions_ndi_NdiReceiver_nativeCapture(
 
     if (type == NDIlib_frame_type_metadata) {
         int kind = KIND_METADATA;
-        jlong values[6] = {0, 0, 0, 0, 0, 0};
+        jlong values[7] = {0, 0, 0, 0, 0, 0, 0};
         if (metadata.p_data) {
             size_t len = strlen(metadata.p_data);
             if ((jlong) len <= capacity) {
@@ -178,14 +178,18 @@ Java_com_mantraproductions_ndi_NdiReceiver_nativeCapture(
                 kind = KIND_TOO_BIG;
             }
         }
-        env->SetLongArrayRegion(info, 0, 6, values);
+        env->SetLongArrayRegion(info, 0, 7, values);
         NDIlib_recv_free_metadata(recv, &metadata);
         return kind;
     }
 
     if (type == NDIlib_frame_type_video) {
         int kind = KIND_VIDEO;
-        jlong values[6] = {0, 0, 0, 0, video.xres, video.yres};
+        // The timecode the sender stamped onto this exact frame, in 100ns
+        // units. It rides with the picture rather than beside it, so a
+        // follower reads the master's clock off the frame it just decoded and
+        // there is nothing left to line up afterwards.
+        jlong values[7] = {0, 0, 0, 0, video.xres, video.yres, (jlong) video.timecode};
 
         const uint32_t fourcc = (uint32_t) video.FourCC;
         const bool is_h264 =
@@ -226,7 +230,7 @@ Java_com_mantraproductions_ndi_NdiReceiver_nativeCapture(
             values[3] = fourcc;
         }
 
-        env->SetLongArrayRegion(info, 0, 6, values);
+        env->SetLongArrayRegion(info, 0, 7, values);
         NDIlib_recv_free_video_v2(recv, &video);
         return kind;
     }

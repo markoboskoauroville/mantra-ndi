@@ -162,14 +162,17 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendVideo(
     }
 
     // NDI timecodes are in 100ns units; MediaCodec gives microseconds.
-    const int64_t timecode = static_cast<int64_t>(ptsUs) * 10;
+    const int64_t pts = static_cast<int64_t>(ptsUs) * 10;
+    const int64_t timecode = stamp_for(pts);
 
     NDIlib_compressed_packet_t packet = {};
     packet.version = sizeof(NDIlib_compressed_packet_t);
     packet.fourCC = isHevc ? NDIlib_compressed_FourCC_type_HEVC
                             : NDIlib_compressed_FourCC_type_H264;
-    packet.pts = timecode;
-    packet.dts = timecode;
+    // The packet keeps encoder time; only the frame carries the timecode,
+    // because a decoder needs monotonic pts and a person needs the clock.
+    packet.pts = pts;
+    packet.dts = pts;
     packet.flags = isKeyframe ? NDIlib_compressed_packet_t::flags_keyframe
                                : NDIlib_compressed_packet_t::flags_none;
     packet.data_size = static_cast<uint32_t>(data_len);
@@ -238,14 +241,15 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendAudio(
     if (!data_ptr) return;
 
     std::vector<uint8_t> extra = toVector(env, extraData);
-    const int64_t timecode = static_cast<int64_t>(ptsUs) * 10;
+    const int64_t pts = static_cast<int64_t>(ptsUs) * 10;
+    const int64_t timecode = stamp_for(pts);
 
     NDIlib_compressed_packet_t packet = {};
     packet.version = sizeof(NDIlib_compressed_packet_t);
     packet.fourCC = NDIlib_compressed_FourCC_type_AAC;
     packet.flags = NDIlib_compressed_packet_t::flags_keyframe; // every AAC frame is one
-    packet.pts = timecode;
-    packet.dts = timecode;
+    packet.pts = pts;
+    packet.dts = pts;
     packet.data_size = static_cast<uint32_t>(data_len);
     packet.extra_data_size = static_cast<uint32_t>(extra.size());
 
@@ -292,6 +296,21 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendAudio(
  * on the connection that already exists, so there is no second socket and no
  * extra discovery.
  */
+/**
+ * Sets the timecode this source announces, as 100ns units since midnight.
+ *
+ * Called by the master when its clock is jammed. Passing zero returns the
+ * source to reporting encoder time, which is the honest answer for a camera
+ * that is not following any clock.
+ */
+extern "C" JNIEXPORT void JNICALL
+Java_com_mantraproductions_ndi_NdiSender_nativeSetTimecode(
+        JNIEnv*, jobject, jlong timecode100ns, jlong atPtsUs) {
+    std::lock_guard<std::mutex> lock(g_timecode_mutex);
+    g_timecode_anchor = static_cast<int64_t>(timecode100ns);
+    g_timecode_anchor_pts = static_cast<int64_t>(atPtsUs) * 10;
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_mantraproductions_ndi_NdiSender_nativeCaptureMetadata(
         JNIEnv* env, jobject, jint timeoutMs) {

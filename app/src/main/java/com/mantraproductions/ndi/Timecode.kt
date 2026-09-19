@@ -174,6 +174,21 @@ data class Timecode(
          * The names the Tentacle parser already calls, kept as the one public
          * spelling rather than two doing the same thing.
          */
+        /**
+         * As NDI carries it: 100 nanosecond units since midnight.
+         *
+         * Computed from the frame count rather than from the fields, so drop
+         * frame lands on real time rather than on its own labels. That is the
+         * whole point of drop frame, and a converter that ignores it puts an
+         * hour of 29.97 out by three and a half seconds.
+         */
+        fun to100ns(tc: Timecode): Long =
+            Math.round(toFrames(tc) / tc.rate.fps * 10_000_000.0)
+
+        /** And back, for a follower reading a master's stamp. */
+        fun from100ns(units: Long, rate: Rate): Timecode =
+            fromFrames(Math.round(units / 10_000_000.0 * rate.fps), rate)
+
         /** Parses what a device or a person writes, in either separator. */
         fun parse(text: String, rate: Rate): Timecode? {
             val parts = text.trim().split(':', ';', '.')

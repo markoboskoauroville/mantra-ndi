@@ -89,6 +89,9 @@ class NdiSendService : Service() {
     /** Kept for anything that only wants one number; it is the output. */
     val audioLevel: Float get() = audioLevelOut
 
+    /** The encoder timestamp of the last frame sent, for anchoring timecode. */
+    val lastVideoPtsUs: Long get() = stream?.lastVideoPtsUs ?: 0L
+
     /**
      * The meter runs whenever the encoder is not holding the microphone, so
      * levels are visible before a take rather than only during one. Only one

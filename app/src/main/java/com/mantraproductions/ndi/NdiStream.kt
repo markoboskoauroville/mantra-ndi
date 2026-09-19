@@ -34,6 +34,11 @@ class NdiStream(
     audioSource: AudioSource
 ) : StreamBase(context, videoSource, audioSource) {
 
+    /** The encoder timestamp of the most recent frame sent. */
+    @Volatile var lastVideoPtsUs: Long = 0L
+        private set
+
+
     constructor(context: Context) : this(context, Camera2Source(context), MicrophoneSource())
 
     private val streamClient = NdiStreamClient()
@@ -85,6 +90,10 @@ class NdiStream(
 
     override fun getVideoDataImp(videoBuffer: ByteBuffer, info: MediaCodec.BufferInfo) {
         val isKeyframe = (info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0
+        // Remembered so the timecode can be anchored against the same clock
+        // the frames are stamped with, rather than against a reading taken at
+        // some other moment.
+        lastVideoPtsUs = info.presentationTimeUs
         NdiSender.sendVideo(videoBuffer.toByteArray(info), isKeyframe, info.presentationTimeUs, useHevc)
         streamClient.countVideoFrame()
     }

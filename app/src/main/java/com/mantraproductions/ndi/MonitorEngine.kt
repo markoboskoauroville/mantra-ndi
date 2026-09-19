@@ -55,6 +55,14 @@ class MonitorEngine(
     @Volatile private var lastFrameAt = 0L
 
     /**
+     * The timecode carried by the most recent frame, in 100ns units, or zero
+     * if this source stamps none. Read straight off the picture, so a follower
+     * is on the master's clock without decoding anything extra.
+     */
+    @Volatile var lastTimecode100ns = 0L
+        private set
+
+    /**
      * Whether anything has arrived recently enough to still be on screen.
      * A surface keeps its last frame forever, so silence has to be measured
      * rather than observed.
@@ -77,7 +85,9 @@ class MonitorEngine(
         // 4 MB covers a 1080p keyframe with room to spare; oversized frames are
         // reported rather than silently truncated.
         val buffer = ByteBuffer.allocateDirect(4 * 1024 * 1024)
-        val info = LongArray(6)
+        // Seven: size, pts, keyframe, spare, width, height, and the timecode
+        // the sender stamped on this frame.
+        val info = LongArray(7)
         var framesSeen = 0L
         var warnedUnsupported = false
 
@@ -92,6 +102,7 @@ class MonitorEngine(
                     val isHevc = info[3] == 1L
                     val width = info[4].toInt()
                     val height = info[5].toInt()
+                    lastTimecode100ns = info[6]
 
                     if (codec == null || width != configuredWidth ||
                         height != configuredHeight || isHevc != configuredHevc

@@ -100,6 +100,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 refreshLiveIndicators()
                 refreshSignal()
+                pushTimecodeToNdi()
                 refreshTimecode()
                 refreshVectorscope()
                 refreshWaveform()
@@ -468,13 +469,44 @@ class MainActivity : AppCompatActivity() {
         ltcEngine.lastError?.let { say(it) }
     }
 
+    /**
+     * Hands the clock to the NDI sender, so every frame carries it.
+     *
+     * Once a second is enough. The stamp is anchored rather than set, so the
+     * native side advances it with each frame's own timestamp; calling more
+     * often would only re-anchor to the same clock and add jitter from
+     * whenever this happened to run.
+     */
+    private fun pushTimecodeToNdi() {
+        if (service?.isStreaming != true) return
+        val now = android.os.SystemClock.elapsedRealtimeNanos()
+        if (now - lastTimecodePushAt < 1_000_000_000L) return
+        lastTimecodePushAt = now
+
+        val tc = ltcEngine.clock.now(now)
+        if (tc == null) {
+            NdiSender.setTimecode(0L, 0L)
+            return
+        }
+        NdiSender.setTimecode(Timecode.to100ns(tc), service?.lastVideoPtsUs ?: 0L)
+    }
+
+    private var lastTimecodePushAt = 0L
+
     private fun refreshTimecode() {
         if (!appSettings.timecodeEnabled) {
             binding.timecodeText.visibility = View.GONE
             return
         }
         binding.timecodeText.visibility = View.VISIBLE
-        val now = ltcEngine.clock.now(android.os.SystemClock.elapsedRealtimeNanos())
+        val nanos = android.os.SystemClock.elapsedRealtimeNanos()
+        // A stamp on the incoming picture beats anything decoded separately:
+        // it arrived attached to the frame, so it cannot have drifted from it.
+        val fromStream = remoteEngine?.lastTimecode100ns
+            ?.takeIf { it > 0L }
+            ?.let { Timecode.from100ns(it, appSettings.ltcRate) }
+        val now = fromStream
+            ?: ltcEngine.clock.now(nanos)
             ?: timecode.now()
         if (now == null) {
             binding.timecodeText.text = "--:--:--:--"
