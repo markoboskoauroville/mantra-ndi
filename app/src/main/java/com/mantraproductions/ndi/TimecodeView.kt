@@ -9,23 +9,21 @@ import android.util.AttributeSet
 import android.view.View
 
 /**
- * The clock, its state, and where it came from.
+ * The burn-in block: the clock, and everything a person needs to read beside it.
  *
- * Laid out the way a timecode display on any professional monitor is laid out:
- * the number large on the left, because it is the thing being read, and the
- * small print stacked to its right where it can be checked without taking the
- * eye off the number.
+ * Laid out the way a data burn-in is laid out and the way a deck's status
+ * display is: one column, everything flush left, most important at the top.
+ * Nothing is pushed to the right, because a reader's eye returns to the same
+ * left edge for every line and anything set to the right of a variable width
+ * number moves whenever the number does.
  *
- *     10:22:33:14   SYC
- *                   MARKO PHONE
+ *     10:22:33:14
+ *     SYNC EXT   MARKO PHONE
+ *     RECORDING
+ *     V-LOG   3840x2160   25p
  *
- * The source name matters once there is more than one device generating. Two
- * cameras following two different masters look identical if all you show is a
- * running number, and they will stay looking identical until the edit.
- *
- * Colour and the three letters say the same thing twice on purpose. Colour
- * alone fails for anybody who cannot separate green from white; three small
- * letters alone are unreadable at arm's length on a gimbal.
+ * Four lines, each answering a question that gets asked on set: what time is
+ * it, whose clock is that, what is this camera doing, and what is it writing.
  */
 class TimecodeView @JvmOverloads constructor(
     context: Context,
@@ -34,88 +32,106 @@ class TimecodeView @JvmOverloads constructor(
 ) : View(context, attrs, defStyle) {
 
     enum class Sync(val label: String, val colour: Int) {
-        /** Stamping frames; this device is the clock. */
-        MASTER("MST", Color.parseColor("#12C46A")),
+        /** This device is the clock the others follow. */
+        MASTER("SYNC MST", Color.parseColor("#12C46A")),
 
-        /** Following somebody else's clock. */
-        FOLLOWING("SYC", Color.parseColor("#F2F4F6")),
+        /** Following another device's clock. */
+        EXTERNAL("SYNC EXT", Color.parseColor("#F2F4F6")),
 
-        /** A clock of its own, agreeing with nothing. */
-        INTERNAL("INT", Color.parseColor("#8C99A6"))
+        /** Its own clock, agreeing with nothing else. */
+        INTERNAL("SYNC INT", Color.parseColor("#8C99A6"))
+    }
+
+    /** What the camera is doing, in the words a deck would use. */
+    enum class Status(val label: String, val colour: Int) {
+        IDLE("STANDBY", Color.parseColor("#8C99A6")),
+        STREAMING("LIVE", Color.parseColor("#12C46A")),
+        RECORDING("RECORDING", Color.parseColor("#FF4436")),
+        BOTH("LIVE / RECORDING", Color.parseColor("#FF4436")),
+        WATCHING("MONITOR", Color.parseColor("#FFC400"))
     }
 
     private val density = resources.displayMetrics.density
 
-    var timecode: String = "--:--:--:--"
+    var timecode: String = "00:00:00:00"
         set(value) { if (field != value) { field = value; invalidate() } }
 
     var sync: Sync = Sync.INTERNAL
         set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** Which device the clock came from. Empty when it came from nowhere. */
+    /** Whose clock it is. On internal, this device's own name. */
     var sourceName: String = ""
         set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** Height of the timecode digits in sp. */
+    var status: Status = Status.IDLE
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    /** Curve, resolution and rate, already formatted. */
+    var formatLine: String = ""
+        set(value) { if (field != value) { field = value; invalidate() } }
+
     var sizeSp: Float = 16f
         set(value) { field = value; requestLayout(); invalidate() }
 
-    /** A half transparent plate behind it, as a broadcast burn-in has. */
     var showBackground: Boolean = true
         set(value) { field = value; invalidate() }
+
+    /** Any line can be turned off without disturbing the ones that remain. */
+    var showSync = true
+    var showStatus = true
+    var showFormat = true
 
     private val digits = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = android.graphics.Typeface.MONOSPACE
         isFakeBoldText = true
     }
-    private val status = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val small = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = android.graphics.Typeface.MONOSPACE
-        letterSpacing = 0.18f
-    }
-    private val source = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = android.graphics.Typeface.MONOSPACE
-        letterSpacing = 0.06f
+        letterSpacing = 0.1f
     }
     private val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        // Half transparent black, the standard burn-in plate: dark enough to
-        // read white digits over a bright sky, light enough not to hide the
-        // shot underneath it.
-        color = Color.argb(128, 0, 0, 0)
+        // The standard burn-in plate: dark enough to read white digits over a
+        // bright sky, light enough not to hide the shot underneath.
+        color = Color.argb(115, 0, 0, 0)
     }
 
-    private val padding get() = 6f * density
-    private val gap get() = 8f * density
-
+    private val pad get() = 7f * density
     private fun digitSize() = sizeSp * density
-    private fun smallSize() = (sizeSp * 0.42f * density).coerceAtLeast(7f * density)
+    private fun smallSize() = (sizeSp * 0.44f * density).coerceAtLeast(8f * density)
+    private fun lineGap() = smallSize() * 1.45f
+
+    private fun lines(): List<Pair<String, Int>> {
+        val out = mutableListOf<Pair<String, Int>>()
+        if (showSync) {
+            val name = sourceName.uppercase()
+            out += (if (name.isEmpty()) sync.label else sync.label + "   " + name) to sync.colour
+        }
+        if (showStatus) out += status.label to status.colour
+        if (showFormat && formatLine.isNotEmpty()) {
+            out += formatLine.uppercase() to Color.parseColor("#9AA6B2")
+        }
+        return out
+    }
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
         digits.textSize = digitSize()
-        status.textSize = smallSize()
-        source.textSize = smallSize()
+        small.textSize = smallSize()
 
-        val numberWidth = digits.measureText("00:00:00:00")
-        val smallWidth = maxOf(
-            status.measureText("MST"),
-            source.measureText(sourceName.ifEmpty { " " })
+        val widest = maxOf(
+            digits.measureText("00:00:00:00"),
+            lines().maxOfOrNull { small.measureText(it.first) } ?: 0f
         )
-        val width = (padding * 2 + numberWidth + gap + smallWidth).toInt()
-
-        // Two small lines stacked must never be shorter than the number beside
-        // them, or the plate crops the device name on a small setting.
-        val smallStack = smallSize() * 2.6f
-        val height = (padding * 2 + maxOf(digitSize() * 1.15f, smallStack)).toInt()
+        val height = pad * 2 + digitSize() * 1.1f + lines().size * lineGap()
 
         setMeasuredDimension(
-            resolveSize(width, widthSpec),
-            resolveSize(height, heightSpec)
+            resolveSize((pad * 2 + widest).toInt(), widthSpec),
+            resolveSize(height.toInt(), heightSpec)
         )
     }
 
     override fun onDraw(canvas: Canvas) {
         digits.textSize = digitSize()
-        status.textSize = smallSize()
-        source.textSize = smallSize()
+        small.textSize = smallSize()
 
         if (showBackground) {
             canvas.drawRoundRect(
@@ -124,24 +140,19 @@ class TimecodeView @JvmOverloads constructor(
             )
         }
 
+        // One left edge for everything. The eye returns to the same place for
+        // every line, which is the whole reason a burn-in is a column.
+        val left = pad
+        var y = pad + digitSize() * 0.88f
+
         digits.color = sync.colour
-        status.color = sync.colour
-        // The source name is deliberately quieter than the state: it is
-        // reference, not a warning.
-        source.color = Color.parseColor("#9AA6B2")
+        canvas.drawText(timecode, left, y, digits)
 
-        // The number sits on the vertical centre; the two small lines straddle
-        // it, so the block reads as one thing rather than three.
-        val baseline = height / 2f - (digits.descent() + digits.ascent()) / 2f
-        canvas.drawText(timecode, padding, baseline, digits)
-
-        val smallX = padding + digits.measureText("00:00:00:00") + gap
-        val centre = height / 2f
-        canvas.drawText(sync.label, smallX, centre - smallSize() * 0.25f, status)
-        if (sourceName.isNotEmpty()) {
-            canvas.drawText(
-                sourceName.uppercase(), smallX, centre + smallSize() * 1.05f, source
-            )
+        y += digitSize() * 0.22f
+        for ((text, colour) in lines()) {
+            y += lineGap()
+            small.color = colour
+            canvas.drawText(text, left, y, small)
         }
     }
 }

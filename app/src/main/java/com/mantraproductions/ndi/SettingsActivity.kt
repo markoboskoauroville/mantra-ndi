@@ -124,6 +124,8 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
         binding.rowScreen.setOnClickListener { manageScreenAndBattery() }
         binding.rowTimecode.setOnClickListener { manageTimecode() }
+        binding.rowTimecodeSync.setOnClickListener { manageLtc() }
+        binding.rowTimecodeBurn.setOnClickListener { pickTimecodeDisplay() }
         binding.rowProfile.setOnClickListener { pickProfile() }
         binding.rowSourceName.setOnClickListener { editSourceName() }
         binding.rowBitDepth.setOnClickListener { pickBitDepth() }
@@ -217,6 +219,8 @@ class SettingsActivity : AppCompatActivity() {
             binding.rowNetwork to system,
             binding.rowScreen to system,
             binding.rowTimecode to system,
+            binding.rowTimecodeSync to hasPicture,
+            binding.rowTimecodeBurn to hasPicture,
             binding.rowKeys to system,
             binding.rowAbout to system
         )
@@ -249,6 +253,17 @@ class SettingsActivity : AppCompatActivity() {
                 group.getChildAt(it).visibility == android.view.View.VISIBLE
             }
             group.visibility = if (anyVisible) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
+        binding.valueTimecodeSync.text = when (prefs.ltcRole) {
+            LtcEngine.Role.MASTER -> "Master, generating at " + prefs.ltcRate.label
+            LtcEngine.Role.FOLLOW -> "External, from " + (prefs.timecodeSource ?: "anything")
+            LtcEngine.Role.OFF -> "Internal, this phone's own clock"
+        }
+        binding.valueTimecodeBurn.text = if (!prefs.showTimecode) "Hidden" else buildString {
+            append(prefs.timecodeSize).append("sp ")
+            append(if (prefs.timecodeAtTop) "top" else "bottom")
+            append(if (prefs.timecodePlate) ", plate" else ", no plate")
         }
 
         binding.valueTimecode.text = buildString {
@@ -430,6 +445,9 @@ class SettingsActivity : AppCompatActivity() {
                 "Position, now " + (if (prefs.timecodeAtTop) "top" else "bottom"),
                 "Background, now " + (if (prefs.timecodePlate) "on" else "off"),
                 "Timecode from, now " + (prefs.timecodeSource ?: "anything"),
+                "Sync line, now " + (if (prefs.timecodeShowSync) "on" else "off"),
+                "Status line, now " + (if (prefs.timecodeShowStatus) "on" else "off"),
+                "Format line, now " + (if (prefs.timecodeShowFormat) "on" else "off"),
                 "Frame rate, now ${prefs.ltcRate.label}"
             )
         ) { index ->
@@ -442,7 +460,10 @@ class SettingsActivity : AppCompatActivity() {
                 2 -> { prefs.timecodeAtTop = !prefs.timecodeAtTop; refresh() }
                 3 -> { prefs.timecodePlate = !prefs.timecodePlate; refresh() }
                 4 -> pickTimecodeSource()
-                5 -> {
+                5 -> { prefs.timecodeShowSync = !prefs.timecodeShowSync; refresh() }
+                6 -> { prefs.timecodeShowStatus = !prefs.timecodeShowStatus; refresh() }
+                7 -> { prefs.timecodeShowFormat = !prefs.timecodeShowFormat; refresh() }
+                8 -> {
                     val rates = Timecode.Rate.values().toList()
                     choose("Frame rate", rates.map { it.label }) { r ->
                         prefs.ltcRate = rates[r]

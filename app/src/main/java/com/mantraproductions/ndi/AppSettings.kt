@@ -169,6 +169,19 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_TC_SOURCE, null)
         set(value) = prefs.edit().putString(KEY_TC_SOURCE, value).apply()
 
+    /** Which lines of the burn-in are drawn. */
+    var timecodeShowSync: Boolean
+        get() = prefs.getBoolean(KEY_TC_SYNC, true)
+        set(value) = prefs.edit().putBoolean(KEY_TC_SYNC, value).apply()
+
+    var timecodeShowStatus: Boolean
+        get() = prefs.getBoolean(KEY_TC_STATUS, true)
+        set(value) = prefs.edit().putBoolean(KEY_TC_STATUS, value).apply()
+
+    var timecodeShowFormat: Boolean
+        get() = prefs.getBoolean(KEY_TC_FORMAT, true)
+        set(value) = prefs.edit().putBoolean(KEY_TC_FORMAT, value).apply()
+
     var showTimecode: Boolean
         get() = prefs.getBoolean(KEY_SHOW_TC, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_TC, value).apply()
@@ -222,6 +235,9 @@ class AppSettings(context: Context) {
         const val KEY_SHOW_TC = "show_timecode"
         const val KEY_TC_TOP = "timecode_top"
         const val KEY_TC_PLATE = "timecode_plate"
+        const val KEY_TC_SYNC = "tc_line_sync"
+        const val KEY_TC_STATUS = "tc_line_status"
+        const val KEY_TC_FORMAT = "tc_line_format"
         const val KEY_TC_SOURCE = "timecode_source"
         const val KEY_CAMERA_ID = "camera_id"
         const val KEY_RECORD_MBPS = "record_mbps"

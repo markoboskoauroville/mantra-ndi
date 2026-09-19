@@ -36,6 +36,19 @@
         <item name="android:focusable">true</item>
     </style>
 
+    <!-- The tiny title above each card. Small, spaced and quiet: it is a
+         signpost, not content. -->
+    <style name="MantraSectionTitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">14dp</item>
+        <item name="android:layout_marginBottom">6dp</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.18</item>
+        <item name="android:textColor">#6E7A86</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
     <style name="MantraSettingsGroup">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

@@ -598,51 +598,76 @@ class MainActivity : AppCompatActivity() {
             return
         }
         binding.timecodeView.visibility = View.VISIBLE
-
+        val view = binding.timecodeView
         val nanos = android.os.SystemClock.elapsedRealtimeNanos()
+        val rate = appSettings.ltcRate
         val wanted = appSettings.timecodeSource
+        val watching = appSettings.remoteSource
 
         // A stamp on the incoming picture beats anything decoded separately:
         // it arrived attached to the frame, so it cannot have drifted from it.
-        // Only honoured when it came from the device that was asked for, or
-        // two cameras following two different masters look identical.
-        val watching = appSettings.remoteSource
+        // Honoured only from the device that was asked for, or two cameras
+        // following two different masters look identical.
         val streamTc = remoteEngine
             ?.takeIf { wanted == null || wanted == watching }
             ?.lastTimecode100ns
             ?.takeIf { it > 0L }
-            ?.let { Timecode.from100ns(it, appSettings.ltcRate) }
+            ?.let { Timecode.from100ns(it, rate) }
 
         val isMaster = appSettings.ltcRole == LtcEngine.Role.MASTER
         val ltcTc = ltcEngine.clock.now(nanos)
-        val running = streamTc ?: ltcTc ?: timecode.now()
 
-        binding.timecodeView.sizeSp = appSettings.timecodeSize.toFloat()
-        binding.timecodeView.showBackground = appSettings.timecodePlate
-        binding.timecodeView.timecode = running?.toString() ?: "--:--:--:--"
+        // Internal is not "no timecode", it is this device's own clock running
+        // free. A display that sits still is not a clock, which is why this
+        // never falls through to a dash.
+        val running = streamTc ?: ltcTc ?: Timecode.timeOfDay(rate)
 
-        binding.timecodeView.sync = when {
+        view.sizeSp = appSettings.timecodeSize.toFloat()
+        view.showBackground = appSettings.timecodePlate
+        view.showSync = appSettings.timecodeShowSync
+        view.showStatus = appSettings.timecodeShowStatus
+        view.showFormat = appSettings.timecodeShowFormat
+        view.timecode = running.toString()
+
+        view.sync = when {
             isMaster -> TimecodeView.Sync.MASTER
-            streamTc != null || ltcEngine.isLocked -> TimecodeView.Sync.FOLLOWING
+            streamTc != null || ltcEngine.isLocked -> TimecodeView.Sync.EXTERNAL
             else -> TimecodeView.Sync.INTERNAL
         }
-
-        binding.timecodeView.sourceName = when {
-            isMaster -> SourceIdentity.sanitize(identity.name)
+        view.sourceName = when {
             streamTc != null -> watching.orEmpty()
-            ltcEngine.isLocked -> "LTC AUDIO"
-            wanted != null -> wanted + " ?"
-            else -> ""
+            ltcEngine.isLocked && !isMaster -> "LTC AUDIO"
+            wanted != null && !isMaster -> wanted + " ?"
+            // On internal, this device's own name, because the question the
+            // line answers is whose clock this is.
+            else -> SourceIdentity.sanitize(identity.name)
         }
 
-        // Position is a bias rather than two layouts, so switching it costs
-        // nothing and cannot leave the other one behind.
-        val params = binding.timecodeView.layoutParams
+        val svc = service
+        view.status = when {
+            appSettings.appMode == AppMode.MONITOR -> TimecodeView.Status.WATCHING
+            svc == null -> TimecodeView.Status.IDLE
+            svc.isRecording && svc.isStreaming -> TimecodeView.Status.BOTH
+            svc.isRecording -> TimecodeView.Status.RECORDING
+            svc.isStreaming -> TimecodeView.Status.STREAMING
+            else -> TimecodeView.Status.IDLE
+        }
+
+        view.formatLine = activeProfile?.let { p ->
+            val curve = appSettings.logCurve.label
+            val depth = if (appSettings.tenBitWanted && DeviceProfile.tenBitCapable) "10-bit"
+                else "8-bit"
+            curve + "   " + p.width + "x" + p.height + "   " + p.fps + "p   " + depth
+        }.orEmpty()
+
+        // Position is a bias rather than two layouts, so switching it cannot
+        // leave the other one behind.
+        val params = view.layoutParams
                 as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
         val bias = if (appSettings.timecodeAtTop) 0f else 1f
         if (params.verticalBias != bias) {
             params.verticalBias = bias
-            binding.timecodeView.layoutParams = params
+            view.layoutParams = params
         }
     }
 

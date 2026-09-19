@@ -189,6 +189,23 @@ data class Timecode(
         fun from100ns(units: Long, rate: Rate): Timecode =
             fromFrames(Math.round(units / 10_000_000.0 * rate.fps), rate)
 
+        /**
+         * Time of day, which is what internal timecode means on every camera
+         * that has ever had the setting.
+         *
+         * A clock that does not move is not a clock. Internal is not "no
+         * timecode", it is this device's own time running free, and it must
+         * tick whether or not anything else is connected.
+         */
+        fun timeOfDay(rate: Rate, calendar: java.util.Calendar = java.util.Calendar.getInstance()): Timecode {
+            val h = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+            val m = calendar.get(java.util.Calendar.MINUTE)
+            val s = calendar.get(java.util.Calendar.SECOND)
+            val ms = calendar.get(java.util.Calendar.MILLISECOND)
+            val f = ((ms / 1000.0) * rate.fps).toInt().coerceIn(0, rate.nominal - 1)
+            return Timecode(h, m, s, f, rate)
+        }
+
         /** Parses what a device or a person writes, in either separator. */
         fun parse(text: String, rate: Rate): Timecode? {
             val parts = text.trim().split(':', ';', '.')

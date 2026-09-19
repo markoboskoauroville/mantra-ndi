@@ -54,6 +54,9 @@
             android:textSize="12sp" />
 
         <!-- Capture -->
+        <TextView android:id="@+id/sectionTitle_groupCapture" style="@style/MantraSectionTitle"
+            android:text="Camera and recording" />
+
         <LinearLayout android:id="@+id/groupCapture" style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowLens" style="@style/MantraSettingsRow">
@@ -84,6 +87,9 @@
         </LinearLayout>
 
         <!-- Colour -->
+        <TextView android:id="@+id/sectionTitle_groupColour" style="@style/MantraSectionTitle"
+            android:text="Colour" />
+
         <LinearLayout android:id="@+id/groupColour" style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowLogCurve" style="@style/MantraSettingsRow">
@@ -106,6 +112,9 @@
         </LinearLayout>
 
         <!-- Display -->
+        <TextView android:id="@+id/sectionTitle_groupDisplay" style="@style/MantraSectionTitle"
+            android:text="Scopes and overlays" />
+
         <LinearLayout android:id="@+id/groupDisplay" style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowFocusBox" style="@style/MantraSettingsRow">
@@ -157,6 +166,26 @@
         </LinearLayout>
 
         <!-- This device -->
+        <TextView android:id="@+id/sectionTitle_groupTimecode" style="@style/MantraSectionTitle"
+            android:text="Timecode" />
+
+        <LinearLayout android:id="@+id/groupTimecode" style="@style/MantraSettingsGroup">
+
+            <LinearLayout android:id="@+id/rowTimecodeSync" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Sync" />
+                <TextView android:id="@+id/valueTimecodeSync" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowTimecodeBurn" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Burn-in" />
+                <TextView android:id="@+id/valueTimecodeBurn" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <TextView android:id="@+id/sectionTitle_groupDevice" style="@style/MantraSectionTitle"
+            android:text="This phone" />
+
         <LinearLayout android:id="@+id/groupDevice" style="@style/MantraSettingsGroup">
 
             <LinearLayout android:id="@+id/rowCamera" style="@style/MantraSettingsRow">
