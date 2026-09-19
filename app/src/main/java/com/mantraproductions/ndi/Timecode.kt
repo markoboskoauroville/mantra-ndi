@@ -142,10 +142,14 @@ data class Timecode(
          */
         /** The named rate nearest a reported frame rate and its flag. */
         fun rateOf(fps: Double, dropFrame: Boolean): Rate = when {
+            // Drop frame is checked first because it only exists at one rate,
+            // and a signal that says drop frame is telling us the rate as
+            // surely as its timing does. Deciding by fps first threw the flag
+            // away whenever the measurement rounded to 25.
+            dropFrame -> Rate.FPS_29_97_DF
             fps < 23.99 -> Rate.FPS_23_976
             fps < 24.5 -> Rate.FPS_24
             fps < 27.0 -> Rate.FPS_25
-            dropFrame -> Rate.FPS_29_97_DF
             fps < 29.99 -> Rate.FPS_29_97
             else -> Rate.FPS_30
         }

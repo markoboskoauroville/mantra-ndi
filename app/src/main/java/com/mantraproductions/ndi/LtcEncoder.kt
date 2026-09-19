@@ -24,6 +24,23 @@ object LtcEncoder {
     private const val AMP = 16000
 
     /**
+     * The output level, carried from one frame to the next.
+     *
+     * LTC is one unbroken square wave, not a series of separate frames that
+     * happen to follow each other. Restarting the level at every frame leaves
+     * a double length gap at each join, and a decoder reads that as the signal
+     * having stopped, which throws away everything it had gathered. So the
+     * phase persists, and a generator writing frame after frame produces one
+     * continuous signal exactly as a Tentacle does.
+     */
+    @Volatile private var phase = false
+
+    /** Call before starting a fresh run, so a new take begins predictably. */
+    fun reset() {
+        phase = false
+    }
+
+    /**
      * One frame of LTC as PCM samples at the given sample rate.
      *
      * @param timecode the timecode this frame carries
@@ -36,7 +53,6 @@ object LtcEncoder {
         val totalSamples = (samplesPerBit * 80).toInt() + 4
         val out = ByteArray(totalSamples * 2)
 
-        var phase = false  // current output level
         var samplePos = 0
         var nextSample = 0.0
 
