@@ -74,6 +74,9 @@ class MainActivity : AppCompatActivity() {
     private var balanceBase: FloatArray? = null
     private var lastAppliedMode: AppMode? = null
 
+    /** Timecode over audio: this phone either makes it, follows it, or neither. */
+    private val ltcEngine = LtcEngine()
+
 
     /** The generator in the room, if there is one. */
     private val timecode by lazy { TimecodeSource(applicationContext) }
@@ -229,6 +232,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        startLtc()
         startTimecode()
         KeyService.cameraInForeground = true
         ContextCompat.registerReceiver(
@@ -269,6 +273,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        ltcEngine.stop()
         remoteEngine?.stop()
         remoteEngine = null
         KeyService.cameraInForeground = false
@@ -443,13 +448,32 @@ class MainActivity : AppCompatActivity() {
      * Ten times a second, which is enough for a display at arm's length and
      * far cheaper than the frame rate it is counting.
      */
+    /**
+     * Starts whichever half of the timecode job this phone has been given.
+     *
+     * A master needs no permission beyond audio output. A follower needs the
+     * microphone, and asking for it only when timecode is switched on keeps a
+     * camera app from demanding a microphone before it will open.
+     */
+    private fun startLtc() {
+        val role = appSettings.ltcRole
+        if (role == LtcEngine.Role.OFF) {
+            ltcEngine.stop()
+            return
+        }
+        ltcEngine.rate = appSettings.ltcRate
+        ltcEngine.start(role)
+        ltcEngine.lastError?.let { say(it) }
+    }
+
     private fun refreshTimecode() {
         if (!appSettings.timecodeEnabled) {
             binding.timecodeText.visibility = View.GONE
             return
         }
         binding.timecodeText.visibility = View.VISIBLE
-        val now = timecode.now()
+        val now = ltcEngine.clock.now(android.os.SystemClock.elapsedRealtimeNanos())
+            ?: timecode.now()
         if (now == null) {
             binding.timecodeText.text = "--:--:--:--"
             binding.timecodeText.setTextColor(android.graphics.Color.parseColor("#7C8894"))

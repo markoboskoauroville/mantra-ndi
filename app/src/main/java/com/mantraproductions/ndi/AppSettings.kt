@@ -113,6 +113,25 @@ class AppSettings(context: Context) {
         get() = prefs.getLong(KEY_RAMP, 2000)
         set(value) = prefs.edit().putLong(KEY_RAMP, value).apply()
 
+    /**
+     * Whether this phone makes the timecode, follows it, or ignores it.
+     *
+     * Stored as a name rather than an ordinal so adding a role later cannot
+     * silently reinterpret what somebody already chose.
+     */
+    var ltcRole: LtcEngine.Role
+        get() = LtcEngine.Role.values()
+            .firstOrNull { it.name == prefs.getString(KEY_LTC_ROLE, null) }
+            ?: LtcEngine.Role.OFF
+        set(value) = prefs.edit().putString(KEY_LTC_ROLE, value.name).apply()
+
+    /** The rate a master generates at. */
+    var ltcRate: Timecode.Rate
+        get() = Timecode.Rate.values()
+            .firstOrNull { it.name == prefs.getString(KEY_LTC_RATE, null) }
+            ?: Timecode.Rate.FPS_25
+        set(value) = prefs.edit().putString(KEY_LTC_RATE, value.name).apply()
+
     /** Listen for a Tentacle and show its timecode. */
     var timecodeEnabled: Boolean
         get() = prefs.getBoolean(KEY_TIMECODE, false)
@@ -135,6 +154,8 @@ class AppSettings(context: Context) {
         const val KEY_HOLD = "focus_hold"
         const val KEY_RAMP = "focus_ramp"
         const val KEY_TIMECODE = "timecode"
+        const val KEY_LTC_ROLE = "ltc_role"
+        const val KEY_LTC_RATE = "ltc_rate"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
         const val KEY_REMOTE = "remote_mode"
