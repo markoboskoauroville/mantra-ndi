@@ -111,6 +111,29 @@ class ProfileStore(context: Context) {
         return profiles.firstOrNull { it.name == selectedName } ?: profiles.first()
     }
 
+    /**
+     * Writes a format choice into the selected profile.
+     *
+     * Kept here rather than in the settings screen because a profile is the
+     * one place a format lives, and two places that both think they own it is
+     * how a phone ends up recording at a size nobody chose.
+     */
+    fun applyFormat(
+        width: Int = selected().width,
+        height: Int = selected().height,
+        fps: Int = selected().fps,
+        bitRate: Int = selected().bitRate,
+        useHevc: Boolean = selected().useHevc
+    ) {
+        val current = selected()
+        upsert(
+            current.copy(
+                width = width, height = height, fps = fps,
+                bitRate = bitRate, useHevc = useHevc
+            )
+        )
+    }
+
     private companion object {
         const val KEY_PROFILES = "profiles"
         const val KEY_SELECTED = "selected"

@@ -144,6 +144,24 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putString(KEY_CAMERA_ID, value).apply()
 
     /** Recording bitrate in megabits per second. */
+    var recordContainer: RecordingFormats.Container
+        get() = RecordingFormats.Container.values()
+            .firstOrNull { it.name == prefs.getString(KEY_CONTAINER, null) }
+            ?: RecordingFormats.Container.MP4
+        set(value) = prefs.edit().putString(KEY_CONTAINER, value.name).apply()
+
+    var recordCodec: RecordingFormats.Codec
+        get() = RecordingFormats.Codec.values()
+            .firstOrNull { it.name == prefs.getString(KEY_CODEC, null) }
+            ?: RecordingFormats.Codec.H265
+        set(value) = prefs.edit().putString(KEY_CODEC, value.name).apply()
+
+    var recordColour: RecordingFormats.ColourMode
+        get() = RecordingFormats.ColourMode.values()
+            .firstOrNull { it.name == prefs.getString(KEY_COLOUR, null) }
+            ?: RecordingFormats.ColourMode.REC709_8
+        set(value) = prefs.edit().putString(KEY_COLOUR, value.name).apply()
+
     var recordMbps: Int
         get() = prefs.getInt(KEY_RECORD_MBPS, 40)
         set(value) = prefs.edit().putInt(KEY_RECORD_MBPS, value.coerceIn(4, 200)).apply()
@@ -241,6 +259,9 @@ class AppSettings(context: Context) {
         const val KEY_TC_SOURCE = "timecode_source"
         const val KEY_CAMERA_ID = "camera_id"
         const val KEY_RECORD_MBPS = "record_mbps"
+        const val KEY_CONTAINER = "record_container"
+        const val KEY_CODEC = "record_codec"
+        const val KEY_COLOUR = "record_colour"
         const val KEY_BATTERY_ASKED = "battery_asked"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"

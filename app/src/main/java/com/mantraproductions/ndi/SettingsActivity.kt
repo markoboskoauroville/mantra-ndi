@@ -501,11 +501,102 @@ class SettingsActivity : AppCompatActivity() {
      * Two numbers, because those are the two that change a recording: how big
      * the picture is, and how much data is spent on it.
      */
+    /**
+     * The recording format, laid out the way a camera menu lays it out.
+     *
+     * Five decisions in the order a camera asks them: what the file is, what
+     * the picture is encoded as, how big, how fast, and how much data. Each
+     * list is read from this phone rather than written here, so it offers 4K60
+     * only on a phone that can do 4K60 and shows 10-bit only where the encoder
+     * really has it, whatever the marketing said.
+     */
     private fun pickRecording() {
-        val rates = listOf(8, 16, 25, 40, 60, 100, 150)
-        choose("Recording bitrate", rates.map { it.toString() + " Mbps" }) { index ->
-            prefs.recordMbps = rates[index]
+        val codec = prefs.recordCodec
+        val mode = currentMode()
+        choose(
+            "Recording format",
+            listOf(
+                "File: " + prefs.recordContainer.label + "   " + prefs.recordContainer.detail,
+                "Codec: " + codec.label + "   " + codec.detail,
+                "Resolution: " + (mode?.label ?: "unknown"),
+                "Frame rate: " + profileStore.selected().fps + "p",
+                "Colour: " + prefs.recordColour.label + "   " + prefs.recordColour.detail,
+                "Bitrate: " + prefs.recordMbps + " Mbps"
+            )
+        ) { index ->
+            when (index) {
+                0 -> pickFrom(
+                    "File", RecordingFormats.Container.values().toList(), { it.label + "   " + it.detail }
+                ) { prefs.recordContainer = it }
+                1 -> pickFrom(
+                    "Codec", RecordingFormats.Codec.values().toList(), { it.label + "   " + it.detail }
+                ) {
+                    prefs.recordCodec = it
+                    profileStore.applyFormat(useHevc = it == RecordingFormats.Codec.H265)
+                }
+                2 -> pickResolution()
+                3 -> pickFrameRate()
+                4 -> pickColour()
+                5 -> pickBitrate()
+            }
+        }
+    }
+
+    private fun <T> pickFrom(
+        title: String,
+        options: List<T>,
+        label: (T) -> String,
+        onPick: (T) -> Unit
+    ) {
+        if (options.isEmpty()) {
+            toast("This phone offers none")
+            return
+        }
+        choose(title, options.map(label)) { index ->
+            onPick(options[index])
             refresh()
+        }
+    }
+
+    private fun currentMode(): RecordingFormats.Mode? {
+        val p = profileStore.selected()
+        return RecordingFormats.modes(this, prefs.selectedCameraId)
+            .firstOrNull { it.size.width == p.width && it.size.height == p.height }
+    }
+
+    private fun pickResolution() {
+        val modes = RecordingFormats.modes(this, prefs.selectedCameraId)
+        pickFrom("Resolution", modes, { it.label + "   " + it.detail }) { mode ->
+            profileStore.applyFormat(width = mode.size.width, height = mode.size.height)
+        }
+    }
+
+    /**
+     * Only the rates this size can really hold. A 4K sensor that tops out at
+     * thirty must not be offered sixty, because the request succeeds and the
+     * camera quietly delivers thirty.
+     */
+    private fun pickFrameRate() {
+        val rates = currentMode()?.rates ?: listOf(24, 25, 30)
+        pickFrom("Frame rate", rates, { it.toString() + "p" }) { profileStore.applyFormat(fps = it) }
+    }
+
+    private fun pickColour() {
+        val modes = RecordingFormats.colourModes(prefs.recordCodec)
+        pickFrom("Colour", modes, { it.label + "   " + it.detail }) { mode ->
+            prefs.recordColour = mode
+            prefs.tenBitWanted = mode.tenBit
+        }
+    }
+
+    private fun pickBitrate() {
+        val p = profileStore.selected()
+        val choices = RecordingFormats.bitrateChoices(
+            android.util.Size(p.width, p.height), p.fps
+        )
+        pickFrom("Bitrate", choices, { it.first }) {
+            prefs.recordMbps = it.second
+            profileStore.applyFormat(bitRate = it.second * 1_000_000)
         }
     }
 
