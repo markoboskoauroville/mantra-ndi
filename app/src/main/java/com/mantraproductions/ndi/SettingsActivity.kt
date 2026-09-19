@@ -129,6 +129,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
         binding.rowWaveform.setOnClickListener { pickWaveform() }
+        binding.rowBandwidth.setOnClickListener { manageBandwidth() }
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
         binding.rowScreen.setOnClickListener { manageScreenAndBattery() }
         binding.rowTimecode.setOnClickListener { manageTimecode() }
@@ -224,6 +225,7 @@ class SettingsActivity : AppCompatActivity() {
             // The phone, not the job.
             binding.rowCamera to system,
             binding.rowDetect to system,
+            binding.rowBandwidth to system,
             binding.rowNetwork to system,
             binding.rowScreen to system,
             binding.rowTimecode to system,
@@ -764,6 +766,130 @@ class SettingsActivity : AppCompatActivity() {
                 prefs.waveformChannels = emptySet()
                 refresh()
             }
+            .show()
+    }
+
+    /**
+     * Two phones, one measurement. One listens, the other pushes.
+     *
+     * Every quality number in this app is a guess until this is run, and the
+     * usual way of settling them is to shoot something, watch it stutter, and
+     * lower a number until it stops.
+     */
+    private fun manageBandwidth() {
+        choose(
+            "Bandwidth test",
+            listOf(
+                if (BandwidthTest.isServing) "Stop listening" else "Listen, be the far end",
+                "Measure to another phone"
+            )
+        ) { index ->
+            if (index == 0) {
+                if (BandwidthTest.isServing) {
+                    BandwidthTest.stopServer()
+                    toast("Stopped")
+                } else {
+                    BandwidthTest.startServer { message ->
+                        runOnUiThread { toast(message) }
+                    }
+                }
+            } else {
+                findAndMeasure()
+            }
+        }
+    }
+
+    private fun findAndMeasure() {
+        val waiting = AlertDialog.Builder(this)
+            .setTitle("Looking for a phone that is listening")
+            .setMessage("The other phone needs Listen switched on.")
+            .setCancelable(false)
+            .create()
+        waiting.show()
+
+        kotlin.concurrent.thread(name = "bw-find") {
+            val peers = BandwidthTest.findPeers()
+            runOnUiThread {
+                waiting.dismiss()
+                if (peers.isEmpty()) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Nothing answered")
+                        .setMessage(
+                            "Either the other phone is not listening, or this " +
+                                "network blocks phone to phone traffic. If the " +
+                                "second, NDI will not work here either, and a " +
+                                "personal hotspot from one phone will prove it."
+                        )
+                        .setPositiveButton("Close", null)
+                        .show()
+                    return@runOnUiThread
+                }
+                choose("Measure to", peers.map { it.label }) { index ->
+                    measureTo(peers[index])
+                }
+            }
+        }
+    }
+
+    private fun measureTo(peer: BandwidthTest.Peer) {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Measuring to " + peer.model)
+            .setMessage("Six seconds.")
+            .setCancelable(false)
+            .create()
+        progress.show()
+
+        kotlin.concurrent.thread(name = "bw-measure") {
+            val result = BandwidthTest.measure(peer.address) { mbps ->
+                runOnUiThread {
+                    progress.setMessage(String.format("%.0f Mbps", mbps))
+                }
+            }
+            runOnUiThread {
+                progress.dismiss()
+                if (result == null) {
+                    toast("Could not reach " + peer.address)
+                    return@runOnUiThread
+                }
+                showBandwidthResult(peer, result)
+            }
+        }
+    }
+
+    /**
+     * The number, and what it means for the settings that depend on it.
+     *
+     * A bitrate cannot be judged against a network speed without the
+     * arithmetic, so the arithmetic is done here rather than left to the
+     * operator on a shoot.
+     */
+    private fun showBandwidthResult(peer: BandwidthTest.Peer, result: BandwidthTest.Result) {
+        val report = buildString {
+            append(String.format("%.0f Mbps", result.megabitsPerSecond)).append("  to ")
+            append(peer.model).append("\n\n")
+            append(result.verdict).append("\n\n")
+            append("Safe to stream at ").append(result.safeStreamMbps).append(" Mbps.\n")
+            append("That is sixty per cent of what the link managed, because a\n")
+            append("measurement is the best case: nothing else was talking and\n")
+            append("the test was a flat stream rather than bursty video.\n\n")
+            append("WHAT EACH SETTING ASKS FOR\n")
+            listOf(12, 20, 35, 60).forEach { mbps ->
+                val needs = BandwidthTest.requirement(mbps)
+                val fits = needs <= result.safeStreamMbps
+                append(String.format("  %2d Mbps needs %.0f  %s\n", mbps, needs,
+                    if (fits) "fits" else "too much"))
+            }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Bandwidth")
+            .setMessage(report)
+            .setPositiveButton("Use " + result.safeStreamMbps + " Mbps") { _, _ ->
+                prefs.streamMbps = result.safeStreamMbps
+                refresh()
+                toast("Stream set to " + result.safeStreamMbps + " Mbps")
+            }
+            .setNegativeButton("Close", null)
             .show()
     }
 

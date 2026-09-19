@@ -486,6 +486,40 @@ class MechanismTest {
         )
     }
 
+    // --- what a measurement means for the settings that depend on it --------
+
+    @Test fun theSafeRateIsWellUnderWhatTheLinkManaged() {
+        // A measurement is the best case: nothing else was talking and the
+        // test was a flat stream rather than bursty video with keyframes. A
+        // link run at its measured ceiling drops frames the moment any of
+        // that changes.
+        val result = BandwidthTest.Result(100.0, 5.0, 1000)
+        assertTrue(result.safeStreamMbps < 100)
+        assertEquals(60, result.safeStreamMbps)
+    }
+
+    @Test fun aUselessLinkStillReportsSomethingRatherThanZero() {
+        // Zero would read as a broken test rather than a slow network, and it
+        // would divide badly wherever it is used.
+        assertTrue(BandwidthTest.Result(0.5, 5.0, 100).safeStreamMbps >= 1)
+    }
+
+    @Test fun aSlowLinkIsCalledSlow() {
+        assertTrue(BandwidthTest.Result(5.0, 5.0, 100).verdict.contains("Too slow"))
+        assertFalse(BandwidthTest.Result(200.0, 5.0, 100).verdict.contains("Too slow"))
+    }
+
+    @Test fun aStreamAsksForMoreThanItsVideoBitrate() {
+        // Audio and overhead are real and a bitrate judged without them is
+        // judged against the wrong number.
+        assertTrue(BandwidthTest.requirement(20) > 20.0)
+        assertTrue(BandwidthTest.requirement(20) < 28.0)
+    }
+
+    @Test fun theRequirementRisesWithTheBitrate() {
+        assertTrue(BandwidthTest.requirement(60) > BandwidthTest.requirement(12))
+    }
+
     // --- remote control protocol -------------------------------------------
 
     @Test fun commandSurvivesTheRoundTrip() {

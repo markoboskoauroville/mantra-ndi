@@ -147,6 +147,12 @@
                 <TextView android:id="@+id/valueTimecode" style="@style/MantraSettingsValue" />
             </LinearLayout>
 
+            <LinearLayout android:id="@+id/rowBandwidth" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Bandwidth test" />
+                <TextView style="@style/MantraSettingsValue"
+                    android:text="How much this network really carries" />
+            </LinearLayout>
+
             <LinearLayout android:id="@+id/rowNetwork" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="NDI network test" />
                 <TextView style="@style/MantraSettingsValue"
