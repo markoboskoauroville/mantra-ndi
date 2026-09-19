@@ -369,6 +369,17 @@ class CaptureEngine(private val context: Context) {
         return apply()
     }
 
+    /**
+     * What the sensor last reported, for anything driving it from outside.
+     *
+     * The values were already being read for the listener; they were simply
+     * not readable by anyone holding the engine, which is why a link over it
+     * had nothing to seed a fader from.
+     */
+    val lastIso: Int? get() = lastReportedIso
+    val lastExposureNs: Long? get() = lastReportedExposureNs
+    val lastFocusDistance: Float? get() = lastReportedFocus
+
     // --- what this camera can do ---------------------------------------------
 
     fun isoRange(): Range<Int>? =

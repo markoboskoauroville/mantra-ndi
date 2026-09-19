@@ -52,6 +52,14 @@ class NdiSendService : Service() {
     val isDirectPipeline: Boolean get() = hdr?.isRunning == true
     val isTenBitActive: Boolean get() = hdr?.isTenBit == true
 
+    /**
+     * The ten bit pipeline's camera, for the controls to drive.
+     *
+     * Exposed because ProControls only ever wrapped the eight bit path, so in
+     * ten bit every control was pointing at a null.
+     */
+    val engineControls: CaptureEngine? get() = if (hdr?.isRunning == true) hdr?.controls else null
+
     var isStreaming: Boolean = false
         private set
 

@@ -24,7 +24,16 @@ enum class AppMode(val label: String, val detail: String) {
      * They were scattered through the other three and read as common to all
      * of them, which they are not. Testing a camera is not a camera setting.
      */
-    SYSTEM("System", "The phone, the network, the build")
+    SYSTEM("System", "The phone, the network, the build");
+
+    /** Three letters for the status line, where a word does not fit. */
+    val short: String
+        get() = when (this) {
+            LOCAL -> "LOC"
+            REMOTE -> "REM"
+            MONITOR -> "MON"
+            SYSTEM -> "SYS"
+        }
 }
 
 class AppSettings(context: Context) {

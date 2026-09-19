@@ -110,10 +110,21 @@ class MainActivity : AppCompatActivity() {
     private fun activeLink(): CameraLink? {
         val remote = link as? RemoteLink
         if (remote != null && appSettings.appMode == AppMode.REMOTE) return remote
-        val controls = service?.controls ?: return null
-        val cached = link
-        if (cached is LocalLink && cached.controls === controls) return cached
-        return LocalLink(controls).also { link = it }
+
+        // Eight bit runs through RootEncoder and has a ProControls. Ten bit
+        // runs straight into MediaCodec and has a CaptureEngine instead, and
+        // asking only for the first is why every fader was inert in ten bit.
+        service?.controls?.let { controls ->
+            val cached = link
+            if (cached is LocalLink && cached.controls === controls) return cached
+            return LocalLink(controls).also { link = it }
+        }
+        service?.engineControls?.let { engine ->
+            val cached = link
+            if (cached is EngineLink && cached.engine === engine) return cached
+            return EngineLink(engine).also { link = it }
+        }
+        return null
     }
 
     private var remoteEngine: MonitorEngine? = null
@@ -752,6 +763,7 @@ class MainActivity : AppCompatActivity() {
         // behind and an edit finds the stutter months later.
         val mbps = appSettings.recordMbps
         view.fields = appSettings.timecodeFields
+        view.modeLabel = appSettings.appMode.short
         view.modeLabel = when (appSettings.appMode) {
             AppMode.LOCAL -> "LOC"
             AppMode.REMOTE -> "REM"
@@ -871,7 +883,7 @@ class MainActivity : AppCompatActivity() {
         binding.paramBar.alpha = 0f
         binding.paramBar.animate().alpha(1f).setDuration(140).start()
         // Reaching for a fader means wanting the sensor, not the auto routine.
-        if (service?.controls?.supportsManualSensor() == true) manualExposure = true
+        if (activeLink()?.supportsManualSensor() == true) manualExposure = true
         showParam()
     }
 
@@ -958,7 +970,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Never longer than one frame interval, whatever the sensor claims. */
     private fun shutterRange(): Pair<Long, Long>? {
-        val sensor = service?.controls?.exposureTimeRange() ?: return null
+        val sensor = activeLink()?.exposureRange() ?: return null
         return Mechanism.shutterRangeForFps(activeProfile?.fps ?: 25, sensor.lower, sensor.upper)
     }
 
@@ -1300,6 +1312,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onVerticalMoved(which: Mechanism.Param, progress: Int) {
+        // Moving a fader is the request. It used to be ignored unless manual
+        // had already been switched on somewhere else, so the panel worked
+        // after pressing A or opening the single fader bar and did nothing at
+        // all otherwise, which is why the controls seemed to come and go.
+        val controls = service?.controls
+        when (which) {
+            Mechanism.Param.ISO, Mechanism.Param.SHUTTER ->
+                if (controls?.supportsManualSensor() == true) manualExposure = true
+            Mechanism.Param.WHITE_BALANCE -> manualWhiteBalance = true
+            Mechanism.Param.ZOOM -> Unit
+        }
+
         when (which) {
             Mechanism.Param.ISO -> { isoProgress = progress; pushExposure() }
             Mechanism.Param.SHUTTER -> { shutterProgress = progress; pushExposure() }
@@ -1318,7 +1342,12 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         // Locally this shifts the camera's own measurement
                         // rather than substituting a textbook answer for it.
-                        service?.controls?.nudgeWhiteBalanceTo(kelvin)
+                        // Nudging the camera's own measurement only exists on
+                        // the eight bit controls; the engine sets the gains
+                        // directly, which reaches the same place.
+                        val local = service?.controls
+                        if (local != null) local.nudgeWhiteBalanceTo(kelvin)
+                        else active?.setManualWhiteBalance(kelvin)
                     }
                 }
             }
@@ -1476,7 +1505,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pushFocus() {
-        if (!manualFocus) return
+        // Same rule: reaching for the focus fader is the request for manual.
+        manualFocus = true
         activeLink()?.setFocusFraction(focusProgress / 100f)
     }
 
@@ -1988,7 +2018,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (!DeviceProfile.logCapable) return
+        // Either pipeline, since only one of the two exists at a time.
         service?.controls?.setLogCurve(curve)
+        service?.engineControls?.setLogCurve(curve)
     }
 
     private fun applyGrade() {
@@ -2128,7 +2160,7 @@ class MainActivity : AppCompatActivity() {
             remoteEngine?.stop()
             remoteEngine = null
             binding.remoteBorder.visibility = View.GONE
-            service?.controls?.let { link = LocalLink(it) }
+            link = null; activeLink()
             applyModeToInterface(mode)
             return
         }
