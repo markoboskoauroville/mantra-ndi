@@ -120,6 +120,7 @@ object CubeLut {
         val values = ArrayList<Float>(SIZE * SIZE * SIZE * 3)
         var domainMin = 0f
         var domainMax = 1f
+        var title = ""
 
         stream.bufferedReader().forEachLine { raw ->
             val line = raw.substringBefore('#').trim()
@@ -129,7 +130,8 @@ object CubeLut {
                 "LUT_3D_SIZE" -> size = parts.getOrNull(1)?.toIntOrNull() ?: 0
                 "DOMAIN_MIN" -> domainMin = parts.getOrNull(1)?.toFloatOrNull() ?: 0f
                 "DOMAIN_MAX" -> domainMax = parts.getOrNull(1)?.toFloatOrNull() ?: 1f
-                "TITLE", "LUT_1D_SIZE", "LUT_IN_VIDEO_RANGE" -> Unit
+                "TITLE" -> title = line.substringAfter("TITLE").trim().trim('"')
+                "LUT_1D_SIZE", "LUT_IN_VIDEO_RANGE" -> Unit
                 else -> {
                     if (parts.size >= 3) {
                         val r = parts[0].toFloatOrNull()
