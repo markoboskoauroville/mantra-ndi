@@ -132,6 +132,22 @@ class AppSettings(context: Context) {
             ?: Timecode.Rate.FPS_25
         set(value) = prefs.edit().putString(KEY_LTC_RATE, value.name).apply()
 
+    /**
+     * Hold the screen awake on the camera screen.
+     *
+     * On by default, because a camera that sleeps mid take is not a camera.
+     * It is still a setting, since a phone left monitoring on a shelf for an
+     * hour would rather not cook itself.
+     */
+    var keepScreenOn: Boolean
+        get() = prefs.getBoolean(KEY_KEEP_AWAKE, true)
+        set(value) = prefs.edit().putBoolean(KEY_KEEP_AWAKE, value).apply()
+
+    /** Whether the battery prompt has been shown, so it is asked once, not nagged. */
+    var batteryAsked: Boolean
+        get() = prefs.getBoolean(KEY_BATTERY_ASKED, false)
+        set(value) = prefs.edit().putBoolean(KEY_BATTERY_ASKED, value).apply()
+
     /** Listen for a Tentacle and show its timecode. */
     var timecodeEnabled: Boolean
         get() = prefs.getBoolean(KEY_TIMECODE, false)
@@ -156,6 +172,8 @@ class AppSettings(context: Context) {
         const val KEY_TIMECODE = "timecode"
         const val KEY_LTC_ROLE = "ltc_role"
         const val KEY_LTC_RATE = "ltc_rate"
+        const val KEY_KEEP_AWAKE = "keep_awake"
+        const val KEY_BATTERY_ASKED = "battery_asked"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
         const val KEY_REMOTE = "remote_mode"

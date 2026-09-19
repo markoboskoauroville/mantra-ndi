@@ -116,10 +116,12 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        binding.rowScreen.setOnClickListener { manageScreenAndBattery() }
         binding.rowTimecode.setOnClickListener { manageTimecode() }
         binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
         binding.rowWaveform.setOnClickListener { pickWaveform() }
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
+        binding.rowScreen.setOnClickListener { manageScreenAndBattery() }
         binding.rowTimecode.setOnClickListener { manageTimecode() }
         binding.rowProfile.setOnClickListener { pickProfile() }
         binding.rowSourceName.setOnClickListener { editSourceName() }
@@ -210,6 +212,7 @@ class SettingsActivity : AppCompatActivity() {
             binding.rowCamera to system,
             binding.rowDetect to system,
             binding.rowNetwork to system,
+            binding.rowScreen to system,
             binding.rowTimecode to system,
             binding.rowKeys to system,
             binding.rowAbout to system
@@ -346,6 +349,39 @@ class SettingsActivity : AppCompatActivity() {
      * because the byte layout is not published: if a device is heard and not
      * understood, the bytes are the thing that fixes it.
      */
+    /**
+     * The two things that stop a long take: the screen sleeping, and Android
+     * deciding a phone that nobody is touching has nothing to do.
+     */
+    private fun manageScreenAndBattery() {
+        val exempt = PowerPolicy.isExempt(this)
+        choose(
+            "Screen and battery",
+            listOf(
+                if (prefs.keepScreenOn) "Let the screen sleep" else "Keep the screen on",
+                if (exempt) "Battery already unrestricted" else "Stop Android throttling this app"
+            )
+        ) { index ->
+            when (index) {
+                0 -> {
+                    prefs.keepScreenOn = !prefs.keepScreenOn
+                    refresh()
+                }
+                1 -> {
+                    if (exempt) {
+                        toast("Already unrestricted")
+                    } else if (!PowerPolicy.requestExemption(this)) {
+                        // Some builds suppress the dialog, so send them to the
+                        // list rather than leaving a button that did nothing.
+                        PowerPolicy.openBatterySettings(this)
+                        toast("Find Mantra NDI in the list and allow it")
+                    }
+                    prefs.batteryAsked = true
+                }
+            }
+        }
+    }
+
     private fun manageTimecode() {
         AlertDialog.Builder(this)
             .setTitle("Timecode")

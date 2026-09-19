@@ -118,6 +118,11 @@
                 <TextView android:id="@+id/valueWaveform" style="@style/MantraSettingsValue" />
             </LinearLayout>
 
+            <LinearLayout android:id="@+id/rowScreen" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Screen and battery" />
+                <TextView android:id="@+id/valueScreen" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
             <LinearLayout android:id="@+id/rowTimecode" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Timecode" />
                 <TextView android:id="@+id/valueTimecode" style="@style/MantraSettingsValue" />

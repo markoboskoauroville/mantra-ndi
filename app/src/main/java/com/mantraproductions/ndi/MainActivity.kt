@@ -263,6 +263,8 @@ class MainActivity : AppCompatActivity() {
             applyCameraSource()
         }
         applyLogCurve()
+        applyScreenPolicy()
+        offerBatteryExemptionOnce()
         // Settings may have changed the profile while we were away.
         val picked = profileStore.selected()
         if (picked.name != activeProfile?.name) {
@@ -1371,6 +1373,47 @@ class MainActivity : AppCompatActivity() {
      * image stayed exactly as it was. Nothing anywhere corrects log back to
      * Rec.709; the flat picture simply never arrived.
      */
+    /**
+     * A camera that sleeps mid take is not a camera, so the flag rather than a
+     * wake lock: it applies to this window only and goes when the window does,
+     * which is what a wake lock so often fails to do.
+     */
+    private fun applyScreenPolicy() {
+        if (appSettings.keepScreenOn) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    /**
+     * Asked once, on the screen where it matters, and never again.
+     *
+     * Android stops work for apps it thinks are idle, and a phone streaming
+     * from a shelf looks exactly like an idle one: screen off, nobody touching
+     * it. The stream stops and the operator hears about it from the mixer.
+     */
+    private fun offerBatteryExemptionOnce() {
+        if (!PowerPolicy.shouldAsk(this, appSettings)) return
+        appSettings.batteryAsked = true
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Let this app keep running")
+            .setMessage(
+                "Android stops background work for apps it decides are idle, and " +
+                    "a phone streaming from a shelf looks idle to it. Allowing " +
+                    "unrestricted battery use keeps a stream or a recording alive " +
+                    "when the screen goes off.\n\nYou can change this later in " +
+                    "Settings, under System."
+            )
+            .setPositiveButton("Allow") { _, _ ->
+                if (!PowerPolicy.requestExemption(this)) {
+                    PowerPolicy.openBatterySettings(this)
+                }
+            }
+            .setNegativeButton("Not now", null)
+            .show()
+    }
+
     private fun applyLogCurve() {
         val curve = appSettings.logCurve
         val active = link
