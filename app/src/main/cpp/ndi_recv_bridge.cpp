@@ -62,6 +62,29 @@ Java_com_mantraproductions_ndi_NdiFinder_nativeStart(JNIEnv*, jobject) {
     return JNI_TRUE;
 }
 
+/**
+ * Tells the source it is being watched.
+ *
+ * NDI tally flows backwards: a receiver declares whether it has this source on
+ * programme or on preview, and the sender adds up everyone watching. Without
+ * this a camera has no way to know a monitor has opened it, which is exactly
+ * the light an operator needs: yellow for somebody is looking, red for on air.
+ *
+ * A monitor declares preview rather than programme, because opening a picture
+ * to look at it is not the same as cutting to it, and a camera operator who
+ * cannot tell those apart will eventually walk in front of a live camera.
+ */
+extern "C" JNIEXPORT void JNICALL
+Java_com_mantraproductions_ndi_NdiReceiver_nativeSetTally(
+        JNIEnv*, jobject, jboolean onProgram, jboolean onPreview) {
+    std::lock_guard<std::mutex> lock(g_recv_mutex);
+    if (!g_recv) return;
+    NDIlib_tally_t tally;
+    tally.on_program = onProgram == JNI_TRUE;
+    tally.on_preview = onPreview == JNI_TRUE;
+    NDIlib_recv_set_tally(g_recv, &tally);
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_mantraproductions_ndi_NdiFinder_nativeStop(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(g_find_mutex);

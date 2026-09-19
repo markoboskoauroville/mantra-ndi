@@ -116,6 +116,8 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        binding.rowLens.setOnClickListener { pickLens() }
+        binding.rowRecording.setOnClickListener { pickRecording() }
         binding.rowScreen.setOnClickListener { manageScreenAndBattery() }
         binding.rowTimecode.setOnClickListener { manageTimecode() }
         binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
@@ -183,6 +185,8 @@ class SettingsActivity : AppCompatActivity() {
 
         return mapOf(
             // This phone's own camera and what it announces itself as.
+            binding.rowLens to local,
+            binding.rowRecording to local,
             binding.rowProfile to local,
             binding.rowSourceName to local,
             binding.rowBitDepth to local,
@@ -401,6 +405,41 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Every camera the phone really has, not just the first in the list.
+     *
+     * Modern phones carry a main, an ultra wide, a telephoto and often a fused
+     * logical camera, and which of those sits at index zero is up to the
+     * vendor. Depth and infrared sensors are left out: they appear in the same
+     * list and produce nothing an operator would call a shot.
+     */
+    private fun pickLens() {
+        val lenses = CameraCatalogue.lenses(this)
+        if (lenses.isEmpty()) {
+            toast("No usable cameras found")
+            return
+        }
+        val labels = listOf("Chosen by the phone") +
+            lenses.map { it.label + "   " + it.maxResolution }
+        choose("Lens", labels) { index ->
+            prefs.selectedCameraId = if (index == 0) null else lenses[index - 1].id
+            refresh()
+            toast("Reopen the camera screen to switch")
+        }
+    }
+
+    /**
+     * Two numbers, because those are the two that change a recording: how big
+     * the picture is, and how much data is spent on it.
+     */
+    private fun pickRecording() {
+        val rates = listOf(8, 16, 25, 40, 60, 100, 150)
+        choose("Recording bitrate", rates.map { it.toString() + " Mbps" }) { index ->
+            prefs.recordMbps = rates[index]
+            refresh()
         }
     }
 

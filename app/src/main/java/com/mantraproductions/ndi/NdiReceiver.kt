@@ -39,6 +39,21 @@ object NdiReceiver {
     fun sendCommand(command: CameraCommand): Boolean =
         if (available) nativeSendMetadata(command.toXml()) else false
 
+    /**
+     * Declares to the source that this receiver is watching it.
+     *
+     * Tally flows backwards in NDI: the receiver says whether it holds the
+     * source on programme or on preview, and the sender adds up everyone
+     * looking. A monitor declares preview, never programme, because opening a
+     * picture to look at it is not cutting to it, and an operator who cannot
+     * tell those apart will eventually walk in front of a live camera.
+     */
+    fun setTally(onProgram: Boolean, onPreview: Boolean) {
+        if (available) nativeSetTally(onProgram, onPreview)
+    }
+
+    private external fun nativeSetTally(onProgram: Boolean, onPreview: Boolean)
+
     private external fun nativeSendMetadata(xml: String): Boolean
     private external fun nativeConnect(sourceName: String): Boolean
     private external fun nativeDisconnect()

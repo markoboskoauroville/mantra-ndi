@@ -179,7 +179,11 @@ class MainActivity : AppCompatActivity() {
                 service?.attachPreview(binding.preview)
             }
 
-            override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) {}
+            override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) {
+                // Rotating the phone resizes the view and not the buffer, so
+                // without this the picture is stretched from here on.
+                applyPreviewTransform()
+            }
 
             override fun onSurfaceTextureDestroyed(t: SurfaceTexture): Boolean {
                 surfaceReady = false
@@ -265,6 +269,9 @@ class MainActivity : AppCompatActivity() {
         }
         applyLogCurve()
         applyScreenPolicy()
+        // Coming back from the background resizes the view without touching
+        // the buffer, which is the other half of the stretch.
+        binding.preview.post { applyPreviewTransform() }
         offerBatteryExemptionOnce()
         // Settings may have changed the profile while we were away.
         val picked = profileStore.selected()
@@ -1497,6 +1504,46 @@ class MainActivity : AppCompatActivity() {
      * wake lock: it applies to this window only and goes when the window does,
      * which is what a wake lock so often fails to do.
      */
+    /**
+     * Keeps the picture the shape it was shot.
+     *
+     * A TextureView stretches its buffer to its own bounds and asks nobody.
+     * Rotate the phone, or send the app away and bring it back, and the view
+     * is resized while the buffer is not, so the picture is stretched and
+     * stays stretched because nothing recalculates it. This runs on every
+     * event that can change either one.
+     */
+    private fun applyPreviewTransform() {
+        val view = binding.preview
+        if (view.width <= 0 || view.height <= 0) return
+
+        val size = currentVideoSize() ?: return
+        val scale = Mechanism.previewTransform(
+            view.width, view.height, size.first, size.second, fill = false
+        )
+
+        val matrix = android.graphics.Matrix()
+        matrix.setScale(scale[0], scale[1], view.width / 2f, view.height / 2f)
+        view.setTransform(matrix)
+    }
+
+    /** What is actually filling the preview, whichever mode this is. */
+    private fun currentVideoSize(): Pair<Int, Int>? {
+        remoteEngine?.let { engine ->
+            val w = engine.lastWidth
+            val h = engine.lastHeight
+            if (w > 0 && h > 0) return w to h
+        }
+        val profile = activeProfile ?: return null
+        // A portrait view of a landscape sensor is the usual case, and the
+        // sensor's numbers are always given the long way round.
+        return if (binding.preview.height > binding.preview.width) {
+            profile.height to profile.width
+        } else {
+            profile.width to profile.height
+        }
+    }
+
     private fun applyScreenPolicy() {
         if (appSettings.keepScreenOn) {
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

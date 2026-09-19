@@ -139,6 +139,15 @@ class AppSettings(context: Context) {
      * It is still a setting, since a phone left monitoring on a shelf for an
      * hour would rather not cook itself.
      */
+    var selectedCameraId: String?
+        get() = prefs.getString(KEY_CAMERA_ID, null)
+        set(value) = prefs.edit().putString(KEY_CAMERA_ID, value).apply()
+
+    /** Recording bitrate in megabits per second. */
+    var recordMbps: Int
+        get() = prefs.getInt(KEY_RECORD_MBPS, 40)
+        set(value) = prefs.edit().putInt(KEY_RECORD_MBPS, value.coerceIn(4, 200)).apply()
+
     var showTimecode: Boolean
         get() = prefs.getBoolean(KEY_SHOW_TC, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_TC, value).apply()
@@ -202,6 +211,10 @@ class AppSettings(context: Context) {
         const val KEY_KEEP_AWAKE = "keep_awake"
         const val KEY_TC_SIZE = "timecode_size"
         const val KEY_SHOW_TC = "show_timecode"
+        const val KEY_CAMERA_ID = "camera_id"
+        const val KEY_RECORD_MBPS = "record_mbps"
+        const val KEY_CAMERA_ID = "camera_id"
+        const val KEY_RECORD_MBPS = "record_mbps"
         const val KEY_BATTERY_ASKED = "battery_asked"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"

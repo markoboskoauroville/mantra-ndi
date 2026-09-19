@@ -62,6 +62,12 @@ class MonitorEngine(
     @Volatile var lastTimecode100ns = 0L
         private set
 
+    /** The size of the picture arriving, so the view can be shaped to it. */
+    @Volatile var lastWidth = 0
+        private set
+    @Volatile var lastHeight = 0
+        private set
+
     /**
      * Whether anything has arrived recently enough to still be on screen.
      * A surface keeps its last frame forever, so silence has to be measured
@@ -76,6 +82,11 @@ class MonitorEngine(
     }
 
     fun stop() {
+        // Stop claiming to watch something we are no longer watching, or the
+        // camera keeps its yellow border after every monitor has gone.
+        runCatching { NdiReceiver.setTally(onProgram = false, onPreview = true) }
+        runCatching { NdiReceiver.setTally(onProgram = false, onPreview = false) }
+
         running.set(false)
         worker?.join(2000)
         worker = null
@@ -91,6 +102,9 @@ class MonitorEngine(
         var framesSeen = 0L
         var warnedUnsupported = false
 
+        // Watching counts as preview. The source shows yellow for this.
+        NdiReceiver.setTally(onProgram = false, onPreview = true)
+
         while (running.get()) {
             buffer.clear()
             when (NdiReceiver.capture(buffer, info, timeoutMs = 1000)) {
@@ -103,6 +117,10 @@ class MonitorEngine(
                     val width = info[4].toInt()
                     val height = info[5].toInt()
                     lastTimecode100ns = info[6]
+                    if (width > 0 && height > 0) {
+                        lastWidth = width
+                        lastHeight = height
+                    }
 
                     if (codec == null || width != configuredWidth ||
                         height != configuredHeight || isHevc != configuredHevc

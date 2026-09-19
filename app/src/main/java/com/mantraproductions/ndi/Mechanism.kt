@@ -618,6 +618,49 @@ object Mechanism {
         return out
     }
 
+    // --- fitting a picture into a view ----------------------------------------
+
+    /**
+     * Scale factors that fit a picture inside a view without distorting it.
+     *
+     * A TextureView stretches its buffer to its own bounds and asks nobody,
+     * which is why a picture goes wrong the moment the two stop agreeing:
+     * rotate the phone, or send the app away and bring it back, and the view
+     * is resized while the buffer is not. The picture is then stretched, and
+     * it stays stretched because nothing recalculates.
+     *
+     * The fix is a transform applied every time either one changes. These are
+     * the two numbers that transform needs.
+     *
+     * @param fill true to cover the view and crop the overflow, false to fit
+     *             the whole picture and leave bars
+     * @return scaleX and scaleY about the view's centre
+     */
+    fun previewTransform(
+        viewWidth: Int,
+        viewHeight: Int,
+        videoWidth: Int,
+        videoHeight: Int,
+        fill: Boolean = false
+    ): FloatArray {
+        if (viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) {
+            return floatArrayOf(1f, 1f)
+        }
+        val viewAspect = viewWidth.toFloat() / viewHeight
+        val videoAspect = videoWidth.toFloat() / videoHeight
+
+        // The view already draws the buffer stretched to its bounds, so these
+        // are corrections to that, not scales from the original size.
+        val wider = videoAspect > viewAspect
+        val correction = if (wider) videoAspect / viewAspect else viewAspect / videoAspect
+
+        return if (wider == fill) {
+            floatArrayOf(1f, correction)
+        } else {
+            floatArrayOf(correction, 1f)
+        }
+    }
+
     // --- how sharp the frame is, where it matters -----------------------------
 
     /**

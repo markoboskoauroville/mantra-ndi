@@ -56,6 +56,16 @@
         <!-- Capture -->
         <LinearLayout android:id="@+id/groupCapture" style="@style/MantraSettingsGroup">
 
+            <LinearLayout android:id="@+id/rowLens" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Lens" />
+                <TextView android:id="@+id/valueLens" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/rowRecording" style="@style/MantraSettingsRow">
+                <TextView style="@style/MantraSettingsTitle" android:text="Recording" />
+                <TextView android:id="@+id/valueRecording" style="@style/MantraSettingsValue" />
+            </LinearLayout>
+
             <LinearLayout android:id="@+id/rowProfile" style="@style/MantraSettingsRow">
                 <TextView style="@style/MantraSettingsTitle" android:text="Capture profile" />
                 <TextView android:id="@+id/valueProfile" style="@style/MantraSettingsValue" />
