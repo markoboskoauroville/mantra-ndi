@@ -477,6 +477,26 @@ class MainActivity : AppCompatActivity() {
      * often would only re-anchor to the same clock and add jitter from
      * whenever this happened to run.
      */
+    /**
+     * Whether there is anything on the wire, checked on the tick.
+     *
+     * A remote picture that stops does not clear itself: the last decoded
+     * frame stays on the surface and looks exactly like a working picture of a
+     * still scene. So the absence is measured and covered over, and the source
+     * name goes with it, because a name over a dead feed reads as a live one.
+     */
+    private fun refreshSignal() {
+        if (appSettings.appMode == AppMode.LOCAL) {
+            binding.noSignal.visibility = View.GONE
+            return
+        }
+        val engine = remoteEngine
+        val alive = engine != null && engine.hasRecentFrame()
+        binding.noSignal.expected = appSettings.remoteSource
+        binding.noSignal.visibility = if (alive) View.GONE else View.VISIBLE
+        binding.remoteBorder.visibility = if (alive) View.VISIBLE else View.GONE
+    }
+
     private fun pushTimecodeToNdi() {
         if (service?.isStreaming != true) return
         val now = android.os.SystemClock.elapsedRealtimeNanos()
@@ -492,6 +512,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var lastTimecodePushAt = 0L
+
+    private val MASTER_GREEN = android.graphics.Color.parseColor("#12C46A")
+    private val FOLLOW_WHITE = android.graphics.Color.parseColor("#F2F4F6")
+    private val INTERNAL_GREY = android.graphics.Color.parseColor("#8C99A6")
 
     /**
      * The clock, and what kind of clock it is.
