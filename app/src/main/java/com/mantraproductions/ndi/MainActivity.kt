@@ -654,7 +654,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         view.formatLine = activeProfile?.let { p ->
-            val curve = appSettings.logCurve.label
+            val curve = appSettings.logCurve.displayName
             val depth = if (appSettings.tenBitWanted && DeviceProfile.tenBitCapable) "10-bit"
                 else "8-bit"
             curve + "   " + p.width + "x" + p.height + "   " + p.fps + "p   " + depth
