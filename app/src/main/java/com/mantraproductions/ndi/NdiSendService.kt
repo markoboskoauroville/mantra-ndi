@@ -223,6 +223,7 @@ class NdiSendService : Service() {
         // stream sharing the recording encoder, which is what happened before
         // there was a choice.
         val settings = AppSettings(applicationContext)
+        pipeline.cameraId = settings.selectedCameraId
         pipeline.streamBitRate = settings.streamMbps * 1_000_000
         if (settings.streamHalfSize && settings.streamMbps > 0) {
             // Halved on both axes, so a quarter of the pixels. Any other

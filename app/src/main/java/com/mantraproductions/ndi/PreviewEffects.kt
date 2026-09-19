@@ -53,8 +53,41 @@ object PreviewEffects {
         uniform half threshold;
         uniform half3 peakTint;
 
+        // The trace, drawn in the same pass and the same coordinate space as
+        // the picture it describes.
+        uniform half useWave;
+        uniform half waveTop;      // where the trace starts, in pixels
+        uniform half waveHeight;
+        uniform half viewHeight;
+        uniform half waveLuma;
+        uniform half waveRed;
+        uniform half waveGreen;
+        uniform half waveBlue;
+
         half luma(half4 c) {
             return dot(c.rgb, half3(0.299, 0.587, 0.114));
+        }
+
+        // How much of this column sits at this brightness.
+        //
+        // Column x of the trace reads column x of the picture, which is the
+        // whole point of overlaying it: a part of the frame and its trace are
+        // at the same horizontal position by construction, with no scale to
+        // line up. Forty-eight samples down the column is enough to show the
+        // shape of a real image and cheap enough to run every frame.
+        half columnDensity(float2 coord, half level, half band, int channel) {
+            half hits = 0.0;
+            for (int i = 0; i < 48; i++) {
+                half t = (half(i) + 0.5) / 48.0;
+                half4 s = content.eval(float2(coord.x, t * viewHeight));
+                half v;
+                if (channel == 0) { v = s.r; }
+                else if (channel == 1) { v = s.g; }
+                else if (channel == 2) { v = s.b; }
+                else { v = dot(s.rgb, half3(0.299, 0.587, 0.114)); }
+                if (abs(v - level) < band) { hits += 1.0; }
+            }
+            return hits / 48.0;
         }
 
         half4 main(float2 coord) {
@@ -94,6 +127,37 @@ object PreviewEffects {
                 rgb = peakTint;
             }
 
+            if (useWave > 0.5 &&
+                coord.y >= waveTop && coord.y <= waveTop + waveHeight) {
+                // Black at the bottom of the trace, white at the top, which is
+                // the way every scope on a desk is drawn.
+                half level = 1.0 - (coord.y - waveTop) / waveHeight;
+                half band = 0.5 / 128.0;
+
+                half3 trace = half3(0.0);
+                if (waveLuma > 0.5) {
+                    half d = columnDensity(coord, level, band, 3);
+                    trace += half3(0.35, 1.0, 0.5) * sqrt(d) * 3.0;
+                }
+                if (waveRed > 0.5) {
+                    half d = columnDensity(coord, level, band, 0);
+                    trace += half3(1.0, 0.24, 0.24) * sqrt(d) * 3.0;
+                }
+                if (waveGreen > 0.5) {
+                    half d = columnDensity(coord, level, band, 1);
+                    trace += half3(0.24, 1.0, 0.35) * sqrt(d) * 3.0;
+                }
+                if (waveBlue > 0.5) {
+                    half d = columnDensity(coord, level, band, 2);
+                    trace += half3(0.31, 0.51, 1.0) * sqrt(d) * 3.0;
+                }
+
+                // Laid over a dimmed picture rather than a black box, so the
+                // shot is still readable underneath the trace.
+                half strength = clamp(max(trace.r, max(trace.g, trace.b)), 0.0, 1.0);
+                rgb = mix(rgb * 0.45, clamp(trace, 0.0, 1.0), strength);
+            }
+
             return half4(rgb, c.a);
         }
     """
@@ -130,7 +194,8 @@ object PreviewEffects {
         lut: Boolean,
         peak: Boolean,
         peakColour: PeakColour = PeakColour.RED,
-        sensitivity: Int = 50
+        sensitivity: Int = 50,
+        waveform: Set<Mechanism.WaveformChannel> = emptySet()
     ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return !lut && !peak
@@ -138,7 +203,8 @@ object PreviewEffects {
         return try {
             // Nothing to correct on a picture that is already Rec.709.
             val wantLut = lut && curve != LogCurves.Curve.REC709
-            if (!wantLut && !peak) {
+            val wantWave = waveform.isNotEmpty() && view.height > 0
+            if (!wantLut && !peak && !wantWave) {
                 view.setRenderEffect(null)
                 return true
             }
@@ -163,6 +229,26 @@ object PreviewEffects {
                 Color.green(peakColour.colour) / 255f,
                 Color.blue(peakColour.colour) / 255f
             )
+            // The trace occupies the lower third, which is where a scope sits
+            // on a monitor and where it hides least of the frame.
+            val height = view.height.toFloat()
+            shader.setFloatUniform("useWave", if (wantWave) 1f else 0f)
+            shader.setFloatUniform("waveTop", height * 0.66f)
+            shader.setFloatUniform("waveHeight", height * 0.32f)
+            shader.setFloatUniform("viewHeight", height)
+            shader.setFloatUniform(
+                "waveLuma", if (Mechanism.WaveformChannel.LUMA in waveform) 1f else 0f
+            )
+            shader.setFloatUniform(
+                "waveRed", if (Mechanism.WaveformChannel.RED in waveform) 1f else 0f
+            )
+            shader.setFloatUniform(
+                "waveGreen", if (Mechanism.WaveformChannel.GREEN in waveform) 1f else 0f
+            )
+            shader.setFloatUniform(
+                "waveBlue", if (Mechanism.WaveformChannel.BLUE in waveform) 1f else 0f
+            )
+
             view.setRenderEffect(
                 RenderEffect.createRuntimeShaderEffect(shader, "content")
             )

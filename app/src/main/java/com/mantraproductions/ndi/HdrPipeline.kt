@@ -51,6 +51,9 @@ class HdrPipeline(private val context: Context) {
     @Volatile var streamWidth: Int = 0
     @Volatile var streamHeight: Int = 0
 
+    /** Which physical camera to open. Null lets the phone decide. */
+    @Volatile var cameraId: String? = null
+
     private var streamVideo: HdrVideoEncoder? = null
         private set
 
@@ -182,7 +185,11 @@ class HdrPipeline(private val context: Context) {
         }
 
         engine.open(
-            cameraId = "0",
+            // The lens the operator picked, not whichever camera happens to be
+            // first. The picker has offered every real lens since v42 and this
+            // line was still opening camera zero, so choosing the ultra wide
+            // changed a stored value and nothing else.
+            cameraId = cameraId ?: "0",
             surfaces = targets,
             fps = profile.fps,
             wantTenBit = tenBit,

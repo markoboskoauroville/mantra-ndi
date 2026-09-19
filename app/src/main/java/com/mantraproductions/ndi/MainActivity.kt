@@ -1668,7 +1668,8 @@ class MainActivity : AppCompatActivity() {
         lut = appSettings.previewLut,
         peak = appSettings.focusPeaking,
         peakColour = appSettings.peakColour,
-        sensitivity = appSettings.peakSensitivity
+        sensitivity = appSettings.peakSensitivity,
+        waveform = appSettings.waveformChannels
     )
 
     private fun togglePeaking() {
@@ -2068,46 +2069,42 @@ class MainActivity : AppCompatActivity() {
      * roughly five screen pixels: finer than that is detail nobody reads off a
      * waveform, and coarser loses the alignment that makes it worth overlaying.
      */
+    /**
+     * The trace is drawn by the preview shader now, so this only keeps the
+     * sharpness reading that focus depends on.
+     *
+     * The waveform used to pull a bitmap off the preview every fifth of a
+     * second and count 130,000 pixels on the main thread. The shader does the
+     * same work in the pass that was already happening, and column for column
+     * by construction rather than by matching two scales: the trace samples
+     * column x of the picture at column x of itself, in one coordinate space.
+     */
     private fun refreshWaveform() {
-        // The same sampled frame feeds focus, so measuring sharpness costs
-        // nothing beyond the arithmetic.
-        wavePixels?.let { pixels ->
-            focusDirector.currentSharpness =
-                Mechanism.sharpness(pixels, 480, 270, binding.focusSquare.normalisedBounds())
-        }
-        focusDirector.holdMs = appSettings.focusHoldMs
-        focusDirector.rampMs = appSettings.focusRampMs
-
-        val channels = appSettings.waveformChannels
-        binding.waveform.visibility = if (channels.isEmpty()) View.GONE else View.VISIBLE
         if (!binding.preview.isAvailable) return
-
         val now = System.currentTimeMillis()
         if (now - lastWaveAt < 200) return
         lastWaveAt = now
 
+        // Focus still needs a real measurement, and it needs pixels to do it.
+        if (focusDirector.mode != FocusDirector.Mode.AUTO) return
+
         val bitmap = waveBitmap
-            ?: android.graphics.Bitmap.createBitmap(480, 270, android.graphics.Bitmap.Config.ARGB_8888)
-                .also { waveBitmap = it }
-        val pixels = wavePixels ?: IntArray(480 * 270).also { wavePixels = it }
+            ?: android.graphics.Bitmap.createBitmap(
+                240, 135, android.graphics.Bitmap.Config.ARGB_8888
+            ).also { waveBitmap = it }
+        val pixels = wavePixels ?: IntArray(240 * 135).also { wavePixels = it }
 
         try {
             binding.preview.getBitmap(bitmap) ?: return
-            bitmap.getPixels(pixels, 0, 480, 0, 0, 480, 270)
+            bitmap.getPixels(pixels, 0, 240, 0, 0, 240, 135)
         } catch (e: Exception) {
             return
         }
 
-        if (channels.isEmpty()) return
-        val traces = channels.associateWith { channel ->
-            // Twice the columns and twice the bins: 480 across is about one
-            // trace column per two screen pixels, which is as fine as the
-            // overlay can be read, and 256 bins is one per 10-bit code step
-            // divided by four rather than by eight.
-            Mechanism.waveform(pixels, 480, 270, bins = 256, channel = channel.index)
-        }
-        binding.waveform.channels = channels
-        binding.waveform.setTraces(traces, columns = 480, bins = 256)
+        focusDirector.currentSharpness =
+            Mechanism.sharpness(pixels, 240, 135, binding.focusSquare.normalisedBounds())
+        focusDirector.holdMs = appSettings.focusHoldMs
+        focusDirector.rampMs = appSettings.focusRampMs
     }
 
     private fun refreshVectorscope() {

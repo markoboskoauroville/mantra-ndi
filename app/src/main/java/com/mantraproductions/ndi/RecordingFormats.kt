@@ -28,10 +28,18 @@ import android.util.Size
  */
 object RecordingFormats {
 
-    /** How the file is written. */
+    /**
+     * How the file is written.
+     *
+     * MP4 only, and that is not a shortcut. Android's MediaMuxer writes
+     * MPEG-4, WebM, 3GPP, Ogg and HEIF, and no QuickTime at all, so a MOV
+     * option here would have been a menu entry that produced an MP4 with the
+     * wrong extension. MP4 and MOV are both derived from the same container,
+     * so every edit system reads what this writes; the difference would have
+     * been a lie about the file rather than a difference in the file.
+     */
     enum class Container(val label: String, val extension: String, val detail: String) {
-        MP4("MP4", "mp4", "Plays everywhere, smallest files"),
-        MOV("MOV", "mov", "QuickTime, what an edit expects")
+        MP4("MP4", "mp4", "Plays everywhere; the only container Android muxes")
     }
 
     /** What the picture is encoded as, in the words a camera menu uses. */
