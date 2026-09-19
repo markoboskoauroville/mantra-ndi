@@ -509,6 +509,19 @@ class MainActivity : AppCompatActivity() {
      * being in sync while not being in sync, and it is worth making it look
      * unfinished on purpose.
      */
+    /**
+     * The clock, and what kind of clock it is.
+     *
+     * A colour alone would be ambiguous, so there is a word under it as well.
+     * Green and MST is this phone generating the clock everything else follows.
+     * White and SYC is following somebody else's. Dim outline and INT is a
+     * free running internal count that nothing else knows about, which is
+     * useful for slating a single camera and misleading if mistaken for sync.
+     *
+     * The distinction matters most at exactly the moment it is easiest to get
+     * wrong: a follower that has lost its master keeps counting, and without
+     * this it looks identical to one still locked.
+     */
     private fun refreshTimecode() {
         if (!appSettings.showTimecode) {
             binding.timecodeText.visibility = View.GONE
@@ -517,7 +530,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         val nanos = android.os.SystemClock.elapsedRealtimeNanos()
-
         // A stamp on the incoming picture beats anything decoded separately:
         // it arrived attached to the frame, so it cannot have drifted from it.
         val fromStream = remoteEngine?.lastTimecode100ns
@@ -525,40 +537,47 @@ class MainActivity : AppCompatActivity() {
             ?.let { Timecode.from100ns(it, appSettings.ltcRate) }
 
         val isMaster = appSettings.ltcRole == LtcEngine.Role.MASTER
-        val ltc = ltcEngine.clock.now(nanos)
-        val following = fromStream ?: (if (!isMaster) ltc else null) ?: timecode.now()
-        val shown = if (isMaster) (ltc ?: timecode.now()) else following
+        val now = fromStream ?: ltcEngine.clock.now(nanos) ?: timecode.now()
 
         binding.timecodeText.visibility = View.VISIBLE
         binding.timecodeLabel.visibility = View.VISIBLE
-        binding.timecodeText.textSize = appSettings.timecodeSize.toFloat()
-        binding.timecodeLabel.textSize = (appSettings.timecodeSize * 0.55f).coerceAtLeast(8f)
+        binding.timecodeText.textSize = appSettings.timecodeTextSize.toFloat()
+        binding.timecodeLabel.textSize = (appSettings.timecodeTextSize * 0.55f)
+            .coerceAtLeast(8f)
 
-        val label: String
-        val colour: Int
-        when {
-            isMaster -> {
-                label = "MST"
-                colour = android.graphics.Color.parseColor("#12C46A")
-            }
-            following != null && (fromStream != null || ltcEngine.isLocked) -> {
-                label = "SYC"
-                colour = android.graphics.Color.WHITE
-            }
-            else -> {
-                label = "INT"
-                colour = android.graphics.Color.parseColor("#9AA6B2")
-            }
+        if (now == null) {
+            binding.timecodeText.text = "--:--:--:--"
+            binding.timecodeText.setTextColor(COLOUR_INTERNAL)
+            binding.timecodeText.alpha = 0.5f
+            binding.timecodeLabel.text = "INT"
+            binding.timecodeLabel.setTextColor(COLOUR_INTERNAL)
+            return
         }
 
-        binding.timecodeText.text = shown?.toString() ?: "--:--:--:--"
-        binding.timecodeText.setTextColor(colour)
-        binding.timecodeLabel.text = label
-        binding.timecodeLabel.setTextColor(colour)
-        // Internal is drawn faintly rather than solid: it is a clock that
-        // agrees with nothing else, and it should not look settled.
-        binding.timecodeText.alpha = if (label == "INT") 0.55f else 1f
-        binding.timecodeLabel.alpha = binding.timecodeText.alpha
+        binding.timecodeText.text = now.toString()
+        binding.timecodeText.alpha = 1f
+
+        when {
+            isMaster -> {
+                binding.timecodeText.setTextColor(COLOUR_MASTER)
+                binding.timecodeLabel.setTextColor(COLOUR_MASTER)
+                binding.timecodeLabel.text = "MST"
+            }
+
+            fromStream != null || ltcEngine.isLocked -> {
+                binding.timecodeText.setTextColor(COLOUR_FOLLOWING)
+                binding.timecodeLabel.setTextColor(COLOUR_FOLLOWING)
+                binding.timecodeLabel.text = "SYC"
+            }
+
+            else -> {
+                // Counting, but answering to nothing.
+                binding.timecodeText.setTextColor(COLOUR_INTERNAL)
+                binding.timecodeText.alpha = 0.6f
+                binding.timecodeLabel.setTextColor(COLOUR_INTERNAL)
+                binding.timecodeLabel.text = "INT"
+            }
+        }
     }
 
     private fun refreshSignal() {

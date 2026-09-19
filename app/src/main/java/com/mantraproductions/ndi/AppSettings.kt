@@ -154,6 +154,23 @@ class AppSettings(context: Context) {
         get() = prefs.getInt(KEY_TC_SIZE, 16)
         set(value) = prefs.edit().putInt(KEY_TC_SIZE, value.coerceIn(10, 48)).apply()
 
+    /** Whether the clock is drawn over the picture at all. */
+    var showTimecode: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_TC, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_TC, value).apply()
+
+    /**
+     * How large the clock is drawn, in sp.
+     *
+     * A setting rather than a constant because the right size depends on how
+     * far away the phone is: on a gimbal at arm's length it wants to be large,
+     * clamped to a monitor beside a viewfinder it wants to be small enough to
+     * stay out of the frame.
+     */
+    var timecodeTextSize: Int
+        get() = prefs.getInt(KEY_TC_SIZE, 16)
+        set(value) = prefs.edit().putInt(KEY_TC_SIZE, value.coerceIn(10, 48)).apply()
+
     var keepScreenOn: Boolean
         get() = prefs.getBoolean(KEY_KEEP_AWAKE, true)
         set(value) = prefs.edit().putBoolean(KEY_KEEP_AWAKE, value).apply()
@@ -188,6 +205,8 @@ class AppSettings(context: Context) {
         const val KEY_LTC_ROLE = "ltc_role"
         const val KEY_LTC_RATE = "ltc_rate"
         const val KEY_KEEP_AWAKE = "keep_awake"
+        const val KEY_SHOW_TC = "show_timecode"
+        const val KEY_TC_SIZE = "timecode_size"
         const val KEY_TC_SIZE = "timecode_size"
         const val KEY_SHOW_TC = "show_timecode"
         const val KEY_BATTERY_ASKED = "battery_asked"
