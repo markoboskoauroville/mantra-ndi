@@ -72,6 +72,14 @@ class TimecodeView @JvmOverloads constructor(
     var sourceName: String = ""
         set(value) { if (field != value) { field = value; invalidate() } }
 
+    /**
+     * LOC, REM or MON. Three letters on the same line as everything else,
+     * because it was being written across the picture as a word and there is
+     * room for it here.
+     */
+    var modeLabel: String = ""
+        set(value) { if (field != value) { field = value; invalidate() } }
+
     var status: Status = Status.IDLE
         set(value) { if (field != value) { field = value; invalidate() } }
 
@@ -117,6 +125,7 @@ class TimecodeView @JvmOverloads constructor(
     /** Left of the number: where the clock is and where it came from. */
     private fun leftFields(): List<Pair<String, Int>> {
         val out = mutableListOf<Pair<String, Int>>()
+        if (modeLabel.isNotEmpty()) out += modeLabel to Color.parseColor("#E7A44C")
         if (Field.TIMECODE in fields) out += ("TC " + timecode) to sync.colour
         if (Field.SYNC in fields) out += sync.label to sync.colour
         if (Field.SOURCE in fields && sourceName.isNotEmpty()) {

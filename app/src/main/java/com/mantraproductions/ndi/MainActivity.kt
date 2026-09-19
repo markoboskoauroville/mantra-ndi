@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
     /** The gains a drag started from, held for the length of that drag. */
     private var balanceBase: FloatArray? = null
     private var lastAppliedMode: AppMode? = null
+    private var lastAppliedTenBit: Boolean? = null
 
     /** Timecode over audio: this phone either makes it, follows it, or neither. */
     private val ltcEngine = LtcEngine()
@@ -92,6 +93,28 @@ class MainActivity : AppCompatActivity() {
      * screen knows the difference.
      */
     private var link: CameraLink? = null
+
+    /**
+     * The camera being driven, resolved now rather than remembered.
+     *
+     * This is why the faders did nothing, intermittently, for many versions.
+     * The link was built once inside applyCameraSource and only if the
+     * pipeline's controls already existed. When the camera had not finished
+     * opening at that moment it stayed null, and every fader, every stepper
+     * and every A button returned early for the rest of the session. Whether
+     * it worked came down to which of two things finished first.
+     *
+     * A remote link is a real object with state, so it is kept. A local one is
+     * a thin wrapper over controls that may be replaced at any time, so it is
+     * made on demand and never cached.
+     */
+    private fun activeLink(): CameraLink? {
+        link?.let { if (it.isRemote) return it }
+        val controls = service?.controls ?: return null
+        val local = link as? LocalLink
+        if (local != null && local.controls === controls) return local
+        return LocalLink(controls).also { link = it }
+    }
     private var remoteEngine: MonitorEngine? = null
     private val ui = Handler(Looper.getMainLooper())
     private val clearStatus = Runnable { binding.statusText.text = defaultStatus() }
@@ -254,7 +277,15 @@ class MainActivity : AppCompatActivity() {
         binding.focusSquare.boxSize = appSettings.focusBoxSize
         // A mode change in settings takes effect here, including handing the
         // preview from the camera to the decoder or back.
-        if (appSettings.appMode != lastAppliedMode) {
+        // The bit depth decides the whole capture session: a ten bit pipeline
+        // is a different encoder, a different colour space and different
+        // OutputConfigurations. Changing it without rebuilding left the old
+        // session running against the new settings, which is the frozen
+        // picture, and the stretch afterwards was the transform still sized
+        // for the session that had gone.
+        val depthNow = appSettings.tenBitWanted
+        if (appSettings.appMode != lastAppliedMode || depthNow != lastAppliedTenBit) {
+            lastAppliedTenBit = depthNow
             // Modes are separate programs that happen to share a screen. Half
             // of one left running underneath the other is what produced a
             // local camera showing black: the decoder still held the surface
@@ -272,7 +303,12 @@ class MainActivity : AppCompatActivity() {
         refreshLutButton()
         // Coming back from the background resizes the view without touching
         // the buffer, which is the other half of the stretch.
-        binding.preview.post { applyPreviewTransform() }
+        // Three times, spread out: the buffer size changes when the session
+        // starts, not when it is asked for, and one post lands too early on a
+        // cold camera.
+        listOf(0L, 600L, 1500L).forEach { delay ->
+            binding.preview.postDelayed({ applyPreviewTransform() }, delay)
+        }
         offerBatteryExemptionOnce()
         // Settings may have changed the profile while we were away.
         val picked = profileStore.selected()
@@ -319,6 +355,35 @@ class MainActivity : AppCompatActivity() {
      * flag that changes it, so the record shortcut lives on a long press of
      * the volume rocker instead, which is the closest key the platform allows.
      */
+    private var rockerRunnable: Runnable? = null
+
+    private fun startRockerRepeat(direction: Int) {
+        if (rockerRunnable != null) return
+        val runnable = object : Runnable {
+            override fun run() {
+                handleRocker(direction, 0)
+                ui.postDelayed(this, 110)
+            }
+        }
+        rockerRunnable = runnable
+        ui.post(runnable)
+    }
+
+    private fun stopRockerRepeat() {
+        rockerRunnable?.let { ui.removeCallbacks(it) }
+        rockerRunnable = null
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+            keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        ) {
+            stopRockerRepeat()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val direction = when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> +1
@@ -330,13 +395,30 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
+    /**
+     * The rocker, held as well as pressed.
+     *
+     * Every repeat past the first moves the value, which is the whole point of
+     * a rocker: a stop of exposure is many steps and tapping forty times is
+     * not a control. Android's own repeats arrive at the system key rate,
+     * which is slower than anybody wants here, so they are only the trigger.
+     * The pacing is ours: one step every 110ms once a hold has settled.
+     *
+     * Three repeats still means record, so a take starts without looking at
+     * the screen. That is checked before the hold begins, so a deliberate hold
+     * to record does not also run the value away.
+     */
     private fun handleRocker(direction: Int, repeatCount: Int) {
-        // Held down: record, so a take can start without looking at the screen.
         if (repeatCount == 3) {
+            stopRockerRepeat()
             toggleRecording()
             return
         }
-        if (repeatCount > 0) return
+        if (repeatCount in 1..3) return
+        if (repeatCount > 3) {
+            startRockerRepeat(direction)
+            return
+        }
 
         when {
             binding.verticalPanel.visibility == View.VISIBLE -> nudgeFocusedColumn(direction)
@@ -663,6 +745,12 @@ class MainActivity : AppCompatActivity() {
         // behind and an edit finds the stutter months later.
         val mbps = appSettings.recordMbps
         view.fields = appSettings.timecodeFields
+        view.modeLabel = when (appSettings.appMode) {
+            AppMode.LOCAL -> "LOC"
+            AppMode.REMOTE -> "REM"
+            AppMode.MONITOR -> "MON"
+            AppMode.SYSTEM -> ""
+        }
         view.healthLine = RecordingHealth.summary(mbps)
         view.healthLevel = maxOf(
             RecordingHealth.spaceLevel(RecordingHealth.secondsRemaining(mbps)),
@@ -888,7 +976,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun pushExposure() {
         if (!manualExposure) return
-        val active = link ?: return
+        val active = activeLink() ?: return
         val isoRange = active.isoRange() ?: return
         val range = shutterRange() ?: return
         val iso = (isoRange.lower + isoProgress).coerceIn(isoRange.lower, isoRange.upper)
@@ -909,7 +997,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pushZoom(progress: Int) {
-        val active = link ?: return
+        val active = activeLink() ?: return
         val range = active.zoomRange() ?: return
         val ratio = range.lower + (progress / 100f) * (range.upper - range.lower)
         if (active.isRemote) active.setZoom(ratio) else pump.setZoom(ratio)
@@ -1217,7 +1305,7 @@ class MainActivity : AppCompatActivity() {
                     if (snapped != asked) Mechanism.progressForKelvin(snapped, 100) else progress
                 if (manualWhiteBalance) {
                     val kelvin = Mechanism.kelvinFromProgress(kelvinProgress, 100)
-                    val active = link
+                    val active = activeLink()
                     if (active?.isRemote == true) {
                         active.setManualWhiteBalance(kelvin)
                     } else {
@@ -1382,7 +1470,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun pushFocus() {
         if (!manualFocus) return
-        link?.setFocusFraction(focusProgress / 100f)
+        activeLink()?.setFocusFraction(focusProgress / 100f)
     }
 
     // --- live actions -------------------------------------------------------
@@ -1863,7 +1951,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyLogCurve() {
         val curve = appSettings.logCurve
-        val active = link
+        val active = activeLink()
         if (active?.isRemote == true) {
             (active as? RemoteLink)?.setLogCurve(curve)
             return
@@ -1998,7 +2086,8 @@ class MainActivity : AppCompatActivity() {
         binding.remoteBorder.visibility = View.GONE
         binding.noSignal.visibility = View.GONE
         binding.tallyBorder.state = TallyBorderView.State.OFF
-        say(appSettings.appMode.label, transient = false)
+        // The mode lives on the status line now; announcing it across the
+        // picture as well was the overlap.
     }
 
     private fun applyCameraSource() {

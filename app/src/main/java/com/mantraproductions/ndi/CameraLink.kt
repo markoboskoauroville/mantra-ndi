@@ -48,7 +48,7 @@ interface CameraLink {
 }
 
 /** The sensor in this phone. */
-class LocalLink(private val controls: ProControls) : CameraLink {
+class LocalLink(val controls: ProControls) : CameraLink {
 
     override val isRemote = false
     override val label = ""
