@@ -95,6 +95,28 @@ class MainActivity : AppCompatActivity() {
     private var link: CameraLink? = null
 
     /**
+     * The camera being driven, worked out now rather than remembered.
+     *
+     * This is why the manual controls kept not working. The link was cached
+     * when the mode was applied, and in local mode that happens before the
+     * pipeline exists, so `service.controls` was null and no link was ever
+     * built. Every fader then returned early and moved nothing. It worked
+     * whenever the ordering happened to come out the other way, which is worse
+     * than never working, because it looks like a flaky camera rather than a
+     * bug.
+     *
+     * Asked for on each use, so it cannot be stale.
+     */
+    private fun activeLink(): CameraLink? {
+        val remote = link as? RemoteLink
+        if (remote != null && appSettings.appMode == AppMode.REMOTE) return remote
+        val controls = service?.controls ?: return null
+        val cached = link
+        if (cached is LocalLink && cached.controls === controls) return cached
+        return LocalLink(controls).also { link = it }
+    }
+
+    /**
      * The camera being driven, resolved now rather than remembered.
      *
      * This is why the faders did nothing, intermittently, for many versions.
@@ -357,16 +379,29 @@ class MainActivity : AppCompatActivity() {
      */
     private var rockerRunnable: Runnable? = null
 
+    /**
+     * Repeats on our own timer rather than on Android's.
+     *
+     * The repeat used to wait for the platform's key repeat count to pass
+     * three, and the platform does not always send repeats at all, so on some
+     * phones holding the rocker did exactly one step and then nothing. Worse,
+     * count three toggled recording, so a hold that did register started a
+     * take instead of moving the value.
+     *
+     * A third of a second before it starts, so a deliberate single press is
+     * still a single step, then nine steps a second, which crosses a stop of
+     * exposure in about the time a hand expects it to.
+     */
     private fun startRockerRepeat(direction: Int) {
         if (rockerRunnable != null) return
         val runnable = object : Runnable {
             override fun run() {
-                handleRocker(direction, 0)
-                ui.postDelayed(this, 110)
+                nudgeRocker(direction)
+                ui.postDelayed(this, 111)
             }
         }
         rockerRunnable = runnable
-        ui.post(runnable)
+        ui.postDelayed(runnable, 340)
     }
 
     private fun stopRockerRepeat() {
@@ -409,17 +444,13 @@ class MainActivity : AppCompatActivity() {
      * to record does not also run the value away.
      */
     private fun handleRocker(direction: Int, repeatCount: Int) {
-        if (repeatCount == 3) {
-            stopRockerRepeat()
-            toggleRecording()
-            return
-        }
-        if (repeatCount in 1..3) return
-        if (repeatCount > 3) {
-            startRockerRepeat(direction)
-            return
-        }
+        // Only the first press is acted on here; the hold is our own timer.
+        if (repeatCount > 0) return
+        nudgeRocker(direction)
+        startRockerRepeat(direction)
+    }
 
+    private fun nudgeRocker(direction: Int) {
         when {
             binding.verticalPanel.visibility == View.VISIBLE -> nudgeFocusedColumn(direction)
             binding.paramBar.visibility == View.VISIBLE -> binding.paramFader.let { fader ->
@@ -1769,6 +1800,29 @@ class MainActivity : AppCompatActivity() {
      * Both effects go on in one call, because a View has one render effect and
      * two features that each set their own would silently cancel each other.
      */
+    private var loadedLutCurve: LogCurves.Curve? = null
+    private var loadedLut: CubeLut.Table? = null
+
+    /**
+     * The cube for the curve in use, read once and kept until the curve
+     * changes. Parsing 35,937 triples on every touch event would be its own
+     * kind of bug.
+     */
+    private fun lutForCurrentCurve(): CubeLut.Table? {
+        val curve = appSettings.logCurve
+        if (loadedLutCurve == curve) return loadedLut
+        loadedLutCurve = curve
+        loadedLut = appSettings.lutForCurve(curve)?.let { uri ->
+            try {
+                contentResolver.openInputStream(android.net.Uri.parse(uri))
+                    ?.use { CubeLut.parse(it) }
+            } catch (e: Exception) {
+                null
+            }
+        }
+        return loadedLut
+    }
+
     private fun applyPreviewEffects(): Boolean = PreviewEffects.apply(
         view = binding.preview,
         curve = appSettings.logCurve,
@@ -1776,7 +1830,8 @@ class MainActivity : AppCompatActivity() {
         peak = appSettings.focusPeaking,
         peakColour = appSettings.peakColour,
         sensitivity = appSettings.peakSensitivity,
-        waveform = appSettings.waveformChannels
+        waveform = appSettings.waveformChannels,
+        uploaded = lutForCurrentCurve()
     )
 
     private fun togglePeaking() {

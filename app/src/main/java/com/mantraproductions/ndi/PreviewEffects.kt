@@ -52,6 +52,7 @@ object PreviewEffects {
         uniform half usePeak;
         uniform half threshold;
         uniform half3 peakTint;
+        uniform half lutSize;
 
         // The trace, drawn in the same pass and the same coordinate space as
         // the picture it describes.
@@ -112,13 +113,21 @@ object PreviewEffects {
 
             half3 rgb = c.rgb;
             if (useLut > 0.5) {
-                // The strip is 256 wide, so half a texel lands on its centre
-                // rather than on the boundary between two.
-                rgb = half3(
-                    curve.eval(float2(c.r * 255.0 + 0.5, 0.5)).r,
-                    curve.eval(float2(c.g * 255.0 + 0.5, 0.5)).r,
-                    curve.eval(float2(c.b * 255.0 + 0.5, 0.5)).r
-                );
+                // A 3D lookup, read from the cube laid out as slices side by
+                // side. Two fetches and a blend between neighbouring blue
+                // slices, which is the standard way a GPU carries a cube.
+                half last = lutSize - 1.0;
+                half br = clamp(c.b, 0.0, 1.0) * last;
+                half b0 = floor(br);
+                half b1 = min(b0 + 1.0, last);
+                half bf = br - b0;
+
+                half gx = clamp(c.r, 0.0, 1.0) * last + 0.5;
+                half gy = clamp(c.g, 0.0, 1.0) * last + 0.5;
+
+                half4 s0 = curve.eval(float2(b0 * lutSize + gx, gy));
+                half4 s1 = curve.eval(float2(b1 * lutSize + gx, gy));
+                rgb = mix(s0.rgb, s1.rgb, bf);
             }
 
             if (usePeak > 0.5 && edge > threshold) {
@@ -163,22 +172,30 @@ object PreviewEffects {
     """
 
     /**
-     * What each coded level should look like once taken back to scene light
-     * and re-encoded for a screen. Computed here because the maths already
-     * exists in LogCurves and is tested; a second copy in shader code is how
-     * two versions of it drift apart.
+     * A cube laid out as an image the shader can sample: the blue slices side
+     * by side, so a 33 cube becomes 1089 by 33.
+     *
+     * How every GPU has carried a 3D LUT since before there were 3D textures
+     * to put one in. One fetch per neighbour rather than a loop.
      */
-    private fun strip(curve: LogCurves.Curve): Bitmap {
-        val bitmap = Bitmap.createBitmap(256, 1, Bitmap.Config.ARGB_8888)
-        val pixels = IntArray(256)
-        for (i in 0 until 256) {
-            val linear = LogCurves.decode(curve, i / 255.0).coerceAtLeast(0.0)
-            val display = LogCurves.encode(LogCurves.Curve.REC709, linear)
-                .coerceIn(0.0, 1.0)
-            val v = (display * 255.0).toInt().coerceIn(0, 255)
-            pixels[i] = (0xFF shl 24) or (v shl 16) or (v shl 8) or v
+    fun stripFor(table: CubeLut.Table): Bitmap {
+        val size = table.size
+        val bitmap = Bitmap.createBitmap(size * size, size, Bitmap.Config.ARGB_8888)
+        val pixels = IntArray(size * size * size)
+        for (b in 0 until size) {
+            for (g in 0 until size) {
+                for (r in 0 until size) {
+                    val i = ((b * size + g) * size + r) * 3
+                    pixels[g * (size * size) + b * size + r] = Color.argb(
+                        255,
+                        (table.data[i] * 255f).toInt().coerceIn(0, 255),
+                        (table.data[i + 1] * 255f).toInt().coerceIn(0, 255),
+                        (table.data[i + 2] * 255f).toInt().coerceIn(0, 255)
+                    )
+                }
+            }
         }
-        bitmap.setPixels(pixels, 0, 256, 0, 0, 256, 1)
+        bitmap.setPixels(pixels, 0, size * size, 0, 0, size * size, size)
         return bitmap
     }
 
@@ -195,7 +212,8 @@ object PreviewEffects {
         peak: Boolean,
         peakColour: PeakColour = PeakColour.RED,
         sensitivity: Int = 50,
-        waveform: Set<Mechanism.WaveformChannel> = emptySet()
+        waveform: Set<Mechanism.WaveformChannel> = emptySet(),
+        uploaded: CubeLut.Table? = null
     ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return !lut && !peak
@@ -210,10 +228,15 @@ object PreviewEffects {
             }
 
             val shader = RuntimeShader(SHADER)
+            // The uploaded cube for this curve if there is one, otherwise the
+            // correction computed from the curve itself, in the same 33 point
+            // structure so a vendor LUT replaces it point for point.
+            val table = uploaded ?: CubeLut.generate(curve)
             shader.setInputShader(
                 "curve",
-                BitmapShader(strip(curve), Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                BitmapShader(stripFor(table), Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
             )
+            shader.setFloatUniform("lutSize", table.size.toFloat())
             shader.setFloatUniform("useLut", if (wantLut) 1f else 0f)
             shader.setFloatUniform("usePeak", if (peak) 1f else 0f)
             // Higher sensitivity means a lower bar. A Sobel magnitude on

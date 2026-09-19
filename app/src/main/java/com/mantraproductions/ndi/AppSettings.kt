@@ -225,6 +225,23 @@ class AppSettings(context: Context) {
         get() = prefs.getInt(KEY_PEAK_SENS, 50)
         set(value) = prefs.edit().putInt(KEY_PEAK_SENS, value.coerceIn(0, 100)).apply()
 
+    /**
+     * A LUT file per log curve.
+     *
+     * Per curve rather than one slot, because switching to V-Log on set should
+     * pick up the V-Log LUT without anybody remembering to change it too.
+     * Empty means use the correction computed from the curve.
+     */
+    fun lutForCurve(curve: LogCurves.Curve): String? =
+        prefs.getString(KEY_LUT_PREFIX + curve.name, null)
+
+    fun setLutForCurve(curve: LogCurves.Curve, uri: String?) {
+        prefs.edit().apply {
+            if (uri == null) remove(KEY_LUT_PREFIX + curve.name)
+            else putString(KEY_LUT_PREFIX + curve.name, uri)
+        }.apply()
+    }
+
     var previewLut: Boolean
         get() = prefs.getBoolean(KEY_PREVIEW_LUT, false)
         set(value) = prefs.edit().putBoolean(KEY_PREVIEW_LUT, value).apply()
@@ -290,6 +307,7 @@ class AppSettings(context: Context) {
         const val KEY_TC_SIZE = "timecode_size"
         const val KEY_SHOW_TC = "show_timecode"
         const val KEY_PREVIEW_LUT = "preview_lut"
+        const val KEY_LUT_PREFIX = "lut_for_"
         const val KEY_PEAK = "focus_peaking"
         const val KEY_PEAK_COLOUR = "peak_colour"
         const val KEY_PEAK_SENS = "peak_sensitivity"
