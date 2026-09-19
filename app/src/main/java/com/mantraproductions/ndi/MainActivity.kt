@@ -1106,7 +1106,13 @@ class MainActivity : AppCompatActivity() {
             fader.onChange = { onVerticalMoved(which, it) }
             fader.onRelease = { pump.flush() }
             fader.onTouchedWhileAutomatic = { leaveAuto(which) }
-            fader.setOnTouchListener { _, _ -> focusedColumn = which; false }
+            fader.setOnTouchListener { _, _ ->
+                // Touching a column is also choosing it for the rocker, so the
+                // hardware keys follow the hand rather than a separate choice.
+                focusedColumn = which
+                refreshColumnFocus()
+                false
+            }
         }
 
         binding.vGain.label = "GAIN"
@@ -1267,8 +1273,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Lights the column the rocker is driving.
+     *
+     * One at a time, set here rather than by each fader watching a shared
+     * value, so two can never both believe they are the chosen one.
+     */
+    private fun refreshColumnFocus() {
+        listOf(
+            Mechanism.Param.ISO to binding.vIso,
+            Mechanism.Param.SHUTTER to binding.vShutter,
+            Mechanism.Param.WHITE_BALANCE to binding.vWhiteBalance,
+            Mechanism.Param.ZOOM to binding.vZoom
+        ).forEach { (which, fader) ->
+            fader.focused = which == focusedColumn
+        }
+        binding.vFocus.focused = false
+        binding.vGain.focused = false
+    }
+
     private fun refreshVerticalPanel() {
         val controls = service?.controls
+        refreshColumnFocus()
         binding.vIso.automatic = !manualExposure
         binding.vShutter.automatic = !manualExposure
         binding.vWhiteBalance.automatic = !manualWhiteBalance

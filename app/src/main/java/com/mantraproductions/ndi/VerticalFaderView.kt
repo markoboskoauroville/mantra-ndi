@@ -83,6 +83,20 @@ class VerticalFaderView @JvmOverloads constructor(
     var meterLevel: Float? = null
         set(value) { field = value; postInvalidateOnAnimation() }
 
+    /**
+     * Whether the volume rocker is currently driving this column.
+     *
+     * The rocker moves one control and the screen never said which, so the
+     * only way to find out was to press it and watch what changed. On a shot
+     * that is not an acceptable way to find out.
+     */
+    var focused: Boolean = false
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    private val focusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+    }
+
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#2A2E35")
         strokeCap = Paint.Cap.ROUND
@@ -143,6 +157,17 @@ class VerticalFaderView @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
+        if (focused) {
+            // A hairline down the column rather than a filled panel: it has to
+            // be unmistakable at a glance and must not sit on top of the shot.
+            focusPaint.color = FaderView.AMBER
+            focusPaint.strokeWidth = 1.5f * density
+            val inset = 2f * density
+            canvas.drawRoundRect(
+                inset, inset, width - inset, height - inset,
+                4f * density, 4f * density, focusPaint
+            )
+        }
         val cx = width / 2f
         val top = trackTop
         val bottom = trackBottom
@@ -155,6 +180,9 @@ class VerticalFaderView @JvmOverloads constructor(
         // and a full word like SHUTTER fits where three letters used to.
         canvas.save()
         canvas.rotate(-90f, cx, (top + bottom) / 2f)
+        // The label goes amber with the outline, so the two say the same thing
+        // and either one alone is enough to read it.
+        labelPaint.color = if (focused) FaderView.AMBER else Color.parseColor("#7C8894")
         labelPaint.textAlign = Paint.Align.CENTER
         canvas.drawText(
             label.uppercase(), cx, (top + bottom) / 2f - 13f * density, labelPaint
