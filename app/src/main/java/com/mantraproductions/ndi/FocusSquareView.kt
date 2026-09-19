@@ -159,8 +159,20 @@ class FocusSquareView @JvmOverloads constructor(
                 val cx = width * centreX
                 val cy = height * centreY
                 val reach = half + 20f * density
-                grabbed = Math.abs(event.x - cx) <= reach && Math.abs(event.y - cy) <= reach
-                if (!grabbed) return false
+                val insideBox = Math.abs(event.x - cx) <= reach &&
+                    Math.abs(event.y - cy) <= reach
+
+                // A tap anywhere on the picture puts the box there. It used to
+                // refuse anything outside itself, so the only way to focus on
+                // something was to drag the box onto it first, which is not
+                // what tapping a viewfinder has ever meant.
+                if (!insideBox) {
+                    centreX = (event.x / width).coerceIn(0.08f, 0.92f)
+                    centreY = (event.y / height).coerceIn(0.08f, 0.92f)
+                    onMoved?.invoke(centreX, centreY)
+                    invalidate()
+                }
+                grabbed = true
                 pressStart = System.currentTimeMillis()
                 downX = event.x
                 downY = event.y

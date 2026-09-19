@@ -35,12 +35,17 @@ class TimecodeView @JvmOverloads constructor(
         INTERNAL("SYNC INT", Color.parseColor("#8C99A6"))
     }
 
+    /**
+     * Three letters, because the status sits beside the take length and a
+     * word wide enough to read from a distance is a word wide enough to push
+     * the number off centre. These are the abbreviations a deck uses.
+     */
     enum class Status(val label: String, val colour: Int) {
-        IDLE("STANDBY", Color.parseColor("#8C99A6")),
-        STREAMING("LIVE", Color.parseColor("#12C46A")),
-        RECORDING("RECORDING", Color.parseColor("#FF4436")),
-        BOTH("LIVE / REC", Color.parseColor("#FF4436")),
-        WATCHING("MONITOR", Color.parseColor("#FFC400"))
+        IDLE("STB", Color.parseColor("#8C99A6")),
+        STREAMING("LIV", Color.parseColor("#12C46A")),
+        RECORDING("REC", Color.parseColor("#FF4436")),
+        BOTH("R+L", Color.parseColor("#FF4436")),
+        WATCHING("MON", Color.parseColor("#FFC400"))
     }
 
     /** Each field can be turned off on its own, as a burn-in's can. */
@@ -123,7 +128,6 @@ class TimecodeView @JvmOverloads constructor(
     /** Right of it: what the camera is doing and what it is writing. */
     private fun rightFields(): List<Pair<String, Int>> {
         val out = mutableListOf<Pair<String, Int>>()
-        if (Field.STATUS in fields) out += status.label to status.colour
         if (Field.FORMAT in fields && formatLine.isNotEmpty()) {
             out += formatLine.uppercase() to Color.parseColor("#9AA6B2")
         }
@@ -170,7 +174,20 @@ class TimecodeView @JvmOverloads constructor(
         }
         big.alpha = 255
 
-        val reserved = big.measureText(duration) / 2f + gap
+        // Drawn hard against the number so the two read as one block: what the
+        // camera is doing and how long it has been doing it.
+        var reserved = big.measureText(duration) / 2f + gap
+        if (Field.STATUS in fields) {
+            small.textAlign = Paint.Align.LEFT
+            small.color = status.colour
+            canvas.drawText(
+                status.label,
+                width / 2f + big.measureText(duration) / 2f + gap * 0.5f,
+                smallBaseline,
+                small
+            )
+            reserved += small.measureText(status.label) + gap * 0.5f
+        }
 
         // Left group runs outwards from the edge and stops before the number.
         var x = pad

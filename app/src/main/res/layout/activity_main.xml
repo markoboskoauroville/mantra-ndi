@@ -42,7 +42,7 @@
         <TextView android:id="@+id/tglWave" style="@style/MantraRailToggle" android:text="WAVE" />
         <TextView android:id="@+id/tglScope" style="@style/MantraRailToggle" android:text="SCOPE" />
         <TextView android:id="@+id/tglGrade" style="@style/MantraRailToggle" android:text="GRADE" />
-        <TextView android:id="@+id/tglFocusBox" style="@style/MantraRailToggle" android:text="BOX" />
+        <TextView android:id="@+id/tglFocusBox" style="@style/MantraRailToggle" android:text="FOCUS" />
         <TextView android:id="@+id/tglBurn" style="@style/MantraRailToggle" android:text="TC" />
 
     </LinearLayout>
