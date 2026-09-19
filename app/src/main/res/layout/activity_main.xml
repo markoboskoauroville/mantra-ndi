@@ -142,6 +142,38 @@
              discoverable only to whoever wrote it. It is a button now. -->
         <!-- Text only, and the colour is the whole state: grey is the picture
              as the sensor sends it, green is corrected for this screen. -->
+        <!-- Recovery, at the top of the column where a thumb reaching in a
+             hurry lands, and away from record and stream. -->
+        <TextView
+            android:id="@+id/killButton"
+            android:layout_width="54dp"
+            android:layout_height="30dp"
+            android:layout_marginBottom="4dp"
+            android:gravity="center"
+            android:text="X"
+            android:textSize="13sp"
+            android:letterSpacing="0.16"
+            android:fontFamily="monospace"
+            android:textColor="#8E1B12"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/resetButton"
+            android:layout_width="54dp"
+            android:layout_height="30dp"
+            android:layout_marginBottom="14dp"
+            android:gravity="center"
+            android:text="RST"
+            android:textSize="13sp"
+            android:letterSpacing="0.16"
+            android:fontFamily="monospace"
+            android:textColor="#6E7A86"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
         <TextView
             android:id="@+id/peakButton"
             android:layout_width="54dp"

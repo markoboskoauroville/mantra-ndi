@@ -1426,6 +1426,24 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
+        // A tap says what it would do; a hold does it. An accidental tap that
+        // kills a live stream is worse than an extra second of deliberation,
+        // and these two sit beside buttons that are pressed constantly.
+        binding.killButton.setOnClickListener {
+            say("Hold X to shut down completely")
+        }
+        binding.killButton.setOnLongClickListener {
+            killApp()
+            true
+        }
+        binding.resetButton.setOnClickListener {
+            say("Hold RST to reset to a safe state")
+        }
+        binding.resetButton.setOnLongClickListener {
+            resetToSafeState()
+            true
+        }
+
         binding.lutButton.setOnClickListener { toggleLut() }
         binding.peakButton.setOnClickListener { togglePeaking() }
         // Long press to change how faint an edge still counts, which is the
@@ -1719,6 +1737,72 @@ class MainActivity : AppCompatActivity() {
         appSettings.peakSensitivity = next
         applyPreviewEffects()
         say("Peaking sensitivity " + next)
+    }
+
+    /**
+     * Everything down, and the process with it.
+     *
+     * Android will not reliably stop a foreground service and free a camera
+     * just because an activity finished, and a half released NDI sender keeps
+     * announcing a source that no longer sends anything, which on a mixer
+     * looks like a camera that has frozen rather than one that has gone. So
+     * this tears the pieces down in order and then ends the process, which is
+     * the only way to be certain the native sender and the camera are both
+     * genuinely released.
+     */
+    private fun killApp() {
+        say("Shutting down", transient = false)
+        runCatching { ltcEngine.stop() }
+        runCatching { remoteEngine?.stop() }
+        runCatching { focusDirector.stop() }
+        runCatching { service?.stopStreaming() }
+        runCatching { service?.stopRecording() }
+        runCatching { service?.releasePipeline() }
+        runCatching { if (bound) unbindService(connection) }
+        runCatching { stopService(Intent(this, NdiSendService::class.java)) }
+
+        // A moment for the service to finish its own teardown, then go.
+        ui.postDelayed({
+            finishAffinity()
+            kotlin.system.exitProcess(0)
+        }, 400)
+    }
+
+    /**
+     * Back to a state that works, without losing what makes this phone this
+     * camera.
+     *
+     * The point is recovering from something gone wrong on set, so it restarts
+     * the pipeline rather than telling the operator to do it. Identity, keys,
+     * lens and timecode role survive: wiping those in a hurry is worse than
+     * whatever went wrong.
+     */
+    private fun resetToSafeState() {
+        say("Resetting", transient = false)
+
+        appSettings.logCurve = LogCurves.Curve.REC709
+        appSettings.tenBitWanted = false
+        appSettings.previewLut = false
+        appSettings.focusPeaking = false
+        appSettings.waveformChannels = emptySet()
+        appSettings.vectorscopeVisible = false
+        appSettings.stabilisation = false
+        appSettings.streamMbps = 0
+        appSettings.streamHalfSize = false
+        profileStore.applyFormat(
+            width = 1920, height = 1080, fps = 25,
+            bitRate = 25_000_000, useHevc = false
+        )
+
+        runCatching { service?.stopStreaming() }
+        runCatching { binding.gradePanel.visibility = View.GONE }
+        runCatching { binding.vectorscope.visibility = View.GONE }
+        runCatching { applyPreviewEffects() }
+
+        resetForModeChange()
+        preparePipeline()
+        refreshLutButton()
+        say("1080p25, Rec.709, overlays off", transient = false)
     }
 
     private fun applyLogCurve() {
