@@ -176,6 +176,46 @@ class TimecodeTest {
         assertEquals(tc(1, 0, 0, 0, rate), anHour)
     }
 
+    // --- as NDI carries it ----------------------------------------------------
+
+    @Test fun anHourIsAnHourInNdiUnits() {
+        // 100ns units, so an hour is 36,000,000,000 of them.
+        val units = Timecode.to100ns(tc(1, 0, 0, 0, Timecode.Rate.FPS_25))
+        assertEquals(36_000_000_000L, units)
+    }
+
+    @Test fun everyRateRoundTripsThroughNdiUnits() {
+        for (rate in Timecode.Rate.values()) {
+            for (frame in listOf(1L, 137L, 9_000L, 100_001L)) {
+                val original = Timecode.fromFrames(frame, rate)
+                val back = Timecode.from100ns(Timecode.to100ns(original), rate)
+                assertEquals("$rate at $frame", original, back)
+            }
+        }
+    }
+
+    @Test fun dropFrameConvertsByRealTimeNotByItsOwnLabels() {
+        // The point of drop frame: an hour of its labels is an hour of real
+        // time. A converter that works from the fields instead of the frame
+        // count puts 29.97 out by three and a half seconds every hour.
+        val units = Timecode.to100ns(tc(1, 0, 0, 0, Timecode.Rate.FPS_29_97_DF))
+        assertEquals(36_000_000_000.0, units.toDouble(), 20_000_000.0)
+    }
+
+    @Test fun nonDropReportsItsOwnLongerHourHonestly() {
+        // And non drop genuinely is longer, so it must not be quietly fixed.
+        val units = Timecode.to100ns(tc(1, 0, 0, 0, Timecode.Rate.FPS_29_97))
+        assertTrue(units > 36_030_000_000L)
+    }
+
+    @Test fun midnightIsZeroInEitherDirection() {
+        assertEquals(0L, Timecode.to100ns(tc(0, 0, 0, 0, Timecode.Rate.FPS_25)))
+        assertEquals(
+            tc(0, 0, 0, 0, Timecode.Rate.FPS_25),
+            Timecode.from100ns(0L, Timecode.Rate.FPS_25)
+        )
+    }
+
     @Test fun aFrameRateIsChosenSensiblyForACameraRate() {
         assertEquals(Timecode.Rate.FPS_24, Timecode.Rate.nearest(24))
         assertEquals(Timecode.Rate.FPS_25, Timecode.Rate.nearest(25))

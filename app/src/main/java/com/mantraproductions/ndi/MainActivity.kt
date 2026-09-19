@@ -493,38 +493,74 @@ class MainActivity : AppCompatActivity() {
 
     private var lastTimecodePushAt = 0L
 
+    /**
+     * The clock, and what kind of clock it is.
+     *
+     * Three states, told apart by colour and by three letters, because either
+     * one alone fails somebody: a colour is unreadable in sunlight through a
+     * loupe and useless to anyone who cannot separate green from white, and a
+     * label alone is not readable at a glance mid take.
+     *
+     *   MST  green      this phone is the master, everything follows it
+     *   SYC  white      following a master, so the whole set agrees
+     *   INT  outline    free running on its own, agreeing with nobody
+     *
+     * The outline matters most. Internal is the state that looks exactly like
+     * being in sync while not being in sync, and it is worth making it look
+     * unfinished on purpose.
+     */
     private fun refreshTimecode() {
-        if (!appSettings.timecodeEnabled) {
+        if (!appSettings.showTimecode) {
             binding.timecodeText.visibility = View.GONE
+            binding.timecodeLabel.visibility = View.GONE
             return
         }
-        binding.timecodeText.visibility = View.VISIBLE
+
         val nanos = android.os.SystemClock.elapsedRealtimeNanos()
+
         // A stamp on the incoming picture beats anything decoded separately:
         // it arrived attached to the frame, so it cannot have drifted from it.
         val fromStream = remoteEngine?.lastTimecode100ns
             ?.takeIf { it > 0L }
             ?.let { Timecode.from100ns(it, appSettings.ltcRate) }
-        val now = fromStream
-            ?: ltcEngine.clock.now(nanos)
-            ?: timecode.now()
-        if (now == null) {
-            binding.timecodeText.text = "--:--:--:--"
-            binding.timecodeText.setTextColor(android.graphics.Color.parseColor("#7C8894"))
-        } else {
-            binding.timecodeText.text = now.toString()
-            binding.timecodeText.setTextColor(android.graphics.Color.parseColor("#12C46A"))
+
+        val isMaster = appSettings.ltcRole == LtcEngine.Role.MASTER
+        val ltc = ltcEngine.clock.now(nanos)
+        val following = fromStream ?: (if (!isMaster) ltc else null) ?: timecode.now()
+        val shown = if (isMaster) (ltc ?: timecode.now()) else following
+
+        binding.timecodeText.visibility = View.VISIBLE
+        binding.timecodeLabel.visibility = View.VISIBLE
+        binding.timecodeText.textSize = appSettings.timecodeSize.toFloat()
+        binding.timecodeLabel.textSize = (appSettings.timecodeSize * 0.55f).coerceAtLeast(8f)
+
+        val label: String
+        val colour: Int
+        when {
+            isMaster -> {
+                label = "MST"
+                colour = android.graphics.Color.parseColor("#12C46A")
+            }
+            following != null && (fromStream != null || ltcEngine.isLocked) -> {
+                label = "SYC"
+                colour = android.graphics.Color.WHITE
+            }
+            else -> {
+                label = "INT"
+                colour = android.graphics.Color.parseColor("#9AA6B2")
+            }
         }
+
+        binding.timecodeText.text = shown?.toString() ?: "--:--:--:--"
+        binding.timecodeText.setTextColor(colour)
+        binding.timecodeLabel.text = label
+        binding.timecodeLabel.setTextColor(colour)
+        // Internal is drawn faintly rather than solid: it is a clock that
+        // agrees with nothing else, and it should not look settled.
+        binding.timecodeText.alpha = if (label == "INT") 0.55f else 1f
+        binding.timecodeLabel.alpha = binding.timecodeText.alpha
     }
 
-    /**
-     * Whether there is anything on the wire, checked on the tick.
-     *
-     * A remote picture that stops does not clear itself: the last decoded
-     * frame stays on the surface and looks exactly like a working picture of a
-     * still scene. So the absence is detected and covered over, and the source
-     * name goes with it, because a name over a dead feed reads as a live one.
-     */
     private fun refreshSignal() {
         if (appSettings.appMode == AppMode.LOCAL) {
             binding.noSignal.visibility = View.GONE

@@ -139,6 +139,21 @@ class AppSettings(context: Context) {
      * It is still a setting, since a phone left monitoring on a shelf for an
      * hour would rather not cook itself.
      */
+    var showTimecode: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_TC, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_TC, value).apply()
+
+    /**
+     * How big the clock is drawn, in sp.
+     *
+     * A setting because the right size depends on where the phone is. On a
+     * gimbal at arm's length it wants to be large; on a monitor propped beside
+     * a mixer it can be small, and a large one would only cover the shot.
+     */
+    var timecodeSize: Int
+        get() = prefs.getInt(KEY_TC_SIZE, 16)
+        set(value) = prefs.edit().putInt(KEY_TC_SIZE, value.coerceIn(10, 48)).apply()
+
     var keepScreenOn: Boolean
         get() = prefs.getBoolean(KEY_KEEP_AWAKE, true)
         set(value) = prefs.edit().putBoolean(KEY_KEEP_AWAKE, value).apply()
@@ -173,6 +188,9 @@ class AppSettings(context: Context) {
         const val KEY_LTC_ROLE = "ltc_role"
         const val KEY_LTC_RATE = "ltc_rate"
         const val KEY_KEEP_AWAKE = "keep_awake"
+        const val KEY_SHOW_TC = "show_timecode"
+        const val KEY_TC_SIZE = "timecode_size"
+        const val KEY_SHOW_TC = "show_timecode"
         const val KEY_BATTERY_ASKED = "battery_asked"
         const val KEY_STABILISATION = "stabilisation"
         const val KEY_LUT = "monitor_lut"
