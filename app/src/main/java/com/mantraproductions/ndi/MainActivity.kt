@@ -269,7 +269,7 @@ class MainActivity : AppCompatActivity() {
         }
         applyLogCurve()
         applyScreenPolicy()
-        PreviewLut.apply(binding.preview, appSettings.logCurve, appSettings.previewLut)
+        applyPreviewEffects()
         refreshLutButton()
         // Coming back from the background resizes the view without touching
         // the buffer, which is the other half of the stretch.
@@ -1427,6 +1427,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.lutButton.setOnClickListener { toggleLut() }
+        binding.peakButton.setOnClickListener { togglePeaking() }
+        // Long press to change how faint an edge still counts, which is the
+        // only peaking setting anybody actually adjusts on set.
+        binding.peakButton.setOnLongClickListener {
+            cyclePeakSensitivity()
+            true
+        }
         binding.streamButton.centerText = "NDI"
         binding.streamButton.setOnClickListener { toggleStreaming() }
 
@@ -1638,14 +1645,12 @@ class MainActivity : AppCompatActivity() {
      * stream or the recording changes either way.
      */
     private fun toggleLut() {
-        if (!PreviewLut.supported) {
+        if (!PreviewEffects.supported) {
             say("This phone cannot correct the preview; it needs Android 13")
             return
         }
         appSettings.previewLut = !appSettings.previewLut
-        val ok = PreviewLut.apply(
-            binding.preview, appSettings.logCurve, appSettings.previewLut
-        )
+        val ok = applyPreviewEffects()
         if (!ok) {
             appSettings.previewLut = false
             say("Could not apply the correction")
@@ -1653,9 +1658,35 @@ class MainActivity : AppCompatActivity() {
         refreshLutButton()
     }
 
+    /**
+     * Both effects go on in one call, because a View has one render effect and
+     * two features that each set their own would silently cancel each other.
+     */
+    private fun applyPreviewEffects(): Boolean = PreviewEffects.apply(
+        view = binding.preview,
+        curve = appSettings.logCurve,
+        lut = appSettings.previewLut,
+        peak = appSettings.focusPeaking,
+        peakColour = appSettings.peakColour,
+        sensitivity = appSettings.peakSensitivity
+    )
+
+    private fun togglePeaking() {
+        if (!PreviewEffects.supported) {
+            say("Peaking needs Android 13 on this phone")
+            return
+        }
+        appSettings.focusPeaking = !appSettings.focusPeaking
+        if (!applyPreviewEffects()) {
+            appSettings.focusPeaking = false
+            say("Could not apply peaking")
+        }
+        refreshLutButton()
+    }
+
     private fun refreshLutButton() {
         val curve = appSettings.logCurve
-        val available = PreviewLut.supported && curve != LogCurves.Curve.REC709
+        val available = PreviewEffects.supported && curve != LogCurves.Curve.REC709
         val on = available && appSettings.previewLut
 
         binding.lutButton.visibility = if (appSettings.appMode == AppMode.MONITOR) {
@@ -1664,9 +1695,29 @@ class MainActivity : AppCompatActivity() {
             View.VISIBLE
         }
         binding.lutButton.alpha = if (available) 1f else 0.35f
+
+        val peakOn = PreviewEffects.supported && appSettings.focusPeaking
+        binding.peakButton.visibility = binding.lutButton.visibility
+        binding.peakButton.alpha = if (PreviewEffects.supported) 1f else 0.35f
+        binding.peakButton.setTextColor(
+            if (peakOn) appSettings.peakColour.colour
+            else android.graphics.Color.parseColor("#6E7A86")
+        )
         binding.lutButton.setTextColor(
             android.graphics.Color.parseColor(if (on) "#12C46A" else "#6E7A86")
         )
+    }
+
+    /**
+     * Three steps, because on set nobody wants a slider: too little and thin
+     * edges vanish, too much and grain lights up like a subject.
+     */
+    private fun cyclePeakSensitivity() {
+        val steps = listOf(30, 50, 75)
+        val next = steps.firstOrNull { it > appSettings.peakSensitivity } ?: steps.first()
+        appSettings.peakSensitivity = next
+        applyPreviewEffects()
+        say("Peaking sensitivity " + next)
     }
 
     private fun applyLogCurve() {

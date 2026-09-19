@@ -119,6 +119,10 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowLens.setOnClickListener { pickLens() }
         binding.rowRecording.setOnClickListener { pickRecording() }
         binding.rowScreen.setOnClickListener { manageScreenAndBattery() }
+        binding.rowScreen.setOnLongClickListener {
+            resetToSafeState()
+            true
+        }
         binding.rowFocusTiming.setOnClickListener { pickFocusTiming() }
         binding.rowWaveform.setOnClickListener { pickWaveform() }
         binding.rowNetwork.setOnClickListener { runNetworkTest() }
@@ -598,6 +602,44 @@ class SettingsActivity : AppCompatActivity() {
             prefs.recordMbps = it.second
             profileStore.applyFormat(bitRate = it.second * 1_000_000)
         }
+    }
+
+    /**
+     * Back to a state that works, for when something has gone wrong on set.
+     *
+     * Not a factory reset: identity, keys and the timecode role are what make
+     * this phone this camera, and wiping those in a hurry is worse than the
+     * problem. What goes is everything that can make the app heavy or make the
+     * picture wrong, so the way back from a frozen preview is one press rather
+     * than a reinstall.
+     */
+    private fun resetToSafeState() {
+        AlertDialog.Builder(this)
+            .setTitle("Reset to a safe state")
+            .setMessage(
+                "Drops to 1080p25, 8-bit Rec.709, no overlays, no grade, and " +
+                    "stops streaming.\n\nKeeps the source name, the AI keys, " +
+                    "the timecode role and the lens."
+            )
+            .setPositiveButton("Reset") { _, _ ->
+                prefs.logCurve = LogCurves.Curve.REC709
+                prefs.tenBitWanted = false
+                prefs.recordColour = RecordingFormats.ColourMode.REC709_8
+                prefs.previewLut = false
+                prefs.focusPeaking = false
+                prefs.waveformChannels = emptySet()
+                prefs.vectorscopeVisible = false
+                prefs.stabilisation = false
+                profileStore.applyFormat(
+                    width = 1920, height = 1080, fps = 25,
+                    bitRate = 25_000_000, useHevc = false
+                )
+                prefs.recordMbps = 25
+                refresh()
+                toast("Reset. Reopen the camera screen.")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun manageScreenAndBattery() {

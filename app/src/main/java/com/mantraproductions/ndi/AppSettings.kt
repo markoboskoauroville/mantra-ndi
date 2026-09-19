@@ -207,6 +207,22 @@ class AppSettings(context: Context) {
      * that quietly corrects what you are looking at is a camera you cannot
      * trust to tell you what it is recording.
      */
+    /** Mark what is sharp, on this screen only. */
+    var focusPeaking: Boolean
+        get() = prefs.getBoolean(KEY_PEAK, false)
+        set(value) = prefs.edit().putBoolean(KEY_PEAK, value).apply()
+
+    var peakColour: PreviewEffects.PeakColour
+        get() = PreviewEffects.PeakColour.values()
+            .firstOrNull { it.name == prefs.getString(KEY_PEAK_COLOUR, null) }
+            ?: PreviewEffects.PeakColour.RED
+        set(value) = prefs.edit().putString(KEY_PEAK_COLOUR, value.name).apply()
+
+    /** How faint an edge still counts, 0 to 100. */
+    var peakSensitivity: Int
+        get() = prefs.getInt(KEY_PEAK_SENS, 50)
+        set(value) = prefs.edit().putInt(KEY_PEAK_SENS, value.coerceIn(0, 100)).apply()
+
     var previewLut: Boolean
         get() = prefs.getBoolean(KEY_PREVIEW_LUT, false)
         set(value) = prefs.edit().putBoolean(KEY_PREVIEW_LUT, value).apply()
@@ -263,6 +279,9 @@ class AppSettings(context: Context) {
         const val KEY_TC_SIZE = "timecode_size"
         const val KEY_SHOW_TC = "show_timecode"
         const val KEY_PREVIEW_LUT = "preview_lut"
+        const val KEY_PEAK = "focus_peaking"
+        const val KEY_PEAK_COLOUR = "peak_colour"
+        const val KEY_PEAK_SENS = "peak_sensitivity"
         const val KEY_TC_TOP = "timecode_top"
         const val KEY_TC_PLATE = "timecode_plate"
         const val KEY_TC_SYNC = "tc_line_sync"

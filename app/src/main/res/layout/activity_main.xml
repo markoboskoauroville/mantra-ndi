@@ -155,6 +155,21 @@
         <!-- Text only, and the colour is the whole state: grey is the picture
              as the sensor sends it, green is corrected for this screen. -->
         <TextView
+            android:id="@+id/peakButton"
+            android:layout_width="54dp"
+            android:layout_height="34dp"
+            android:layout_marginBottom="6dp"
+            android:gravity="center"
+            android:text="PEAK"
+            android:textSize="13sp"
+            android:letterSpacing="0.16"
+            android:fontFamily="monospace"
+            android:textColor="#6E7A86"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
             android:id="@+id/lutButton"
             android:layout_width="54dp"
             android:layout_height="34dp"
