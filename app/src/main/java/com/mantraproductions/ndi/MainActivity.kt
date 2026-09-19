@@ -269,6 +269,8 @@ class MainActivity : AppCompatActivity() {
         }
         applyLogCurve()
         applyScreenPolicy()
+        PreviewLut.apply(binding.preview, appSettings.logCurve, appSettings.previewLut)
+        refreshLutButton()
         // Coming back from the background resizes the view without touching
         // the buffer, which is the other half of the stretch.
         binding.preview.post { applyPreviewTransform() }
@@ -1424,6 +1426,7 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
+        binding.lutButton.setOnClickListener { toggleLut() }
         binding.streamButton.centerText = "NDI"
         binding.streamButton.setOnClickListener { toggleStreaming() }
 
@@ -1625,6 +1628,45 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Not now", null)
             .show()
+    }
+
+    /**
+     * The monitor LUT: correction on this screen, never on what leaves.
+     *
+     * One tap to compare. Grey is the picture the sensor is actually sending,
+     * green is that picture corrected for this display, and nothing about the
+     * stream or the recording changes either way.
+     */
+    private fun toggleLut() {
+        if (!PreviewLut.supported) {
+            say("This phone cannot correct the preview; it needs Android 13")
+            return
+        }
+        appSettings.previewLut = !appSettings.previewLut
+        val ok = PreviewLut.apply(
+            binding.preview, appSettings.logCurve, appSettings.previewLut
+        )
+        if (!ok) {
+            appSettings.previewLut = false
+            say("Could not apply the correction")
+        }
+        refreshLutButton()
+    }
+
+    private fun refreshLutButton() {
+        val curve = appSettings.logCurve
+        val available = PreviewLut.supported && curve != LogCurves.Curve.REC709
+        val on = available && appSettings.previewLut
+
+        binding.lutButton.visibility = if (appSettings.appMode == AppMode.MONITOR) {
+            View.GONE
+        } else {
+            View.VISIBLE
+        }
+        binding.lutButton.alpha = if (available) 1f else 0.35f
+        binding.lutButton.setTextColor(
+            android.graphics.Color.parseColor(if (on) "#12C46A" else "#6E7A86")
+        )
     }
 
     private fun applyLogCurve() {

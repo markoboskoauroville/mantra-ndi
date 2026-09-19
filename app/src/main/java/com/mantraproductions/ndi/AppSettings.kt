@@ -200,6 +200,17 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_TC_FORMAT, true)
         set(value) = prefs.edit().putBoolean(KEY_TC_FORMAT, value).apply()
 
+    /**
+     * Correct the log picture on this screen only.
+     *
+     * Off by default: the picture the sensor sends is the truth, and a camera
+     * that quietly corrects what you are looking at is a camera you cannot
+     * trust to tell you what it is recording.
+     */
+    var previewLut: Boolean
+        get() = prefs.getBoolean(KEY_PREVIEW_LUT, false)
+        set(value) = prefs.edit().putBoolean(KEY_PREVIEW_LUT, value).apply()
+
     var showTimecode: Boolean
         get() = prefs.getBoolean(KEY_SHOW_TC, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_TC, value).apply()
@@ -251,6 +262,7 @@ class AppSettings(context: Context) {
         const val KEY_KEEP_AWAKE = "keep_awake"
         const val KEY_TC_SIZE = "timecode_size"
         const val KEY_SHOW_TC = "show_timecode"
+        const val KEY_PREVIEW_LUT = "preview_lut"
         const val KEY_TC_TOP = "timecode_top"
         const val KEY_TC_PLATE = "timecode_plate"
         const val KEY_TC_SYNC = "tc_line_sync"
