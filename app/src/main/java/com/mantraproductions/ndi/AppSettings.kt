@@ -188,7 +188,6 @@ class AppSettings(context: Context) {
         const val KEY_LTC_ROLE = "ltc_role"
         const val KEY_LTC_RATE = "ltc_rate"
         const val KEY_KEEP_AWAKE = "keep_awake"
-        const val KEY_SHOW_TC = "show_timecode"
         const val KEY_TC_SIZE = "timecode_size"
         const val KEY_SHOW_TC = "show_timecode"
         const val KEY_BATTERY_ASKED = "battery_asked"
