@@ -22,6 +22,18 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Covers the last frame completely, because a frozen picture looks
+         exactly like a working one of a still scene. -->
+    <com.mantraproductions.ndi.NoSignalView
+        android:id="@+id/noSignal"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/preview"
+        app:layout_constraintBottom_toBottomOf="@id/preview"
+        app:layout_constraintStart_toStartOf="@id/preview"
+        app:layout_constraintEnd_toEndOf="@id/preview" />
+
     <com.mantraproductions.ndi.TallyBorderView
         android:id="@+id/tallyBorder"
         android:layout_width="0dp"
@@ -58,7 +70,7 @@
         android:id="@+id/waveform"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:alpha="0.55"
+        android:alpha="0.8"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="@id/preview"
         app:layout_constraintBottom_toBottomOf="@id/preview"

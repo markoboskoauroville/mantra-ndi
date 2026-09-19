@@ -96,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             try {
                 refreshLiveIndicators()
+                refreshSignal()
                 refreshTimecode()
                 refreshVectorscope()
                 refreshWaveform()
@@ -247,15 +248,17 @@ class MainActivity : AppCompatActivity() {
         // A mode change in settings takes effect here, including handing the
         // preview from the camera to the decoder or back.
         if (appSettings.appMode != lastAppliedMode) {
-            lastAppliedMode = appSettings.appMode
-            service?.releasePipeline()
-            remoteEngine?.stop()
-            remoteEngine = null
-            link = null
+            // Modes are separate programs that happen to share a screen. Half
+            // of one left running underneath the other is what produced a
+            // local camera showing black: the decoder still held the surface
+            // and the sensor could not have it. So everything goes, and the
+            // new mode starts from nothing.
+            resetForModeChange()
             preparePipeline()
         } else {
             applyCameraSource()
         }
+        applyLogCurve()
         // Settings may have changed the profile while we were away.
         val picked = profileStore.selected()
         if (picked.name != activeProfile?.name) {
@@ -456,6 +459,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Whether there is anything on the wire, checked on the tick.
+     *
+     * A remote picture that stops does not clear itself: the last decoded
+     * frame stays on the surface and looks exactly like a working picture of a
+     * still scene. So the absence is detected and covered over, and the source
+     * name goes with it, because a name over a dead feed reads as a live one.
+     */
+    private fun refreshSignal() {
+        if (appSettings.appMode == AppMode.LOCAL) {
+            binding.noSignal.visibility = View.GONE
+            return
+        }
+        val engine = remoteEngine
+        val alive = engine != null && engine.hasRecentFrame()
+        binding.noSignal.expected = appSettings.remoteSource
+        binding.noSignal.visibility = if (alive) View.GONE else View.VISIBLE
+        binding.remoteBorder.visibility = if (alive) View.VISIBLE else View.GONE
+    }
+
     private fun refreshStreamButton() {
         val streaming = service?.isStreaming == true
         binding.streamButton.ringColor =
@@ -646,20 +669,42 @@ class MainActivity : AppCompatActivity() {
         pump.applyZoom = { zoom -> controls.setZoom(zoom) }
     }
 
+    /**
+     * Exposure, to whichever camera is actually being driven.
+     *
+     * This was the bug behind a remote camera that showed a picture and
+     * ignored every fader. CameraLink was built so the panel would not have to
+     * know where the sensor is, and then the panel went straight to the local
+     * controls anyway, so every move landed on the phone in the operator's
+     * hand rather than the one across the room.
+     */
     private fun pushExposure() {
         if (!manualExposure) return
-        val controls = service?.controls ?: return
-        val isoRange = controls.isoRange() ?: return
+        val active = link ?: return
+        val isoRange = active.isoRange() ?: return
         val range = shutterRange() ?: return
-        pump.setExposure(
-            (isoRange.lower + isoProgress).coerceIn(isoRange.lower, isoRange.upper),
-            Mechanism.shutterFromProgress(shutterProgress, 200, range.first, range.second)
+        val iso = (isoRange.lower + isoProgress).coerceIn(isoRange.lower, isoRange.upper)
+        val shutter = Mechanism.shutterFromProgress(
+            shutterProgress, 200, range.first, range.second
         )
+
+        if (active.isRemote) {
+            // Over the wire there is no pump: a command is one small message
+            // and coalescing them would only add latency to a slider that is
+            // already a round trip away.
+            active.setManualExposure(
+                iso, shutter, Mechanism.frameDurationForFps(activeProfile?.fps ?: 25)
+            )
+        } else {
+            pump.setExposure(iso, shutter)
+        }
     }
 
     private fun pushZoom(progress: Int) {
-        val range = service?.controls?.zoomRange() ?: return
-        pump.setZoom(range.lower + (progress / 100f) * (range.upper - range.lower))
+        val active = link ?: return
+        val range = active.zoomRange() ?: return
+        val ratio = range.lower + (progress / 100f) * (range.upper - range.lower)
+        if (active.isRemote) active.setZoom(ratio) else pump.setZoom(ratio)
     }
 
     private fun bindControlRanges() {
@@ -963,11 +1008,15 @@ class MainActivity : AppCompatActivity() {
                 kelvinProgress =
                     if (snapped != asked) Mechanism.progressForKelvin(snapped, 100) else progress
                 if (manualWhiteBalance) {
-                    // Shifts the camera's own measurement warmer or cooler
-                    // rather than substituting a textbook answer for it.
-                    service?.controls?.nudgeWhiteBalanceTo(
-                        Mechanism.kelvinFromProgress(kelvinProgress, 100)
-                    )
+                    val kelvin = Mechanism.kelvinFromProgress(kelvinProgress, 100)
+                    val active = link
+                    if (active?.isRemote == true) {
+                        active.setManualWhiteBalance(kelvin)
+                    } else {
+                        // Locally this shifts the camera's own measurement
+                        // rather than substituting a textbook answer for it.
+                        service?.controls?.nudgeWhiteBalanceTo(kelvin)
+                    }
                 }
             }
             Mechanism.Param.ZOOM -> { zoomProgress = progress; pushZoom(progress) }
@@ -1125,10 +1174,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun pushFocus() {
         if (!manualFocus) return
-        val fraction = focusProgress / 100f
-        val remote = link as? RemoteLink
-        if (remote != null) remote.setFocusFraction(fraction)
-        else service?.controls?.setFocusFraction(fraction)
+        link?.setFocusFraction(focusProgress / 100f)
     }
 
     // --- live actions -------------------------------------------------------
@@ -1171,6 +1217,13 @@ class MainActivity : AppCompatActivity() {
         binding.sourceButton.centerText = "SRC"
         binding.sourceButton.ringColor = CircleButtonView.ACTIVE
         binding.sourceButton.setOnClickListener { pickSourceOnScreen() }
+        // Long press rescans from scratch, for when a camera has only just
+        // come up and was not on the network the first time we looked.
+        binding.sourceButton.setOnLongClickListener {
+            say("Rescanning", transient = false)
+            pickSourceOnScreen()
+            true
+        }
 
         binding.streamButton.centerText = "NDI"
         binding.streamButton.setOnClickListener { toggleStreaming() }
@@ -1286,6 +1339,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The curve, applied every time this screen comes up.
+     *
+     * It was only ever set when the pipeline was first built, so choosing
+     * S-Log3 in settings changed a stored value and nothing else, and the
+     * image stayed exactly as it was. Nothing anywhere corrects log back to
+     * Rec.709; the flat picture simply never arrived.
+     */
+    private fun applyLogCurve() {
+        val curve = appSettings.logCurve
+        val active = link
+        if (active?.isRemote == true) {
+            (active as? RemoteLink)?.setLogCurve(curve)
+            return
+        }
+        if (!DeviceProfile.logCapable) return
+        service?.controls?.setLogCurve(curve)
+    }
+
     private fun applyGrade() {
         val controls = service?.controls ?: return
         if (!DeviceProfile.logCapable) {
@@ -1382,6 +1454,39 @@ class MainActivity : AppCompatActivity() {
      * fills the preview: this phone's sensor, or a decoder fed from the
      * network. Never both.
      */
+    /**
+     * Everything down, before anything comes up.
+     *
+     * Deliberately blunt. Each of these was, at some point, the thing left
+     * running that broke the next mode, and a teardown that tries to be clever
+     * about which ones matter is a teardown that will be wrong again.
+     */
+    private fun resetForModeChange() {
+        lastAppliedMode = appSettings.appMode
+
+        remoteEngine?.stop()
+        remoteEngine = null
+        service?.releasePipeline()
+        link = null
+
+        focusDirector.stop()
+        pump.flush()
+        balanceBase = null
+        manualExposure = false
+        manualWhiteBalance = false
+        manualFocus = false
+
+        binding.verticalPanel.visibility = View.GONE
+        binding.autoAllButton.visibility = View.GONE
+        binding.paramBar.visibility = View.GONE
+        binding.gradePanel.visibility = View.GONE
+        binding.vectorscope.visibility = View.GONE
+        binding.remoteBorder.visibility = View.GONE
+        binding.noSignal.visibility = View.GONE
+        binding.tallyBorder.state = TallyBorderView.State.OFF
+        say(appSettings.appMode.label, transient = false)
+    }
+
     private fun applyCameraSource() {
         val mode = appSettings.appMode
 
@@ -1595,7 +1700,7 @@ class MainActivity : AppCompatActivity() {
         // nothing beyond the arithmetic.
         wavePixels?.let { pixels ->
             focusDirector.currentSharpness =
-                Mechanism.sharpness(pixels, 240, 135, binding.focusSquare.normalisedBounds())
+                Mechanism.sharpness(pixels, 480, 270, binding.focusSquare.normalisedBounds())
         }
         focusDirector.holdMs = appSettings.focusHoldMs
         focusDirector.rampMs = appSettings.focusRampMs
@@ -1609,23 +1714,27 @@ class MainActivity : AppCompatActivity() {
         lastWaveAt = now
 
         val bitmap = waveBitmap
-            ?: android.graphics.Bitmap.createBitmap(240, 135, android.graphics.Bitmap.Config.ARGB_8888)
+            ?: android.graphics.Bitmap.createBitmap(480, 270, android.graphics.Bitmap.Config.ARGB_8888)
                 .also { waveBitmap = it }
-        val pixels = wavePixels ?: IntArray(240 * 135).also { wavePixels = it }
+        val pixels = wavePixels ?: IntArray(480 * 270).also { wavePixels = it }
 
         try {
             binding.preview.getBitmap(bitmap) ?: return
-            bitmap.getPixels(pixels, 0, 240, 0, 0, 240, 135)
+            bitmap.getPixels(pixels, 0, 480, 0, 0, 480, 270)
         } catch (e: Exception) {
             return
         }
 
         if (channels.isEmpty()) return
         val traces = channels.associateWith { channel ->
-            Mechanism.waveform(pixels, 240, 135, bins = 128, channel = channel.index)
+            // Twice the columns and twice the bins: 480 across is about one
+            // trace column per two screen pixels, which is as fine as the
+            // overlay can be read, and 256 bins is one per 10-bit code step
+            // divided by four rather than by eight.
+            Mechanism.waveform(pixels, 480, 270, bins = 256, channel = channel.index)
         }
         binding.waveform.channels = channels
-        binding.waveform.setTraces(traces, columns = 240, bins = 128)
+        binding.waveform.setTraces(traces, columns = 480, bins = 256)
     }
 
     private fun refreshVectorscope() {

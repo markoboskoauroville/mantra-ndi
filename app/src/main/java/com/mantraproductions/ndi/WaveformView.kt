@@ -82,7 +82,10 @@ class WaveformView @JvmOverloads constructor(
                 Mechanism.WaveformChannel.RED -> Color.rgb(255, 60, 60)
                 Mechanism.WaveformChannel.GREEN -> Color.rgb(60, 255, 90)
                 Mechanism.WaveformChannel.BLUE -> Color.rgb(80, 130, 255)
-                Mechanism.WaveformChannel.LUMA -> Color.rgb(235, 235, 235)
+                // Green rather than white: it is the colour every scope on a
+                // desk uses for luma, and it stays legible over a picture,
+                // which white does not once the shot has any highlights.
+                Mechanism.WaveformChannel.LUMA -> Color.rgb(90, 255, 130)
             }
             for (x in 0 until columns) {
                 val offset = x * bins
@@ -94,7 +97,7 @@ class WaveformView @JvmOverloads constructor(
                     // there, and a linear scale hides everything but the sky.
                     val strength = Math.sqrt(count.toDouble() / peak).toFloat()
                     dotPaint.color = Color.argb(
-                        (strength * 150f).toInt().coerceIn(12, 150),
+                        (strength * 215f).toInt().coerceIn(22, 215),
                         Color.red(base), Color.green(base), Color.blue(base)
                     )
                     val top = h - (b + 1) * binHeight

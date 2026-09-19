@@ -19,6 +19,9 @@ import kotlin.concurrent.thread
  * The decoder can't be configured until the first keyframe arrives, since its
  * dimensions come from the stream rather than from us.
  */
+/** How long a decoded frame stays believable before it is treated as stale. */
+private const val SIGNAL_TIMEOUT_MS = 1500L
+
 class MonitorEngine(
     private val surface: Surface,
     private val onStatus: (String) -> Unit,
@@ -47,6 +50,21 @@ class MonitorEngine(
             NdiReceiver.disconnect()
             releaseCodec()
         }
+    }
+
+    @Volatile private var lastFrameAt = 0L
+
+    /**
+     * Whether anything has arrived recently enough to still be on screen.
+     * A surface keeps its last frame forever, so silence has to be measured
+     * rather than observed.
+     */
+    fun hasRecentFrame(): Boolean =
+        lastFrameAt != 0L &&
+            android.os.SystemClock.elapsedRealtime() - lastFrameAt < SIGNAL_TIMEOUT_MS
+
+    internal fun markFrame() {
+        lastFrameAt = android.os.SystemClock.elapsedRealtime()
     }
 
     fun stop() {
@@ -157,7 +175,10 @@ class MonitorEngine(
                 val index = c.dequeueOutputBuffer(bufferInfo, 0)
                 if (index < 0) break
                 // true = hand the frame to the Surface for display.
+                // Rendered, so the surface now holds something real. This is
+                // the only moment that can be trusted as "there is a picture".
                 c.releaseOutputBuffer(index, true)
+                markFrame()
             }
         } catch (e: IllegalStateException) {
             Log.w(TAG, "Decoder output failed", e)

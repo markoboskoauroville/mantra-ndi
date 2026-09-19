@@ -25,6 +25,14 @@ class TallyBorderView @JvmOverloads constructor(
     defStyle: Int = 0
 ) : View(context, attrs, defStyle) {
 
+    /**
+     * What the border means, in the order a camera operator cares about.
+     *
+     * Yellow is somebody watching: a monitor has opened this source, so the
+     * camera is being seen even though it is not cut. Red is on air. Green
+     * was wrong for watched, because green everywhere else in this app and on
+     * every mixer means safe, and being watched is not safe.
+     */
     enum class State { OFF, CONNECTED, PREVIEW, PROGRAM }
 
     var state: State = State.OFF
@@ -49,7 +57,7 @@ class TallyBorderView @JvmOverloads constructor(
         val colour = when (state) {
             State.PROGRAM -> Color.parseColor("#FF1F0F")
             State.PREVIEW -> Color.parseColor("#FFC400")
-            State.CONNECTED -> Color.parseColor("#12C46A")
+            State.CONNECTED -> Color.parseColor("#FFC400")
             State.OFF -> return
         }
         // Program gets a heavier border; being live should not be subtle.
