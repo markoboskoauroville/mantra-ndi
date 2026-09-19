@@ -202,19 +202,6 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_TC_SOURCE, null)
         set(value) = prefs.edit().putString(KEY_TC_SOURCE, value).apply()
 
-    /** Which lines of the burn-in are drawn. */
-    var timecodeShowSync: Boolean
-        get() = prefs.getBoolean(KEY_TC_SYNC, true)
-        set(value) = prefs.edit().putBoolean(KEY_TC_SYNC, value).apply()
-
-    var timecodeShowStatus: Boolean
-        get() = prefs.getBoolean(KEY_TC_STATUS, true)
-        set(value) = prefs.edit().putBoolean(KEY_TC_STATUS, value).apply()
-
-    var timecodeShowFormat: Boolean
-        get() = prefs.getBoolean(KEY_TC_FORMAT, true)
-        set(value) = prefs.edit().putBoolean(KEY_TC_FORMAT, value).apply()
-
     /**
      * Correct the log picture on this screen only.
      *
@@ -241,6 +228,15 @@ class AppSettings(context: Context) {
     var previewLut: Boolean
         get() = prefs.getBoolean(KEY_PREVIEW_LUT, false)
         set(value) = prefs.edit().putBoolean(KEY_PREVIEW_LUT, value).apply()
+
+    /** Which fields the status line carries. */
+    var timecodeFields: Set<TimecodeView.Field>
+        get() = prefs.getStringSet(KEY_TC_FIELDS, null)
+            ?.mapNotNull { name -> TimecodeView.Field.values().firstOrNull { it.name == name } }
+            ?.toSet()
+            ?: TimecodeView.Field.values().toSet()
+        set(value) = prefs.edit()
+            .putStringSet(KEY_TC_FIELDS, value.map { it.name }.toSet()).apply()
 
     var showTimecode: Boolean
         get() = prefs.getBoolean(KEY_SHOW_TC, true)
@@ -299,6 +295,7 @@ class AppSettings(context: Context) {
         const val KEY_PEAK_SENS = "peak_sensitivity"
         const val KEY_TC_TOP = "timecode_top"
         const val KEY_TC_PLATE = "timecode_plate"
+        const val KEY_TC_FIELDS = "tc_fields"
         const val KEY_TC_SYNC = "tc_line_sync"
         const val KEY_TC_STATUS = "tc_line_status"
         const val KEY_TC_FORMAT = "tc_line_format"

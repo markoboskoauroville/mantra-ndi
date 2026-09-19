@@ -113,9 +113,8 @@
          setting rather than two layouts. -->
     <com.mantraproductions.ndi.TimecodeView
         android:id="@+id/timecodeView"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_margin="12dp"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="@id/preview"
         app:layout_constraintBottom_toBottomOf="@id/preview"
@@ -153,22 +152,6 @@
 
         <!-- Focus first, at the top, clear of the system gesture area at the
              bottom of the screen. M or A, and nothing else. -->
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/focusModeButton"
-            android:layout_width="46dp"
-            android:layout_height="46dp"
-            android:layout_marginBottom="14dp" />
-
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/recordButton"
-            android:layout_width="58dp"
-            android:layout_height="58dp"
-            android:layout_marginBottom="14dp" />
-
-        <!-- Going live had been a long press on the record ring, which is
-             discoverable only to whoever wrote it. It is a button now. -->
-        <!-- Text only, and the colour is the whole state: grey is the picture
-             as the sensor sends it, green is corrected for this screen. -->
         <!-- Recovery, at the top of the column where a thumb reaching in a
              hurry lands, and away from record and stream. -->
         <TextView
@@ -185,7 +168,6 @@
             android:background="?android:attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true" />
-
         <TextView
             android:id="@+id/resetButton"
             android:layout_width="54dp"
@@ -200,6 +182,24 @@
             android:background="?android:attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true" />
+
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/focusModeButton"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:layout_marginBottom="14dp" />
+
+        <com.mantraproductions.ndi.CircleButtonView
+            android:id="@+id/recordButton"
+            android:layout_width="58dp"
+            android:layout_height="58dp"
+            android:layout_marginBottom="14dp" />
+
+        <!-- Going live had been a long press on the record ring, which is
+             discoverable only to whoever wrote it. It is a button now. -->
+        <!-- Text only, and the colour is the whole state: grey is the picture
+             as the sensor sends it, green is corrected for this screen. -->
+
 
 
 

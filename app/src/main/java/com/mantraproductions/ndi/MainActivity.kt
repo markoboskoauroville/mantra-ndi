@@ -171,8 +171,6 @@ class MainActivity : AppCompatActivity() {
         safely("vectorscope") { setUpVectorscope() }
         safely("actions") { setUpActions() }
 
-        binding.preview.setOnClickListener { toggleVerticalPanel() }
-
         binding.preview.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) {
                 surfaceReady = true
@@ -627,9 +625,6 @@ class MainActivity : AppCompatActivity() {
 
         view.sizeSp = appSettings.timecodeSize.toFloat()
         view.showBackground = appSettings.timecodePlate
-        view.showSync = appSettings.timecodeShowSync
-        view.showStatus = appSettings.timecodeShowStatus
-        view.showFormat = appSettings.timecodeShowFormat
         view.timecode = running.toString()
 
         // The big number is the take, the small one is the file's timecode.
@@ -667,7 +662,7 @@ class MainActivity : AppCompatActivity() {
         // the card fills and the file simply stops, or the encoder falls
         // behind and an edit finds the stutter months later.
         val mbps = appSettings.recordMbps
-        view.showHealth = appSettings.timecodeShowFormat
+        view.fields = appSettings.timecodeFields
         view.healthLine = RecordingHealth.summary(mbps)
         view.healthLevel = maxOf(
             RecordingHealth.spaceLevel(RecordingHealth.secondsRemaining(mbps)),
@@ -1771,11 +1766,12 @@ class MainActivity : AppCompatActivity() {
         binding.tglLut.alpha = if (lutAvailable) 1f else 0.35f
         light(binding.tglLut, lutAvailable && appSettings.previewLut)
 
+        // Green for on, grey for off, the same as every other toggle. The
+        // peaking colour belongs on the edges it marks, not on its own button:
+        // a bar where each switch lights differently is a bar that has to be
+        // read rather than glanced at.
         binding.tglPeak.alpha = if (PreviewEffects.supported) 1f else 0.35f
-        binding.tglPeak.setTextColor(
-            if (PreviewEffects.supported && appSettings.focusPeaking) appSettings.peakColour.colour
-            else android.graphics.Color.parseColor("#6E7A86")
-        )
+        light(binding.tglPeak, PreviewEffects.supported && appSettings.focusPeaking)
 
         light(binding.tglWave, appSettings.waveformChannels.isNotEmpty())
         light(binding.tglScope, appSettings.vectorscopeVisible)

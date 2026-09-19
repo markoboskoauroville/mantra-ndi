@@ -421,6 +421,30 @@ class SettingsActivity : AppCompatActivity() {
      * following two different masters look identical if all that is shown is a
      * running number, and they stay identical until the edit.
      */
+    /**
+     * Which fields the status line carries, as checkmarks.
+     *
+     * Checkmarks rather than a mode, because a camera operator and a sound
+     * recordist want different halves of the same line and neither wants the
+     * other's.
+     */
+    private fun pickTimecodeFields() {
+        val all = TimecodeView.Field.values()
+        val chosen = prefs.timecodeFields.toMutableSet()
+        val checked = BooleanArray(all.size) { all[it] in chosen }
+
+        AlertDialog.Builder(this)
+            .setTitle("Status line")
+            .setMultiChoiceItems(all.map { it.label }.toTypedArray(), checked) { _, which, on ->
+                if (on) chosen.add(all[which]) else chosen.remove(all[which])
+            }
+            .setPositiveButton("Done") { _, _ ->
+                prefs.timecodeFields = chosen
+                refresh()
+            }
+            .show()
+    }
+
     private fun pickTimecodeSource() {
         if (!NdiFinder.available) {
             toast("This build has no NDI SDK")
@@ -455,9 +479,7 @@ class SettingsActivity : AppCompatActivity() {
                 "Position, now " + (if (prefs.timecodeAtTop) "top" else "bottom"),
                 "Background, now " + (if (prefs.timecodePlate) "on" else "off"),
                 "Timecode from, now " + (prefs.timecodeSource ?: "anything"),
-                "Sync line, now " + (if (prefs.timecodeShowSync) "on" else "off"),
-                "Status line, now " + (if (prefs.timecodeShowStatus) "on" else "off"),
-                "Format line, now " + (if (prefs.timecodeShowFormat) "on" else "off"),
+                "Which fields, now " + prefs.timecodeFields.size + " of 6",
                 "Frame rate, now ${prefs.ltcRate.label}"
             )
         ) { index ->
@@ -470,10 +492,8 @@ class SettingsActivity : AppCompatActivity() {
                 2 -> { prefs.timecodeAtTop = !prefs.timecodeAtTop; refresh() }
                 3 -> { prefs.timecodePlate = !prefs.timecodePlate; refresh() }
                 4 -> pickTimecodeSource()
-                5 -> { prefs.timecodeShowSync = !prefs.timecodeShowSync; refresh() }
-                6 -> { prefs.timecodeShowStatus = !prefs.timecodeShowStatus; refresh() }
-                7 -> { prefs.timecodeShowFormat = !prefs.timecodeShowFormat; refresh() }
-                8 -> {
+                5 -> pickTimecodeFields()
+                6 -> {
                     val rates = Timecode.Rate.values().toList()
                     choose("Frame rate", rates.map { it.label }) { r ->
                         prefs.ltcRate = rates[r]

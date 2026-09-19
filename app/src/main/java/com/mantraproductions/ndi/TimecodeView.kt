@@ -9,21 +9,19 @@ import android.util.AttributeSet
 import android.view.View
 
 /**
- * The burn-in block: the clock, and everything a person needs to read beside it.
+ * One status line across the top, the way a deck or a mixer writes one.
  *
- * Laid out the way a data burn-in is laid out and the way a deck's status
- * display is: one column, everything flush left, most important at the top.
- * Nothing is pushed to the right, because a reader's eye returns to the same
- * left edge for every line and anything set to the right of a variable width
- * number moves whenever the number does.
+ * Everything on a single row and nothing stacked. A block of text sitting in
+ * the corner of a frame covers the part of the shot nearest it; a line along
+ * the top edge covers a strip nobody composes into anyway, and the eye reads a
+ * row far faster than a column of short lines.
  *
- *     10:22:33:14
- *     SYNC EXT   MARKO PHONE
- *     RECORDING
- *     V-LOG   3840x2160   25p
+ *   TC 19:16:22:15  SYNC INT  MANTRA CAM A142   00:01:47:12   STANDBY  LOGC4 ...
  *
- * Four lines, each answering a question that gets asked on set: what time is
- * it, whose clock is that, what is this camera doing, and what is it writing.
+ * The take length sits in the middle in a larger face, because it is the one
+ * field watched continuously while rolling and everything else is checked
+ * occasionally. Centring it also means it stays where the eye expects it as
+ * the fields either side change width.
  */
 class TimecodeView @JvmOverloads constructor(
     context: Context,
@@ -32,112 +30,104 @@ class TimecodeView @JvmOverloads constructor(
 ) : View(context, attrs, defStyle) {
 
     enum class Sync(val label: String, val colour: Int) {
-        /** This device is the clock the others follow. */
         MASTER("SYNC MST", Color.parseColor("#12C46A")),
-
-        /** Following another device's clock. */
         EXTERNAL("SYNC EXT", Color.parseColor("#F2F4F6")),
-
-        /** Its own clock, agreeing with nothing else. */
         INTERNAL("SYNC INT", Color.parseColor("#8C99A6"))
     }
 
-    /** What the camera is doing, in the words a deck would use. */
     enum class Status(val label: String, val colour: Int) {
         IDLE("STANDBY", Color.parseColor("#8C99A6")),
         STREAMING("LIVE", Color.parseColor("#12C46A")),
         RECORDING("RECORDING", Color.parseColor("#FF4436")),
-        BOTH("LIVE / RECORDING", Color.parseColor("#FF4436")),
+        BOTH("LIVE / REC", Color.parseColor("#FF4436")),
         WATCHING("MONITOR", Color.parseColor("#FFC400"))
+    }
+
+    /** Each field can be turned off on its own, as a burn-in's can. */
+    enum class Field(val label: String) {
+        TIMECODE("Timecode"),
+        SYNC("Sync state"),
+        SOURCE("Clock source"),
+        STATUS("Camera status"),
+        FORMAT("Format"),
+        HEALTH("Space and drops")
     }
 
     private val density = resources.displayMetrics.density
 
-    /**
-     * The big number: how long the current take has run.
-     *
-     * Large because it is the thing being watched during a take. How long the
-     * shot is now is a question asked constantly while rolling; what time of
-     * day it is is a question asked once, afterwards, in the edit.
-     */
     var duration: String = "00:00:00:00"
         set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** The small number beneath it: the timecode actually written to the file. */
     var timecode: String = "00:00:00:00"
-        set(value) { if (field != value) { field = value; invalidate() } }
-
-    /** Dimmed when no take is running, so a held length cannot read as a live one. */
-    var rolling: Boolean = false
         set(value) { if (field != value) { field = value; invalidate() } }
 
     var sync: Sync = Sync.INTERNAL
         set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** Whose clock it is. On internal, this device's own name. */
     var sourceName: String = ""
         set(value) { if (field != value) { field = value; invalidate() } }
 
     var status: Status = Status.IDLE
         set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** Curve, resolution and rate, already formatted. */
     var formatLine: String = ""
         set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** Space left, time left, frames lost. */
     var healthLine: String = ""
         set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** Drawn in a warning colour once either number stops being comfortable. */
     var healthLevel: RecordingHealth.Level = RecordingHealth.Level.FINE
         set(value) { if (field != value) { field = value; invalidate() } }
+
+    var rolling: Boolean = false
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    var fields: Set<Field> = Field.values().toSet()
+        set(value) { field = value; requestLayout(); invalidate() }
 
     var sizeSp: Float = 16f
         set(value) { field = value; requestLayout(); invalidate() }
 
     var showBackground: Boolean = true
-        set(value) { field = value; invalidate() }
+        set(value) { if (field != value) { field = value; invalidate() } }
 
-    /** Any line can be turned off without disturbing the ones that remain. */
-    var showSync = true
-    var showStatus = true
-    var showFormat = true
-    var showHealth = true
-
-    private val digits = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val big = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = android.graphics.Typeface.MONOSPACE
         isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
     }
     private val small = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = android.graphics.Typeface.MONOSPACE
-        letterSpacing = 0.1f
+        letterSpacing = 0.06f
     }
     private val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        // The standard burn-in plate: dark enough to read white digits over a
-        // bright sky, light enough not to hide the shot underneath.
         color = Color.argb(115, 0, 0, 0)
     }
 
-    private val pad get() = 7f * density
-    private fun digitSize() = sizeSp * density
-    private fun smallSize() = (sizeSp * 0.44f * density).coerceAtLeast(8f * density)
-    private fun lineGap() = smallSize() * 1.45f
+    private val pad get() = 8f * density
+    private val gap get() = 14f * density
+    private fun bigSize() = sizeSp * density
+    private fun smallSize() = (sizeSp * 0.46f * density).coerceAtLeast(8f * density)
 
-    private fun lines(): List<Pair<String, Int>> {
+    /** Left of the number: where the clock is and where it came from. */
+    private fun leftFields(): List<Pair<String, Int>> {
         val out = mutableListOf<Pair<String, Int>>()
-        // The file's own timecode, directly under the take length, because the
-        // two are read together: how long this is, and where it sits.
-        out += ("TC " + timecode) to sync.colour
-        if (showSync) {
-            val name = sourceName.uppercase()
-            out += (if (name.isEmpty()) sync.label else sync.label + "   " + name) to sync.colour
+        if (Field.TIMECODE in fields) out += ("TC " + timecode) to sync.colour
+        if (Field.SYNC in fields) out += sync.label to sync.colour
+        if (Field.SOURCE in fields && sourceName.isNotEmpty()) {
+            out += sourceName.uppercase() to Color.parseColor("#9AA6B2")
         }
-        if (showStatus) out += status.label to status.colour
-        if (showFormat && formatLine.isNotEmpty()) {
+        return out
+    }
+
+    /** Right of it: what the camera is doing and what it is writing. */
+    private fun rightFields(): List<Pair<String, Int>> {
+        val out = mutableListOf<Pair<String, Int>>()
+        if (Field.STATUS in fields) out += status.label to status.colour
+        if (Field.FORMAT in fields && formatLine.isNotEmpty()) {
             out += formatLine.uppercase() to Color.parseColor("#9AA6B2")
         }
-        if (showHealth && healthLine.isNotEmpty()) {
+        if (Field.HEALTH in fields && healthLine.isNotEmpty()) {
             out += healthLine.uppercase() to when (healthLevel) {
                 RecordingHealth.Level.CRITICAL -> Status.RECORDING.colour
                 RecordingHealth.Level.LOW -> Status.WATCHING.colour
@@ -148,47 +138,61 @@ class TimecodeView @JvmOverloads constructor(
     }
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
-        digits.textSize = digitSize()
+        big.textSize = bigSize()
         small.textSize = smallSize()
-
-        val widest = maxOf(
-            digits.measureText("00:00:00:00"),
-            lines().maxOfOrNull { small.measureText(it.first) } ?: 0f
-        )
-        val height = pad * 2 + digitSize() * 1.1f + lines().size * lineGap()
-
+        val height = (pad * 2 + bigSize() * 1.12f).toInt()
+        // Full width: it is a status line along an edge, not a label.
         setMeasuredDimension(
-            resolveSize((pad * 2 + widest).toInt(), widthSpec),
-            resolveSize(height.toInt(), heightSpec)
+            resolveSize(Int.MAX_VALUE, widthSpec),
+            resolveSize(height, heightSpec)
         )
     }
 
     override fun onDraw(canvas: Canvas) {
-        digits.textSize = digitSize()
+        big.textSize = bigSize()
         small.textSize = smallSize()
 
         if (showBackground) {
-            canvas.drawRoundRect(
-                RectF(0f, 0f, width.toFloat(), height.toFloat()),
-                3f * density, 3f * density, plate
-            )
+            canvas.drawRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), plate)
         }
 
-        // One left edge for everything. The eye returns to the same place for
-        // every line, which is the whole reason a burn-in is a column.
-        val left = pad
-        var y = pad + digitSize() * 0.88f
+        val middle = height / 2f
+        val smallBaseline = middle - (small.descent() + small.ascent()) / 2f
 
-        digits.color = if (rolling) Status.RECORDING.colour else sync.colour
-        digits.alpha = if (rolling) 255 else 170
-        canvas.drawText(duration, left, y, digits)
-        digits.alpha = 255
+        // The take, centred, in the larger face.
+        big.color = if (rolling) Status.RECORDING.colour else sync.colour
+        big.alpha = if (rolling) 255 else 180
+        if (Field.TIMECODE in fields || fields.isNotEmpty()) {
+            canvas.drawText(
+                duration, width / 2f,
+                middle - (big.descent() + big.ascent()) / 2f, big
+            )
+        }
+        big.alpha = 255
 
-        y += digitSize() * 0.22f
-        for ((text, colour) in lines()) {
-            y += lineGap()
+        val reserved = big.measureText(duration) / 2f + gap
+
+        // Left group runs outwards from the edge and stops before the number.
+        var x = pad
+        small.textAlign = Paint.Align.LEFT
+        for ((text, colour) in leftFields()) {
+            val w = small.measureText(text)
+            if (x + w > width / 2f - reserved) break
             small.color = colour
-            canvas.drawText(text, left, y, small)
+            canvas.drawText(text, x, smallBaseline, small)
+            x += w + gap
+        }
+
+        // Right group runs inwards from the other edge, so the line stays
+        // balanced however wide the middle gets.
+        var rx = width - pad
+        small.textAlign = Paint.Align.RIGHT
+        for ((text, colour) in rightFields().reversed()) {
+            val w = small.measureText(text)
+            if (rx - w < width / 2f + reserved) break
+            small.color = colour
+            canvas.drawText(text, rx, smallBaseline, small)
+            rx -= w + gap
         }
     }
 }

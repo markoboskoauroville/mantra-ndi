@@ -155,7 +155,7 @@ object PreviewEffects {
                 // Laid over a dimmed picture rather than a black box, so the
                 // shot is still readable underneath the trace.
                 half strength = clamp(max(trace.r, max(trace.g, trace.b)), 0.0, 1.0);
-                rgb = mix(rgb * 0.45, clamp(trace, 0.0, 1.0), strength);
+                rgb = mix(rgb * 0.55, clamp(trace, 0.0, 1.0), strength);
             }
 
             return half4(rgb, c.a);
@@ -229,12 +229,13 @@ object PreviewEffects {
                 Color.green(peakColour.colour) / 255f,
                 Color.blue(peakColour.colour) / 255f
             )
-            // The trace occupies the lower third, which is where a scope sits
-            // on a monitor and where it hides least of the frame.
+            // The whole frame. A trace squeezed into a strip throws away the
+            // vertical resolution that makes it readable: black and white end
+            // up a few pixels apart and every exposure looks the same.
             val height = view.height.toFloat()
             shader.setFloatUniform("useWave", if (wantWave) 1f else 0f)
-            shader.setFloatUniform("waveTop", height * 0.66f)
-            shader.setFloatUniform("waveHeight", height * 0.32f)
+            shader.setFloatUniform("waveTop", 0f)
+            shader.setFloatUniform("waveHeight", height)
             shader.setFloatUniform("viewHeight", height)
             shader.setFloatUniform(
                 "waveLuma", if (Mechanism.WaveformChannel.LUMA in waveform) 1f else 0f
