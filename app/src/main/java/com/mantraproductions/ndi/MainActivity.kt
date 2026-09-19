@@ -662,6 +662,17 @@ class MainActivity : AppCompatActivity() {
             else -> TimecodeView.Status.IDLE
         }
 
+        // What is left and what has been lost. Both fail silently otherwise:
+        // the card fills and the file simply stops, or the encoder falls
+        // behind and an edit finds the stutter months later.
+        val mbps = appSettings.recordMbps
+        view.showHealth = appSettings.timecodeShowFormat
+        view.healthLine = RecordingHealth.summary(mbps)
+        view.healthLevel = maxOf(
+            RecordingHealth.spaceLevel(RecordingHealth.secondsRemaining(mbps)),
+            RecordingHealth.dropLevel(RecordingHealth.dropPercent)
+        )
+
         view.formatLine = activeProfile?.let { p ->
             val curve = appSettings.logCurve.displayName
             val depth = if (appSettings.tenBitWanted && DeviceProfile.tenBitCapable) "10-bit"

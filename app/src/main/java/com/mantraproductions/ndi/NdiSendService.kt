@@ -505,6 +505,7 @@ class NdiSendService : Service() {
      * this costs almost nothing on top.
      */
     fun startRecording(): Boolean {
+        RecordingHealth.reset()
         val s = stream ?: return false
         if (isRecording) return true
         // DCIM/Mantra NDI, so the footage lands in the gallery beside

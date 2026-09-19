@@ -76,7 +76,12 @@ class Mp4Recorder(private val path: String) {
         if ((info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) return
         try {
             muxer?.writeSampleData(videoTrack, buffer, info)
+            RecordingHealth.frameDelivered()
         } catch (e: Exception) {
+            // A refused sample is a frame that is not in the file. It was
+            // logged and forgotten before, which is how a take comes back from
+            // a shoot with gaps nobody knew about.
+            RecordingHealth.frameDropped()
             Log.w(TAG, "video sample", e)
         }
     }

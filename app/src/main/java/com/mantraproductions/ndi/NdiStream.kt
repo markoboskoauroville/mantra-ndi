@@ -94,6 +94,7 @@ class NdiStream(
         // the frames are stamped with, rather than against a reading taken at
         // some other moment.
         lastVideoPtsUs = info.presentationTimeUs
+        RecordingHealth.frameDelivered()
         NdiSender.sendVideo(videoBuffer.toByteArray(info), isKeyframe, info.presentationTimeUs, useHevc)
         streamClient.countVideoFrame()
     }

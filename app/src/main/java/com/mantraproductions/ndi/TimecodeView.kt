@@ -85,6 +85,14 @@ class TimecodeView @JvmOverloads constructor(
     var formatLine: String = ""
         set(value) { if (field != value) { field = value; invalidate() } }
 
+    /** Space left, time left, frames lost. */
+    var healthLine: String = ""
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    /** Drawn in a warning colour once either number stops being comfortable. */
+    var healthLevel: RecordingHealth.Level = RecordingHealth.Level.FINE
+        set(value) { if (field != value) { field = value; invalidate() } }
+
     var sizeSp: Float = 16f
         set(value) { field = value; requestLayout(); invalidate() }
 
@@ -95,6 +103,7 @@ class TimecodeView @JvmOverloads constructor(
     var showSync = true
     var showStatus = true
     var showFormat = true
+    var showHealth = true
 
     private val digits = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = android.graphics.Typeface.MONOSPACE
@@ -127,6 +136,13 @@ class TimecodeView @JvmOverloads constructor(
         if (showStatus) out += status.label to status.colour
         if (showFormat && formatLine.isNotEmpty()) {
             out += formatLine.uppercase() to Color.parseColor("#9AA6B2")
+        }
+        if (showHealth && healthLine.isNotEmpty()) {
+            out += healthLine.uppercase() to when (healthLevel) {
+                RecordingHealth.Level.CRITICAL -> Status.RECORDING.colour
+                RecordingHealth.Level.LOW -> Status.WATCHING.colour
+                RecordingHealth.Level.FINE -> Color.parseColor("#9AA6B2")
+            }
         }
         return out
     }

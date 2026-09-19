@@ -520,6 +520,53 @@ class MechanismTest {
         assertTrue(BandwidthTest.requirement(60) > BandwidthTest.requirement(12))
     }
 
+    // --- whether a take will fit, and whether it survived --------------------
+
+    @Test fun timeLeftFallsAsTheBitrateRises() {
+        val free = 64_000_000_000L
+        val cheap = RecordingHealth.secondsRemaining(25, free)
+        val dear = RecordingHealth.secondsRemaining(100, free)
+        assertTrue(cheap > dear * 3)
+    }
+
+    @Test fun timeLeftIsRoughlyRightRatherThanApproximatelyAnything() {
+        // 25 Mbps is about 3.1 MB per second, so 31 GB is around 10,000
+        // seconds. A figure that is wrong by a factor is worse than none.
+        val seconds = RecordingHealth.secondsRemaining(25, 31_000_000_000L)
+        assertTrue("got $seconds", seconds in 9_000..10_500)
+    }
+
+    @Test fun anEmptyCardIsZeroSecondsRatherThanADivisionByIt() {
+        assertEquals(0L, RecordingHealth.secondsRemaining(25, 0L))
+    }
+
+    @Test fun spaceIsWarnedAboutByTimeNotBySize() {
+        // Ten gigabytes is an hour at one setting and six minutes at another,
+        // and the question anybody asks is whether the next take fits.
+        assertEquals(RecordingHealth.Level.CRITICAL, RecordingHealth.spaceLevel(120))
+        assertEquals(RecordingHealth.Level.LOW, RecordingHealth.spaceLevel(900))
+        assertEquals(RecordingHealth.Level.FINE, RecordingHealth.spaceLevel(7200))
+    }
+
+    @Test fun aHandfulOfDroppedFramesIsNotAnAlarm() {
+        // The encoder catching its breath over a long take is not a take to
+        // reshoot; a steady percentage is.
+        assertEquals(RecordingHealth.Level.FINE, RecordingHealth.dropLevel(0.1))
+        assertEquals(RecordingHealth.Level.LOW, RecordingHealth.dropLevel(1.0))
+        assertEquals(RecordingHealth.Level.CRITICAL, RecordingHealth.dropLevel(4.0))
+    }
+
+    @Test fun durationsReadTheWayAPersonWouldSayThem() {
+        assertEquals("2h14m", RecordingHealth.formatDuration(8040))
+        assertEquals("8m", RecordingHealth.formatDuration(500))
+        assertEquals("40s", RecordingHealth.formatDuration(40))
+    }
+
+    @Test fun spaceReadsInTheUnitAPersonWouldUse() {
+        assertEquals("417 GB", RecordingHealth.formatSpace(417_000_000_000L))
+        assertEquals("980 MB", RecordingHealth.formatSpace(980_000_000L))
+    }
+
     // --- remote control protocol -------------------------------------------
 
     @Test fun commandSurvivesTheRoundTrip() {
