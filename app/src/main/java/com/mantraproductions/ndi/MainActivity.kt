@@ -116,27 +116,6 @@ class MainActivity : AppCompatActivity() {
         return LocalLink(controls).also { link = it }
     }
 
-    /**
-     * The camera being driven, resolved now rather than remembered.
-     *
-     * This is why the faders did nothing, intermittently, for many versions.
-     * The link was built once inside applyCameraSource and only if the
-     * pipeline's controls already existed. When the camera had not finished
-     * opening at that moment it stayed null, and every fader, every stepper
-     * and every A button returned early for the rest of the session. Whether
-     * it worked came down to which of two things finished first.
-     *
-     * A remote link is a real object with state, so it is kept. A local one is
-     * a thin wrapper over controls that may be replaced at any time, so it is
-     * made on demand and never cached.
-     */
-    private fun activeLink(): CameraLink? {
-        link?.let { if (it.isRemote) return it }
-        val controls = service?.controls ?: return null
-        val local = link as? LocalLink
-        if (local != null && local.controls === controls) return local
-        return LocalLink(controls).also { link = it }
-    }
     private var remoteEngine: MonitorEngine? = null
     private val ui = Handler(Looper.getMainLooper())
     private val clearStatus = Runnable { binding.statusText.text = defaultStatus() }
@@ -467,9 +446,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) true
-        else super.onKeyUp(keyCode, event)
 
     /** The rocker drives whichever column was touched last. */
     private var focusedColumn: Mechanism.Param = Mechanism.Param.ISO
