@@ -218,6 +218,19 @@ class NdiSendService : Service() {
         if (hdr?.isRunning == true) return true
         activeProfile = profile
         val pipeline = HdrPipeline(applicationContext)
+
+        // The network's own quality, if one was asked for. Zero leaves the
+        // stream sharing the recording encoder, which is what happened before
+        // there was a choice.
+        val settings = AppSettings(applicationContext)
+        pipeline.streamBitRate = settings.streamMbps * 1_000_000
+        if (settings.streamHalfSize && settings.streamMbps > 0) {
+            // Halved on both axes, so a quarter of the pixels. Any other
+            // fraction risks a size the encoder will not take.
+            pipeline.streamWidth = profile.width / 2
+            pipeline.streamHeight = profile.height / 2
+        }
+
         pipeline.listener = object : HdrPipeline.Listener {
             override fun onReady(tenBit: Boolean, codec: String) {
                 Log.i(TAG, "Direct pipeline: ${if (tenBit) "10-bit HLG" else "8-bit"} $codec")

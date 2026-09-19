@@ -71,15 +71,20 @@ class HdrPipeline(private val context: Context) {
             listener?.onError("No 10-bit HEVC encoder on this phone, using 8-bit")
         }
 
+        // The recording encoder. Always at the profile's own bitrate, because
+        // the file is the thing that has to survive the grade.
         val encoder = HdrVideoEncoder(
             width = profile.width,
             height = profile.height,
             fps = profile.fps,
             bitRate = profile.bitRate,
             tenBit = tenBit,
-            onFormat = { sps, pps, vps -> NdiSender.setVideoInfo(sps, pps, vps) },
+            onFormat = { sps, pps, vps ->
+                if (streamBitRate <= 0) NdiSender.setVideoInfo(sps, pps, vps)
+            },
             onFrame = { data, keyframe, ptsUs, hevc ->
-                NdiSender.sendVideo(data, keyframe, ptsUs, hevc)
+                // Only feeds NDI when there is no separate stream encoder.
+                if (streamBitRate <= 0) NdiSender.sendVideo(data, keyframe, ptsUs, hevc)
             }
         )
         val encoderSurface = encoder.start()
@@ -90,7 +95,50 @@ class HdrPipeline(private val context: Context) {
         video = encoder
         isTenBit = tenBit
 
-        NdiSender.setVideoFormat(profile.width, profile.height, profile.fps, 1)
+        /*
+         * A second encoder for the network, when one is asked for.
+         *
+         * The two jobs want different things and always did. A recording wants
+         * every bit it can get, because it is graded later and nothing can put
+         * back what the encoder threw away. A stream wants to arrive: over a
+         * busy wifi a generous bitrate does not look better, it stutters, and
+         * a dropped frame is worse than a soft one.
+         *
+         * One encoder cannot serve both, so there are two, each with its own
+         * surface on the same capture session. The camera writes to both, and
+         * neither knows about the other.
+         *
+         * Some phones will not run two hardware encoders at this size. That is
+         * not a failure worth stopping for, so it falls back to sharing the
+         * recording encoder and says so.
+         */
+        var streamSurface: Surface? = null
+        if (streamBitRate > 0) {
+            val streamEncoder = HdrVideoEncoder(
+                width = streamWidth.takeIf { it > 0 } ?: profile.width,
+                height = streamHeight.takeIf { it > 0 } ?: profile.height,
+                fps = profile.fps,
+                bitRate = streamBitRate,
+                tenBit = tenBit,
+                onFormat = { sps, pps, vps -> NdiSender.setVideoInfo(sps, pps, vps) },
+                onFrame = { data, keyframe, ptsUs, hevc ->
+                    NdiSender.sendVideo(data, keyframe, ptsUs, hevc)
+                }
+            )
+            streamSurface = streamEncoder.start()
+            if (streamSurface == null) {
+                listener?.onError("Two encoders will not run here, sharing one")
+                streamBitRate = 0
+            } else {
+                streamVideo = streamEncoder
+            }
+        }
+
+        NdiSender.setVideoFormat(
+            if (streamBitRate > 0 && streamWidth > 0) streamWidth else profile.width,
+            if (streamBitRate > 0 && streamHeight > 0) streamHeight else profile.height,
+            profile.fps, 1
+        )
         if (!NdiSender.create(sourceName)) {
             listener?.onError("NDI sender could not start")
             encoder.stop()
@@ -111,7 +159,7 @@ class HdrPipeline(private val context: Context) {
             listener?.onError("Microphone unavailable, sending video only")
         }
 
-        val targets = listOfNotNull(encoderSurface, previewSurface)
+        val targets = listOfNotNull(encoderSurface, streamSurface, previewSurface)
         engine.listener = object : CaptureEngine.Listener {
             override fun onReady(cameraId: String, tenBitActive: Boolean, curve: LogCurves.Curve) {
                 isTenBit = tenBitActive
@@ -142,6 +190,8 @@ class HdrPipeline(private val context: Context) {
         audio = null
         video?.stop()
         video = null
+        streamVideo?.stop()
+        streamVideo = null
         NdiSender.destroy()
         isRunning = false
     }

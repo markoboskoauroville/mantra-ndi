@@ -118,6 +118,10 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.rowLens.setOnClickListener { pickLens() }
         binding.rowRecording.setOnClickListener { pickRecording() }
+        binding.rowRecording.setOnLongClickListener {
+            pickStreamQuality()
+            true
+        }
         binding.rowScreen.setOnClickListener { manageScreenAndBattery() }
         binding.rowScreen.setOnLongClickListener {
             resetToSafeState()
@@ -514,6 +518,38 @@ class SettingsActivity : AppCompatActivity() {
      * only on a phone that can do 4K60 and shows 10-bit only where the encoder
      * really has it, whatever the marketing said.
      */
+    /**
+     * What goes on the wire, which is a different decision from what goes in
+     * the file.
+     *
+     * A recording wants every bit it can get, because it is graded later and
+     * nothing puts back what the encoder threw away. A stream wants to arrive:
+     * over a busy wifi a generous bitrate does not look better, it stutters,
+     * and a dropped frame is worse than a soft one. They were sharing one
+     * encoder, so one number had to be wrong for one of them.
+     */
+    private fun pickStreamQuality() {
+        val p = profileStore.selected()
+        val options = listOf(
+            "Same as the recording" to 0,
+            "12 Mbps, weak wifi" to 12,
+            "20 Mbps, ordinary wifi" to 20,
+            "35 Mbps, good wifi" to 35,
+            "60 Mbps, wired or 6GHz" to 60
+        )
+        choose("Stream quality", options.map { it.first } + listOf(
+            "Half size: " + (if (prefs.streamHalfSize) "on" else "off")
+        )) { index ->
+            if (index < options.size) {
+                prefs.streamMbps = options[index].second
+            } else {
+                prefs.streamHalfSize = !prefs.streamHalfSize
+            }
+            refresh()
+            toast("Restart the stream to apply")
+        }
+    }
+
     private fun pickRecording() {
         val codec = prefs.recordCodec
         val mode = currentMode()

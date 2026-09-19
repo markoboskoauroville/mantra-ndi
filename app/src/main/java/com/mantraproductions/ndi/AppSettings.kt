@@ -162,6 +162,21 @@ class AppSettings(context: Context) {
             ?: RecordingFormats.ColourMode.REC709_8
         set(value) = prefs.edit().putString(KEY_COLOUR, value.name).apply()
 
+    /**
+     * Stream bitrate, separate from the recording's.
+     *
+     * Zero means send whatever the recording encoder makes, which is what the
+     * app did before there was a choice.
+     */
+    var streamMbps: Int
+        get() = prefs.getInt(KEY_STREAM_MBPS, 0)
+        set(value) = prefs.edit().putInt(KEY_STREAM_MBPS, value.coerceIn(0, 200)).apply()
+
+    /** Send at a smaller size than is recorded, for a network that cannot keep up. */
+    var streamHalfSize: Boolean
+        get() = prefs.getBoolean(KEY_STREAM_HALF, false)
+        set(value) = prefs.edit().putBoolean(KEY_STREAM_HALF, value).apply()
+
     var recordMbps: Int
         get() = prefs.getInt(KEY_RECORD_MBPS, 40)
         set(value) = prefs.edit().putInt(KEY_RECORD_MBPS, value.coerceIn(4, 200)).apply()
@@ -290,6 +305,8 @@ class AppSettings(context: Context) {
         const val KEY_TC_SOURCE = "timecode_source"
         const val KEY_CAMERA_ID = "camera_id"
         const val KEY_RECORD_MBPS = "record_mbps"
+        const val KEY_STREAM_MBPS = "stream_mbps"
+        const val KEY_STREAM_HALF = "stream_half"
         const val KEY_CONTAINER = "record_container"
         const val KEY_CODEC = "record_codec"
         const val KEY_COLOUR = "record_colour"
