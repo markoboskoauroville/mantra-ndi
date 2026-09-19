@@ -42,6 +42,16 @@ class HdrPipeline(private val context: Context) {
     var isRunning = false
         private set
     var isTenBit = false
+
+    /**
+     * The network's own encoder settings. Zero bitrate means share the
+     * recording encoder, which is what happened before there was a choice.
+     */
+    @Volatile var streamBitRate: Int = 0
+    @Volatile var streamWidth: Int = 0
+    @Volatile var streamHeight: Int = 0
+
+    private var streamVideo: HdrVideoEncoder? = null
         private set
 
     /** Digital audio gain, 1.0 untouched. */
