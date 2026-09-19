@@ -206,6 +206,20 @@ data class Timecode(
             return Timecode(h, m, s, f, rate)
         }
 
+        /**
+         * A duration as a timecode, counted from zero.
+         *
+         * Never drop frame: drop frame exists so that labels agree with the
+         * wall clock over hours, and a shot length is not a time of day. A
+         * take that ran ninety seconds should read one thirty, not one
+         * twenty-eight with two labels skipped.
+         */
+        fun fromDuration(millis: Long, rate: Rate): Timecode {
+            val plain = if (rate.dropFrame) Rate.FPS_29_97 else rate
+            val frames = Math.round(millis / 1000.0 * plain.fps)
+            return fromFrames(frames.coerceAtLeast(0), plain)
+        }
+
         /** Parses what a device or a person writes, in either separator. */
         fun parse(text: String, rate: Rate): Timecode? {
             val parts = text.trim().split(':', ';', '.')

@@ -629,6 +629,13 @@ class MainActivity : AppCompatActivity() {
         view.showFormat = appSettings.timecodeShowFormat
         view.timecode = running.toString()
 
+        // The big number is the take, the small one is the file's timecode.
+        val svcNow = service
+        view.rolling = svcNow?.isRecording == true
+        view.duration = Timecode.fromDuration(
+            svcNow?.recordingElapsedMillis ?: 0L, rate
+        ).toString()
+
         view.sync = when {
             isMaster -> TimecodeView.Sync.MASTER
             streamTc != null || ltcEngine.isLocked -> TimecodeView.Sync.EXTERNAL

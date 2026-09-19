@@ -75,7 +75,24 @@ class NdiSendService : Service() {
 
     /** Seconds since recording started, for the counter in the record button. */
     val recordingElapsedSeconds: Long
-        get() = if (isRecording) (System.currentTimeMillis() - recordStartedAt) / 1000 else 0
+        get() = recordingElapsedMillis / 1000
+
+    /**
+     * How long the current take has run, to the millisecond, and holding its
+     * final length after the take ends.
+     *
+     * Held rather than zeroed because the first thing anybody does when a take
+     * stops is look at how long it was, and a counter that snaps back to zero
+     * the instant you stop is a counter that answers that question never.
+     */
+    val recordingElapsedMillis: Long
+        get() = when {
+            isRecording -> System.currentTimeMillis() - recordStartedAt
+            lastTakeMillis > 0 -> lastTakeMillis
+            else -> 0L
+        }
+
+    @Volatile private var lastTakeMillis = 0L
 
     /** Live mic level, 0..1 linear RMS, tapped on the way to the encoder. */
     /** What arrives from the microphone, before the gain fader. */
@@ -514,6 +531,7 @@ class NdiSendService : Service() {
     }
 
     fun stopRecording() {
+        if (isRecording) lastTakeMillis = System.currentTimeMillis() - recordStartedAt
         if (!isRecording) return
         hdr?.let {
             it.stopRecording()

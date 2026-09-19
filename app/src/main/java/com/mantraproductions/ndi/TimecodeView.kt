@@ -53,7 +53,22 @@ class TimecodeView @JvmOverloads constructor(
 
     private val density = resources.displayMetrics.density
 
+    /**
+     * The big number: how long the current take has run.
+     *
+     * Large because it is the thing being watched during a take. How long the
+     * shot is now is a question asked constantly while rolling; what time of
+     * day it is is a question asked once, afterwards, in the edit.
+     */
+    var duration: String = "00:00:00:00"
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    /** The small number beneath it: the timecode actually written to the file. */
     var timecode: String = "00:00:00:00"
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    /** Dimmed when no take is running, so a held length cannot read as a live one. */
+    var rolling: Boolean = false
         set(value) { if (field != value) { field = value; invalidate() } }
 
     var sync: Sync = Sync.INTERNAL
@@ -102,6 +117,9 @@ class TimecodeView @JvmOverloads constructor(
 
     private fun lines(): List<Pair<String, Int>> {
         val out = mutableListOf<Pair<String, Int>>()
+        // The file's own timecode, directly under the take length, because the
+        // two are read together: how long this is, and where it sits.
+        out += ("TC " + timecode) to sync.colour
         if (showSync) {
             val name = sourceName.uppercase()
             out += (if (name.isEmpty()) sync.label else sync.label + "   " + name) to sync.colour
@@ -145,8 +163,10 @@ class TimecodeView @JvmOverloads constructor(
         val left = pad
         var y = pad + digitSize() * 0.88f
 
-        digits.color = sync.colour
-        canvas.drawText(timecode, left, y, digits)
+        digits.color = if (rolling) Status.RECORDING.colour else sync.colour
+        digits.alpha = if (rolling) 255 else 170
+        canvas.drawText(duration, left, y, digits)
+        digits.alpha = 255
 
         y += digitSize() * 0.22f
         for ((text, colour) in lines()) {
