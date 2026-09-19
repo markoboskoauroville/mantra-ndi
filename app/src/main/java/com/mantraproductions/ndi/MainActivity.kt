@@ -549,40 +549,55 @@ class MainActivity : AppCompatActivity() {
         else -> ClockKind.INTERNAL
     }
 
+    /**
+     * The clock, and what kind of clock it is.
+     *
+     * Colour and three letters say the same thing twice on purpose, because
+     * either one alone fails: colour is invisible to somebody who cannot
+     * separate green from white, and three small letters are unreadable at
+     * arm's length on a gimbal. Together they survive both.
+     *
+     *   MST, green         this phone is the master and is stamping frames
+     *   SYC, white         following a master's clock off the stream
+     *   INT, grey outline  a clock of its own, agreeing with nothing
+     */
     private fun refreshTimecode() {
         if (!appSettings.showTimecode) {
             binding.timecodeText.visibility = View.GONE
             binding.timecodeLabel.visibility = View.GONE
             return
         }
-        binding.timecodeText.visibility = View.VISIBLE
-        binding.timecodeLabel.visibility = View.VISIBLE
-        binding.timecodeText.textSize = appSettings.timecodeSize.toFloat()
-        binding.timecodeLabel.textSize = (appSettings.timecodeSize * 0.55f)
-            .coerceAtLeast(8f)
 
         val nanos = android.os.SystemClock.elapsedRealtimeNanos()
+
         // A stamp on the incoming picture beats anything decoded separately:
         // it arrived attached to the frame, so it cannot have drifted from it.
         val fromStream = remoteEngine?.lastTimecode100ns
             ?.takeIf { it > 0L }
             ?.let { Timecode.from100ns(it, appSettings.ltcRate) }
-        val now = fromStream ?: ltcEngine.clock.now(nanos) ?: timecode.now()
 
-        val kind = clockKind()
-        binding.timecodeText.text = now?.toString() ?: "--:--:--:--"
-        binding.timecodeLabel.text = kind.label
+        val isMaster = appSettings.ltcRole == LtcEngine.Role.MASTER
+        val running = fromStream ?: ltcEngine.clock.now(nanos) ?: timecode.now()
 
-        val colour = android.graphics.Color.parseColor(kind.colour)
-        binding.timecodeText.setTextColor(colour)
-        binding.timecodeLabel.setTextColor(colour)
+        binding.timecodeText.visibility = View.VISIBLE
+        binding.timecodeLabel.visibility = View.VISIBLE
+        binding.timecodeText.textSize = appSettings.timecodeSizeSp.toFloat()
+        binding.timecodeLabel.textSize = (appSettings.timecodeSizeSp * 0.55f)
+            .coerceAtLeast(8f)
 
-        // Green means this phone is the reference. White means it agrees with
-        // one. A dimmed white means it agrees with nothing, which is the case
-        // worth noticing before the shoot rather than after it.
-        val unattached = kind == ClockKind.INTERNAL || now == null
-        binding.timecodeText.alpha = if (unattached) 0.5f else 1f
-        binding.timecodeLabel.alpha = if (unattached) 0.5f else 0.8f
+        binding.timecodeText.text = running?.toString() ?: "--:--:--:--"
+
+        val kind = when {
+            isMaster -> Triple("MST", MASTER_GREEN, 1f)
+            fromStream != null -> Triple("SYC", FOLLOW_WHITE, 1f)
+            ltcEngine.isLocked -> Triple("SYC", FOLLOW_WHITE, 1f)
+            else -> Triple("INT", INTERNAL_GREY, 0.75f)
+        }
+        binding.timecodeText.setTextColor(kind.second)
+        binding.timecodeText.alpha = kind.third
+        binding.timecodeLabel.text = kind.first
+        binding.timecodeLabel.setTextColor(kind.second)
+        binding.timecodeLabel.alpha = kind.third
     }
 
     private fun refreshStreamButton() {
