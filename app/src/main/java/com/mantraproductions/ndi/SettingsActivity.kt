@@ -40,6 +40,25 @@ class SettingsActivity : AppCompatActivity() {
      * file is read, the keys are found inside whatever else it contains, and
      * the file itself is not kept.
      */
+    /**
+     * Any MIME type: a .cube is routinely served as octet-stream, and
+     * filtering on text hides the file the operator came for.
+     */
+    private val cubePicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        val size = LutStore(this).import(lutTarget, uri)
+        if (size == null) {
+            toast("That is not a readable 3D .cube")
+        } else {
+            // The size is worth reporting: somebody expecting 33 who got 17
+            // has picked up the wrong file.
+            toast("Loaded " + size + " point cube for " + lutTarget.displayName)
+        }
+        refresh()
+    }
+
     private val keyFilePicker = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -140,7 +159,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowBitDepth.setOnClickListener { pickBitDepth() }
         binding.rowLogCurve.setOnClickListener { pickLogCurve() }
         binding.rowExportLut.setOnClickListener { exportLut() }
-        binding.rowLoadLut.setOnClickListener { loadLut() }
+        binding.rowLoadLut.setOnClickListener { manageLuts() }
         binding.rowHistogram.setOnClickListener {
             prefs.vectorscopeVisible = !prefs.vectorscopeVisible
             refresh()
@@ -908,6 +927,57 @@ class SettingsActivity : AppCompatActivity() {
                 prefs.streamMbps = result.safeStreamMbps
                 refresh()
                 toast("Stream set to " + result.safeStreamMbps + " Mbps")
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    /**
+     * A LUT slot for every log curve.
+     *
+     * Per curve rather than one for everything, because switching to V-Log
+     * should pick up the V-Log LUT without anybody remembering a second
+     * setting. On a shoot that second setting is the one that gets forgotten,
+     * and a correction from the wrong format looks plausible enough to survive
+     * the day.
+     */
+    private fun manageLuts() {
+        val store = LutStore(this)
+        val curves = LogCurves.Curve.values().filter { it != LogCurves.Curve.REC709 }
+        val labels = curves.map { curve ->
+            curve.displayName + "   " +
+                if (store.hasCustom(curve)) "loaded" else "generated"
+        }
+        choose("Monitor LUT", labels) { index ->
+            lutTarget = curves[index]
+            manageOneLut(curves[index])
+        }
+    }
+
+    private var lutTarget: LogCurves.Curve = LogCurves.Curve.SLOG3
+
+    private fun manageOneLut(curve: LogCurves.Curve) {
+        val store = LutStore(this)
+        val custom = store.hasCustom(curve)
+        AlertDialog.Builder(this)
+            .setTitle(curve.displayName)
+            .setMessage(
+                if (custom) {
+                    "A .cube is loaded for this curve."
+                } else {
+                    "Using the table built from this curve and its gamut: the " +
+                        "log curve undone, a matrix from " +
+                        curve.vendor + "'s gamut into Rec.709, then the Rec.709 " +
+                        "curve. Load a .cube to replace it."
+                }
+            )
+            .setPositiveButton("Load a .cube") { _, _ ->
+                cubePicker.launch(arrayOf("*/*"))
+            }
+            .setNeutralButton("Reset to generated") { _, _ ->
+                store.clear(curve)
+                toast("Back to the generated table")
+                refresh()
             }
             .setNegativeButton("Close", null)
             .show()

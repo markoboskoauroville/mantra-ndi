@@ -48,6 +48,7 @@ object PreviewEffects {
     private const val SHADER = """
         uniform shader content;
         uniform shader curve;
+        uniform half cubeSize;
         uniform half useLut;
         uniform half usePeak;
         uniform half threshold;

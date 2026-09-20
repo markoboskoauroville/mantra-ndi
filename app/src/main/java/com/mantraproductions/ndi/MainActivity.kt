@@ -78,6 +78,9 @@ class MainActivity : AppCompatActivity() {
     /** Timecode over audio: this phone either makes it, follows it, or neither. */
     private val ltcEngine = LtcEngine()
 
+    /** One cube per log curve, generated until one is loaded. */
+    private val lutStore by lazy { LutStore(this) }
+
 
     /** The generator in the room, if there is one. */
     private val timecode by lazy { TimecodeSource(applicationContext) }
