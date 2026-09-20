@@ -1,153 +1,89 @@
 package com.mantraproductions.ndi
 
-import android.content.ContentValues
 import android.content.Context
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.io.FileOutputStream
 
 /**
- * Evidence that survives the app dying.
+ * What killed the app, written down before it finishes dying.
  *
- * Two faults made this useless exactly when it mattered. It wrote with a raw
- * File path into public DCIM, which Android has forbidden since version ten, so
- * no crash file was ever produced and the silence looked like "no crash was
- * recorded" rather than "the recorder cannot write". And it only caught Java
- * exceptions, so a fault in the NDI native code took the process down without
- * leaving anything at all.
+ * Two things here are the fix for two separate faults in the last build.
  *
- * So: breadcrumbs written to disk **as they happen**, in the app's own external
- * directory which needs no permission and cannot be refused, plus a full report
- * into Downloads through MediaStore, which is the only route a modern Android
- * allows into a folder a person can actually open.
+ * The handler takes a Throwable, and everything inside it catches Throwable.
+ * A rejected GL shader arrives as an Error, not an Exception, and an Error
+ * walks straight past a catch on Exception as though nothing had been written
+ * at all. Java's own uncaught handler hands over a Throwable for exactly this
+ * reason; the mistake is narrowing it afterwards.
  *
- * Breadcrumbs matter more than the report here. A native crash never reaches a
- * Java handler, and the last line written before the silence says where it
- * happened just as well as a stack trace would.
+ * The report is written in two places, in that order. First into the app's own
+ * external files directory, which needs no permission and cannot be refused.
+ * Then into Downloads through MediaStore, which is reachable without a file
+ * manager that can see Android/data. The order matters: the guaranteed copy is
+ * written before the convenient one, so a failure in the second never costs
+ * the first.
+ *
+ * And the previous handler is always called afterwards. Swallowing the
+ * throwable leaves a process with a dead UI thread and no dialogue, which
+ * looks to a person like the app froze rather than crashed.
  */
 object CrashLog {
 
-    private const val TRACE_FILE = "mantra_trace.txt"
-    private var appContext: Context? = null
-    private val recent = ArrayDeque<String>()
+    private var previous: Thread.UncaughtExceptionHandler? = null
+    private var installed = false
 
     fun install(context: Context) {
-        appContext = context.applicationContext
+        if (installed) return
+        installed = true
+        val app = context.applicationContext
+        previous = Thread.getDefaultUncaughtExceptionHandler()
 
-        // A fresh trace each launch, or the file grows forever and the
-        // interesting part is buried under yesterday.
-        runCatching {
-            traceFile()?.writeText(
-                "Mantra NDI v" + BuildConfig.VERSION_NAME + "\n" +
-                    Build.MANUFACTURER + " " + Build.MODEL +
-                    ", Android " + Build.VERSION.RELEASE +
-                    " (API " + Build.VERSION.SDK_INT + ")\n" +
-                    "started " + stamp() + "\n\n"
-            )
-        }
-
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            runCatching { record(thread, error) }
-            previous?.uncaughtException(thread, error)
-        }
-    }
-
-    /**
-     * One step of the startup, written immediately.
-     *
-     * Immediately, not buffered, because the whole point is to survive a
-     * process that is about to stop existing. Each line is short and there are
-     * a few dozen of them, so the cost is nothing next to what it answers.
-     */
-    fun trace(step: String) {
-        val line = stamp() + "  " + step
-        synchronized(recent) {
-            recent.addLast(line)
-            while (recent.size > 60) recent.removeFirst()
-        }
-        runCatching { traceFile()?.appendText(line + "\n") }
-    }
-
-    /** Where the breadcrumbs are, so it can be said out loud rather than guessed. */
-    fun traceLocation(): String =
-        traceFile()?.absolutePath ?: "unavailable"
-
-    private fun traceFile(): File? {
-        val context = appContext ?: return null
-        // The app's own external directory: always writable, never refused,
-        // and reachable with any file manager.
-        val dir = context.getExternalFilesDir(null) ?: return null
-        if (!dir.exists()) dir.mkdirs()
-        return File(dir, TRACE_FILE)
-    }
-
-    private fun record(thread: Thread, error: Throwable) {
-        val context = appContext ?: return
-
-        val report = buildString {
-            append("Mantra NDI v").append(BuildConfig.VERSION_NAME).append('\n')
-            append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
-            append(", Android ").append(Build.VERSION.RELEASE)
-            append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
-            append("thread: ").append(thread.name).append('\n')
-            append("when: ").append(stamp()).append("\n\n")
-
-            append("LAST STEPS BEFORE THE FAULT\n")
-            synchronized(recent) { recent.forEach { append("  ").append(it).append('\n') } }
-
-            append("\nSTACK\n")
-            append(java.io.StringWriter().also {
-                error.printStackTrace(java.io.PrintWriter(it))
-            }.toString())
-        }
-
-        runCatching { traceFile()?.appendText("\nCRASH\n" + report) }
-        runCatching { toDownloads(context, "MantraNDI_crash_" + fileStamp() + ".txt", report) }
-    }
-
-    /**
-     * Into Downloads, which on Android ten and later means MediaStore.
-     *
-     * A raw File path to a public folder is refused, and it is refused
-     * silently, which is how a crash reporter ends up reporting nothing for
-     * months without anybody noticing.
-     */
-    fun toDownloads(context: Context, name: String, content: String): String? = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, name)
-                put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-                put(MediaStore.Downloads.IS_PENDING, 1)
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                report(app, thread, throwable)
+            } catch (t: Throwable) {
+                // Nothing left to do. The system's handler still runs below.
             }
-            val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            if (uri == null) null
-            else {
-                resolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) }
-                values.clear()
-                values.put(MediaStore.Downloads.IS_PENDING, 0)
-                resolver.update(uri, values, null, null)
-                "Downloads/$name"
-            }
-        } else {
-            val dir = Environment
-                .getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (!dir.exists()) dir.mkdirs()
-            File(dir, name).writeText(content)
-            "Downloads/$name"
+            previous?.uncaughtException(thread, throwable)
         }
-    } catch (e: Throwable) {
+        Trace.step("crash handler installed, catching Throwable")
+    }
+
+    private fun report(context: Context, thread: Thread, throwable: Throwable) {
+        Trace.fault("uncaught on thread " + thread.name, throwable)
+
+        val now = System.currentTimeMillis()
+        val name = TraceFormat.crashName(now, Trace.offsetAt(now))
+        val header = ArrayList<Pair<String, String>>(Trace.header())
+        header.add("thread" to thread.name)
+        header.add("trace file" to (Trace.file()?.name ?: "none"))
+
+        val text = TraceFormat.crashReport(header, Trace.stackOf(throwable), Trace.lines())
+
+        writeBeside(context, name, text)
+        Downloads.writeText(context, name, text)
+    }
+
+    /** The copy that cannot be refused: next to the trace, in the app's own directory. */
+    private fun writeBeside(context: Context, name: String, text: String): File? = try {
+        val dir = context.getExternalFilesDir(null) ?: context.filesDir
+        dir.mkdirs()
+        val f = File(dir, name)
+        FileOutputStream(f).use {
+            it.write(text.toByteArray(Charsets.UTF_8))
+            it.flush()
+        }
+        f
+    } catch (t: Throwable) {
         null
     }
 
-    private fun stamp(): String =
-        SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
-
-    private fun fileStamp(): String =
-        SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    /** Every crash report on this phone, newest first, for the panel to show. */
+    fun reports(context: Context): List<File> = try {
+        val dir = context.getExternalFilesDir(null) ?: context.filesDir
+        (dir.listFiles { f -> f.name.startsWith("crash-") && f.name.endsWith(".txt") }
+            ?: emptyArray())
+            .sortedByDescending { it.name }
+    } catch (t: Throwable) {
+        emptyList()
+    }
 }

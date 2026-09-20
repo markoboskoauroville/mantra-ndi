@@ -10,8 +10,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // RootEncoder is published through JitPack
-        maven { url = uri("https://jitpack.io") }
     }
 }
 

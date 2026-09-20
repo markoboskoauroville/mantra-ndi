@@ -3,14 +3,26 @@ package com.mantraproductions.ndi
 import android.app.Application
 
 /**
- * Runs before any screen does, which is the only place capability detection
- * belongs. Deciding what the phone can do while a camera is already opening
- * is how an eight bit phone ended up down a ten bit path.
+ * The first of the app's own code to run.
+ *
+ * Order matters and is the whole job of this class. The elapsed clock is
+ * marked, then the file is opened, then the crash handler is installed, then
+ * the header is written. Anything that fails after this point has somewhere to
+ * be written down; anything that fails before it is the operating system's,
+ * not ours.
  */
 class MantraApp : Application() {
+
     override fun onCreate() {
-        super.onCreate()
+        Trace.markStart()
+        Trace.open(this)
         CrashLog.install(this)
-        DeviceProfile.detect(this)
+        super.onCreate()
+
+        for ((k, v) in Trace.header()) Trace.state("$k = $v")
+        if (Trace.onPrivateStorage()) {
+            Trace.state("external files dir unavailable, trace is in private storage")
+        }
+        Trace.step("application created")
     }
 }

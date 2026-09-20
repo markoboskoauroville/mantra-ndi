@@ -1,129 +1,88 @@
 # Mantra NDI — handover
 
-Everything a new session needs to continue. Read this first, then `scripts/verify.py`.
+Read [REBUILD.md](REBUILD.md) first. This file is what the current session
+decided and what is not tested.
 
-## What it is
+## State
 
-An Android broadcast camera. It sends NDI, records to the phone, monitors other
-NDI sources, and drives a remote camera over NDI metadata. Built for Baba's own
-phones over Wi-Fi, not for distribution.
+**v66. Phase 0, logging. No camera in this build.**
 
-- Repo `markoboskoauroville/mantra-ndi` (public), package `com.mantraproductions.ndi`
-- NDI Advanced SDK lives in the private repo `markoboskoauroville/mantra-ndi-sdk`
-  and is pulled in at build time; its licence forbids redistribution, so it must
-  never be committed here
-- Built only by GitHub Actions. Every push builds, gates and publishes an APK
-- Signing fingerprint `53f963193bdffa9e7ca0ab56af8e9e83da758928e6e4557abb31d139cf88a5f1`
+The previous build ended at v65 and is in git history. It was not extended;
+it was taken apart, because the half-finished parts of it looked finished.
+63 Kotlin files were deleted.
 
-## How to work on it
+## What was kept, and why
 
-1. Edit, then `python3 scripts/verify.py` — it must print `all checks passed`
-2. Read the version already released, set `appVersion` to one above it
-3. Commit with a message that explains *why*, not what
-4. Push, wait about four and a half minutes, read the run's logs
-5. The release APK appears at
-   `https://github.com/markoboskoauroville/mantra-ndi/releases/download/vN/N-mantra-ndi-vN.apk`
-
-**Check every edit landed.** Several builds in this project have failed because
-an edit reported success and had half applied, leaving duplicate declarations.
-`grep` for what was added before committing.
-
-## The gates (`scripts/verify.py` and the workflow)
-
-G1–G12 cover the source. Then:
-- **G13** no duplicate `android:id` in a layout — data binding rejects it
-  silently to a reader
-- The workflow refuses an APK that is unsigned, signed with a different key,
-  missing the NDI runtime or the JNI bridge, or carrying a version already
-  released
-
-A gate that fires on everything is worse than no gate. G14 tried to catch
-duplicate Kotlin declarations, flagged 180 legitimate locals, and was removed.
-
-## Architecture
-
-```
-Camera2 → CaptureEngine → HdrPipeline
-                            ├── record encoder  → Mp4Recorder → DCIM/Mantra NDI
-                            ├── stream encoder  → NdiStream → ndi_bridge.cpp
-                            └── preview Surface → PreviewEffects (GPU shader)
-NDI in  → ndi_recv_bridge.cpp → MonitorEngine → same preview Surface
-```
-
-**Only one thing may own the preview surface.** The mode decides which. Two
-producers on one `SurfaceTexture` is why a remote camera's name appeared and its
-picture never did.
-
-### Files that matter
-
-| File | What it holds |
+| Kept | Why |
 |---|---|
-| `Mechanism.kt` | All pure maths. No Android imports, so it is all testable |
-| `PreviewEffects.kt` | One GPU shader: monitor LUT, focus peaking, waveform |
-| `HdrPipeline.kt` | Camera session, both encoders, the surface list |
-| `TimecodeView.kt` | The status line across the top |
-| `LtcEncoder/LtcDecoder/LtcEngine` | Timecode as audio |
-| `RecordingHealth.kt` | Space left, time left, dropped frames |
-| `BandwidthTest.kt` | Real throughput between two phones |
-| `RecordingFormats.kt` | Formats probed from the phone, never hard-coded |
-| `CameraCatalogue.kt` | Every real lens, named by 35mm equivalent |
+| `Mechanism.kt` | Pure maths, 74 cases, no Android imports |
+| `CubeLut.kt`, `ColourSpaces.kt`, `LogCurves.kt`, `Histogram.kt` | The 33³ LUT work and the colour maths. 56 cases between them |
+| `CameraCommand.kt` | Holds `CameraState`, which `MechanismTest` covers. Pure. Phase 4's wire format |
+| `ndi_bridge.cpp`, `ndi_recv_bridge.cpp` | The NDI side of these worked. Also what keeps the artefact gate satisfied |
+| The CI gates | Extended, not replaced |
 
-## Rules this app is built on
+Dropped to git history, to come back with the phase that uses them:
+`LtcEncoder.kt`, `LtcDecoder.kt`, `LtcEngine.kt`, `Timecode.kt` (phase 4),
+`BandwidthTest.kt` and `RecordingHealth.kt` (phases 3 and 2). `KeyRing*` went
+entirely; nothing in the rebuild needs it.
 
-- **Never write a setting that does nothing.** Two have shipped and both were
-  caught later: a lens picker that stored a choice while the pipeline opened
-  camera zero, and a MOV option Android's muxer cannot write
-- **Probe the hardware, do not assume it.** Frame rate ceilings come from
-  `getOutputMinFrameDuration`, *not* `getHighSpeedVideoFpsRangesFor`, which is
-  the slow-motion path and returns nothing for normal sizes
-- **Nothing expensive on the camera callback thread.** A Planckian search ran
-  5,000 logarithms per second there and was the app's sluggishness
-- **Preview-only effects go on the View, never the capture request.** A tone
-  curve reaches the encoder and bakes itself into the file
-- **Colour and words say the same thing twice.** Colour alone fails for anyone
-  who cannot separate green from white; small text alone fails at arm's length
-- **Measure, do not guess.** Simulate a codec in Python before spending a CI
-  cycle on it; that found two real LTC bugs
+## Decisions this session
 
-## Current state (v51)
+**`MechanismTest` did not compile as inherited.** It reached into
+`BandwidthTest` and `RecordingHealth`, which are phase 2 and 3 code, so
+"the mechanism, alone" was not alone. Twelve test functions were cut and
+travel back with their code.
 
-Working: NDI send and receive, three modes plus System, monitor LUT, focus
-peaking, GPU waveform, vectorscope, three-way grade, LTC timecode master and
-follower, NDI frame timecode, dual encoders for stream and record, bandwidth
-test, recording health, lens catalogue, hardware-probed formats, X and RST.
+**RootEncoder is gone**, with JitPack and ConstraintLayout. REBUILD.md §6:
+one camera path only, Camera2 directly. Phase 1 starts from nothing rather
+than from a library whose Camera2 handling has to be fought.
 
-## Outstanding
+**The insets are set up in phase 0 rather than phase 1.** `picture` is the
+full-bleed layer the preview will fill; `content` is the layer that takes
+`systemBars() or displayCutout()`. The values are written to the trace. The
+last build put the faders under the bars because half of this was done.
 
-Newest first. The top four are from the latest session and not yet built.
+**Every camera's `SENSOR_ORIENTATION` and `MANUAL_SENSOR` flag is traced at
+startup.** No permission, nothing opened. The number phase 1 has to get right
+is in the file from the first version rather than being guessed at six times.
 
-1. **Status as three letters beside the take length** — `REC` only while
-   recording, and the other states equally short, next to the number in the
-   middle. Currently the long word overlaps the picture
-2. **Focus box snapping** — it does not land where it is tapped
-3. **Rename `BOX` to `FOCUS`** on the left bar
-4. **A LUT per log curve** — the operator uploads a `.cube` for each curve and
-   the monitor LUT uses it instead of the computed inverse. Check the
-   application against industry practice while doing it
-5. **Screen streamer mode** — MediaProjection for the picture; remote control
-   needs an AccessibilityService and only works between two copies of this app
-6. **Timecode follower without watching** — a sending camera should subscribe to
-   the master at metadata-only bandwidth just for the clock. This is what makes
-   one master and many cameras actually work
-7. **Draggable timecode**
-8. **Bandwidth figures shown beside each bitrate choice** — `BandwidthTest`
-   already computes them
+**`appVersion` was 65 and v65 was already released.** Check the releases API,
+always; the build refuses a number that is already out.
 
-### Ruled out, with reasons
+## The gates
 
-- **Tentacle Sync BLE** — the protocol is licensed, not published. LTC over
-  audio replaced it and is better: it is what the hardware already outputs
-- **ARCore depth focus** — ARCore takes the camera; it cannot coexist with our
-  Camera2 session. `DEPTH16` is the honest path if depth is ever wanted
-- **MOV** — `MediaMuxer` writes no QuickTime at all
+G1–G13 as before. Three new ones over the logging, each broken on purpose and
+watched to go red before being trusted:
 
-### Known limitation worth stating
+- **G14** `TraceFormat.kt` imports no Android, so the clock and the columns
+  are testable on a desk
+- **G15** the trace is unbuffered — no `BufferedWriter`, no
+  `BufferedOutputStream` in `Trace.kt`
+- **G16** `Trace.kt`, `CrashLog.kt` and `Downloads.kt` catch `Throwable` and
+  narrow it nowhere
+- **G17** `Downloads.kt` reaches the public folder through MediaStore
 
-The log curves flatten what the ISP has already processed; they are not applied
-to raw sensor data. MotionCam Pro captures `RAW_SENSOR`/`RAW10` and encodes log
-from that, which is why its files grade further. Matching it means a second
-pipeline, not a setting.
+**G15 fired on its first run against correct code**, because `Trace.kt`'s
+comment explains why it does *not* use a `BufferedWriter` and the gate matched
+the explanation. `verify.py` now strips comments before any check that reads
+what the code does. This is `checking-the-checks.md`, "a check that matches
+its own comment", met again.
+
+## NOT TESTED
+
+Everything below is code inspection only. Nothing in this build has run on a
+phone.
+
+- **The trace file has never been written on a device.** The formatting is
+  covered by 31 unit cases; the file, the directory and the permissions are not
+- **No crash has been taken.** Both crash keys are unexercised. Whether the
+  report reaches Downloads while the process is dying is the open question of
+  this phase, and it is the one thing phase 0 exists to settle
+- **The MediaStore path is unproven on Android 16.** The API 26–28 branch will
+  never run on a Pixel 7 and is untested anywhere
+- **The insets are unmeasured.** They must be looked at on the phone in both
+  navigation modes, per `system-bars.md` §5, and the lowest key pressed rather
+  than merely seen
+- **Rotation is logged, not handled.** There is nothing yet for it to break
+- **The Android half has never been compiled locally**, because it cannot be.
+  Only CI has an Android SDK

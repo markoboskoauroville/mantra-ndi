@@ -12,6 +12,18 @@ ROOT = Path(__file__).resolve().parent.parent
 FAILS = []
 
 
+def code_only(text):
+    """The source with its comments taken out.
+
+    checking-the-checks.md: a check that matches its own comment. G15 fired
+    on the first run because Trace.kt's KDoc explains why it does NOT use a
+    BufferedWriter, and the gate read the explanation as the fault. A gate
+    over what the code DOES must not be able to see what the code SAYS.
+    """
+    out = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return re.sub(r"//[^\n]*", "", out)
+
+
 def check(name, ok, detail=""):
     print(f"{'PASS' if ok else 'FAIL'}  {name}" + (f"  — {detail}" if detail and not ok else ""))
     if not ok:
@@ -132,6 +144,57 @@ def main():
                 duplicate_ids.append(f"{layout.name}:{name}")
             seen.add(name)
     check("G13 no duplicate ids in a layout", not duplicate_ids, ", ".join(duplicate_ids))
+
+    # --- the logging. Phase zero of the rebuild, and the three faults below
+    # are the ones that cost ten versions of guessing in the last build.
+
+    src = ROOT / "app/src/main/java/com/mantraproductions/ndi"
+
+    # G14 — the trace formatting must stay testable on a desk. The moment it
+    # imports Android, the clock and the columns can only be checked by
+    # reading a file off a phone, which means they are not checked.
+    fmt = src / "TraceFormat.kt"
+    check("G14 TraceFormat.kt exists", fmt.exists())
+    if fmt.exists():
+        bad = re.findall(r"^\s*import android\.", fmt.read_text(), re.M)
+        check("G14 TraceFormat imports no Android", not bad, f"{len(bad)} android imports")
+
+    # G15 — the trace is written as it happens. A BufferedWriter holds the
+    # last few kilobytes in memory, and those are exactly the lines that say
+    # what the app was doing when it died.
+    trace = src / "Trace.kt"
+    check("G15 Trace.kt exists", trace.exists())
+    if trace.exists():
+        text = code_only(trace.read_text())
+        buffered = [w for w in ("BufferedWriter", "BufferedOutputStream") if w in text]
+        check("G15 the trace is unbuffered", not buffered, ", ".join(buffered))
+
+    # G16 — a rejected shader arrives as an Error and walks past a catch on
+    # Exception. The three files whose whole job is to survive a fault must
+    # catch Throwable, and must not narrow it anywhere.
+    narrowed = []
+    caught = []
+    for name in ("Trace.kt", "CrashLog.kt", "Downloads.kt"):
+        path = src / name
+        if not path.exists():
+            narrowed.append(f"{name} missing")
+            continue
+        text = code_only(path.read_text())
+        if re.search(r"catch\s*\(\s*\w+\s*:\s*Exception\s*\)", text):
+            narrowed.append(name)
+        if "Throwable" not in text:
+            caught.append(name)
+    check("G16 the survivors catch Throwable", not caught, ", ".join(caught))
+    check("G16 no catch narrowed to Exception", not narrowed, ", ".join(narrowed))
+
+    # G17 — the public folder is reached through MediaStore. A raw File path
+    # into Downloads is refused silently from Android 10, which is why the old
+    # crash reporter never wrote a single file.
+    downloads = src / "Downloads.kt"
+    if downloads.exists():
+        text = code_only(downloads.read_text())
+        check("G17 Downloads goes through MediaStore",
+              "MediaStore.Downloads.EXTERNAL_CONTENT_URI" in text)
 
     print()
     if FAILS:

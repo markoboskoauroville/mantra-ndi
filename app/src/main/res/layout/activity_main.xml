@@ -1,415 +1,133 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<!-- Phase zero: the state panel. No camera on this screen at all.
+
+     The shape is already the phase 1 shape. `picture` is the full-bleed layer
+     the preview will live in, running edge to edge behind the system bars
+     because an image may go there. `content` is the layer that takes the
+     insets, because nothing a finger presses and nothing a person reads may
+     sit under the status bar or the navigation buttons (system-bars.md).
+     Setting that up now means phase 1 inherits it rather than rediscovering
+     it, which is how the faders ended up under the bars in the last build. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="@color/ink">
 
-    <!-- The image, letterboxed to its own shape. Everything else is anchored
-         to this view rather than to the window, so nothing lands on a black
-         bar beside the picture. -->
-    <!-- A TextureView rather than a SurfaceView: its contents can be read
-         back, which is what lets the scope work on every pipeline instead of
-         only the one that can carry an analysis stream. -->
-    <TextureView
-        android:id="@+id/preview"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintDimensionRatio="H,16:9"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toEndOf="@id/overlayRail"
-        app:layout_constraintEnd_toStartOf="@id/controlRow" />
+    <FrameLayout
+        android:id="@+id/picture"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
-    <!-- The left bar: what is drawn on the picture. Every one is a toggle and
-         every one is lit when it is on, so the state of the screen can be read
-         without turning anything off to find out. -->
     <LinearLayout
-        android:id="@+id/overlayRail"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:id="@+id/content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:paddingHorizontal="6dp"
-        android:layout_marginStart="6dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        android:paddingHorizontal="12dp">
 
-        <TextView android:id="@+id/tglLut" style="@style/MantraRailToggle" android:text="LUT" />
-        <TextView android:id="@+id/tglPeak" style="@style/MantraRailToggle" android:text="PEAK" />
-        <TextView android:id="@+id/tglWave" style="@style/MantraRailToggle" android:text="WAVE" />
-        <TextView android:id="@+id/tglScope" style="@style/MantraRailToggle" android:text="SCOPE" />
-        <TextView android:id="@+id/tglGrade" style="@style/MantraRailToggle" android:text="GRADE" />
-        <TextView android:id="@+id/tglFocusBox" style="@style/MantraRailToggle" android:text="FOCUS" />
-        <TextView android:id="@+id/tglBurn" style="@style/MantraRailToggle" android:text="TC" />
+        <!-- The row has two ends and a middle: the name at one edge, the
+             version at the other. design-language.md §10. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="8dp">
 
-    </LinearLayout>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="MANTRA NDI"
+                android:textColor="@color/amber"
+                android:textSize="15sp"
+                android:letterSpacing="0.22" />
 
-    <!-- Covers the last frame completely, because a frozen picture looks
-         exactly like a working one of a still scene. -->
-    <com.mantraproductions.ndi.NoSignalView
-        android:id="@+id/noSignal"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview" />
+            <TextView
+                android:id="@+id/version"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:textColor="@color/quiet"
+                android:textSize="12sp" />
+        </LinearLayout>
 
-    <com.mantraproductions.ndi.TallyBorderView
-        android:id="@+id/tallyBorder"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview" />
-
-    <com.mantraproductions.ndi.FocusSquareView
-        android:id="@+id/focusSquare"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview" />
-
-    <!-- Remote frame. Constrained to start BELOW the meter, so no drawing
-         order, animation or later edit can put it over the audio. -->
-    <com.mantraproductions.ndi.RemoteBorderView
-        android:id="@+id/remoteBorder"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview" />
-
-
-    <com.mantraproductions.ndi.HairlineVuView
-        android:id="@+id/vuHairline"
-        android:layout_width="0dp"
-        android:layout_height="2dp"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview" />
-
-    <!-- Big enough to read at arm's length, which is where a phone on a rig
-         is. Amber while free running, green once a generator is heard. -->
-
-    <!-- Read constantly during a take, so it sits where the eye already goes
-         and is monospaced, because digits that shift width are unreadable at
-         a glance. -->
-
-    <!-- Three letters under the clock, so what kind of sync this is can be
-         read at a glance rather than inferred from a colour alone. -->
-
-    <!-- Constrained to both top and bottom of the preview; whichever edge is
-         wanted is chosen at runtime by biasing it, so the position is a
-         setting rather than two layouts. -->
-    <com.mantraproductions.ndi.TimecodeView
-        android:id="@+id/timecodeView"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview"
-        app:layout_constraintVertical_bias="0.0" />
-
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="14dp"
-        android:letterSpacing="0.12"
-        android:text="IDLE"
-        android:textAllCaps="true"
-        android:textColor="#8C99A6"
-        android:textSize="11sp"
-        app:layout_constraintTop_toBottomOf="@id/vuHairline"
-        app:layout_constraintStart_toStartOf="@id/preview" />
-
-    <!-- Right edge: record on top, menu, gear at the bottom. The hand reaches
-         one column and never crosses the frame. -->
-    <LinearLayout
-        android:id="@+id/controlRow"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:paddingHorizontal="8dp"
-        android:layout_marginEnd="6dp"
-        android:layout_marginVertical="6dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <!-- Focus first, at the top, clear of the system gesture area at the
-             bottom of the screen. M or A, and nothing else. -->
-        <!-- Recovery, at the top of the column where a thumb reaching in a
-             hurry lands, and away from record and stream. -->
         <TextView
-            android:id="@+id/killButton"
-            android:layout_width="54dp"
-            android:layout_height="30dp"
-            android:layout_marginBottom="4dp"
-            android:gravity="center"
-            android:text="X"
-            android:textSize="13sp"
-            android:letterSpacing="0.16"
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/surface"
             android:fontFamily="monospace"
-            android:textColor="#8E1B12"
-            android:background="?android:attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true" />
+            android:padding="8dp"
+            android:textColor="@color/sand"
+            android:textSize="11sp"
+            android:lineSpacingMultiplier="1.15" />
+
+        <ScrollView
+            android:id="@+id/scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="8dp"
+            android:background="@color/surface"
+            android:scrollbars="vertical">
+
+            <TextView
+                android:id="@+id/trace"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:padding="8dp"
+                android:textColor="@color/sand"
+                android:textSize="10sp"
+                android:textIsSelectable="true" />
+        </ScrollView>
+
+        <!-- Two rows of two rather than one row of four. A word given a
+             quarter of a 390px phone clips, and a clipped label is a control
+             nobody can read. design-language.md, STACK IT. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+
+            <Button
+                android:id="@+id/throwException"
+                style="@style/MantraKey"
+                android:text="Throw exception" />
+
+            <Button
+                android:id="@+id/throwError"
+                style="@style/MantraKey"
+                android:text="Throw error" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/export"
+                style="@style/MantraKey"
+                android:text="Export trace" />
+
+            <Button
+                android:id="@+id/copyPath"
+                style="@style/MantraKey"
+                android:text="Copy path" />
+        </LinearLayout>
+
+        <!-- The attribution the NDI licence requires, and scripts/verify.py
+             fails the build if it stops being here. -->
         <TextView
-            android:id="@+id/resetButton"
-            android:layout_width="54dp"
-            android:layout_height="30dp"
-            android:layout_marginBottom="14dp"
-            android:gravity="center"
-            android:text="RST"
-            android:textSize="13sp"
-            android:letterSpacing="0.16"
-            android:fontFamily="monospace"
-            android:textColor="#6E7A86"
-            android:background="?android:attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true" />
-
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/focusModeButton"
-            android:layout_width="46dp"
-            android:layout_height="46dp"
-            android:layout_marginBottom="14dp" />
-
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/recordButton"
-            android:layout_width="58dp"
-            android:layout_height="58dp"
-            android:layout_marginBottom="14dp" />
-
-        <!-- Going live had been a long press on the record ring, which is
-             discoverable only to whoever wrote it. It is a button now. -->
-        <!-- Text only, and the colour is the whole state: grey is the picture
-             as the sensor sends it, green is corrected for this screen. -->
-
-
-
-
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/streamButton"
-            android:layout_width="54dp"
-            android:layout_height="54dp"
-            android:layout_marginBottom="14dp" />
-
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/settingsButton"
-            android:layout_width="50dp"
-            android:layout_height="50dp"
-            android:layout_marginBottom="14dp" />
-
-        <!-- Which source is being watched. Only in the modes where the
-             picture comes from somewhere else. -->
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/sourceButton"
-            android:layout_width="50dp"
-            android:layout_height="50dp"
-            android:layout_marginBottom="14dp"
-            android:visibility="gone" />
-
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/gearButton"
-            android:layout_width="44dp"
-            android:layout_height="44dp" />
-
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="6dp"
+            android:textColor="@color/quiet"
+            android:textSize="9sp"
+            android:text="Powered by NDI. NDI is a registered trademark of Vizrt NDI AB.  ndi.video" />
     </LinearLayout>
-
-    <!-- The control columns, ending where the action column begins so the two
-         never share a pixel. -->
-    <LinearLayout
-        android:id="@+id/verticalPanel"
-        android:layout_width="wrap_content"
-        android:layout_height="0dp"
-        android:orientation="horizontal"
-        android:visibility="gone"
-        android:layout_marginTop="34dp"
-        android:layout_marginBottom="16dp"
-        android:layout_marginEnd="4dp"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintEnd_toStartOf="@id/controlRow">
-
-        <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/rIso" style="@style/MantraAuto" />
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vIso" style="@style/MantraFader" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/plusIso" style="@style/MantraStep" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/minusIso" style="@style/MantraStep" />
-        </LinearLayout>
-
-        <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/rShutter" style="@style/MantraAuto" />
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vShutter" style="@style/MantraFader" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/plusShutter" style="@style/MantraStep" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/minusShutter" style="@style/MantraStep" />
-        </LinearLayout>
-
-        <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/rWhiteBalance" style="@style/MantraAuto" />
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vWhiteBalance" style="@style/MantraFader" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/plusWhiteBalance" style="@style/MantraStep" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/minusWhiteBalance" style="@style/MantraStep" />
-        </LinearLayout>
-
-        <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/rFocus" style="@style/MantraAuto" />
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vFocus" style="@style/MantraFader" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/plusFocus" style="@style/MantraStep" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/minusFocus" style="@style/MantraStep" />
-        </LinearLayout>
-
-        <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/rZoom" style="@style/MantraAuto" />
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vZoom" style="@style/MantraFader" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/plusZoom" style="@style/MantraStep" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/minusZoom" style="@style/MantraStep" />
-        </LinearLayout>
-
-        <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/rGain" style="@style/MantraAuto" />
-            <com.mantraproductions.ndi.VerticalFaderView
-                android:id="@+id/vGain" style="@style/MantraFader" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/plusGain" style="@style/MantraStep" />
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/minusGain" style="@style/MantraStep" />
-        </LinearLayout>
-
-        <!-- Video Auto, last in the row so it sits nearest the hand. -->
-        <LinearLayout style="@style/MantraColumn">
-            <com.mantraproductions.ndi.CircleButtonView
-                android:id="@+id/autoAllButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginTop="4dp" />
-        </LinearLayout>
-
-    </LinearLayout>
-
-    <!-- Full screen, and alone. Balancing is a thing you stop to do, and a
-         scope competing with six faders for the same glass is a scope nobody
-         can read. Long press it to put everything back. -->
-    <com.mantraproductions.ndi.VectorscopeView
-        android:id="@+id/vectorscope"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:background="#CC05070A"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="@id/preview"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toEndOf="@id/preview" />
-
-    <!-- Three way grade. Lift, gamma, gain, each with its own master. -->
-    <LinearLayout
-        android:id="@+id/gradePanel"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:background="#CC05070A"
-        android:padding="10dp"
-        android:layout_marginBottom="12dp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toStartOf="@id/controlRow">
-
-        <com.mantraproductions.ndi.ColourWheelView
-            android:id="@+id/wheelLift"
-            android:layout_width="0dp"
-            android:layout_height="168dp"
-            android:layout_weight="1" />
-
-        <com.mantraproductions.ndi.ColourWheelView
-            android:id="@+id/wheelGamma"
-            android:layout_width="0dp"
-            android:layout_height="168dp"
-            android:layout_weight="1" />
-
-        <com.mantraproductions.ndi.ColourWheelView
-            android:id="@+id/wheelGain"
-            android:layout_width="0dp"
-            android:layout_height="168dp"
-            android:layout_weight="1" />
-
-    </LinearLayout>
-
-    <!-- One fader at a time, reached by holding the menu button. -->
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/paramBar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:paddingVertical="6dp"
-        android:layout_marginBottom="10dp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/preview"
-        app:layout_constraintStart_toStartOf="@id/preview"
-        app:layout_constraintEnd_toStartOf="@id/controlRow">
-
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/paramCycleButton"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginStart="14dp"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
-
-        <com.mantraproductions.ndi.FaderView
-            android:id="@+id/paramFader"
-            android:layout_width="0dp"
-            android:layout_height="74dp"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toEndOf="@id/paramCycleButton"
-            app:layout_constraintEnd_toStartOf="@id/paramCloseButton" />
-
-        <com.mantraproductions.ndi.CircleButtonView
-            android:id="@+id/paramCloseButton"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginEnd="10dp"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

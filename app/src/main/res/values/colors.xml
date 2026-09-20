@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- design-language.md §3: the palette is fixed across every Mantra app.
+     Colour is the state channel and it is the only one. -->
+<resources>
+    <color name="ink">#0B0D10</color>        <!-- background -->
+    <color name="surface">#141A21</color>    <!-- a panel on the background -->
+    <color name="slate">#23303D</color>      <!-- an inactive surface -->
+    <color name="sand">#F2DDB4</color>       <!-- text and icons on dark -->
+    <color name="amber">#F59E0B</color>      <!-- the active thing, the lit thing -->
+    <color name="quiet">#6E7A86</color>      <!-- a label beside a value -->
+    <color name="fault">#EF4444</color>      <!-- a real fault, and nothing else -->
+</resources>

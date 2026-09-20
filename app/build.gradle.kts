@@ -115,9 +115,4 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-
-    // RootEncoder (Apache-2.0) — Camera2 + hardware MediaCodec pipeline.
-    // We subclass its StreamBase to add NDI as an output alongside RTMP/RTSP/SRT.
-    implementation("com.github.pedroSG94.RootEncoder:library:2.8.1")
 }

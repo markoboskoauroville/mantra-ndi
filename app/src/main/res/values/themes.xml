@@ -1,128 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.MantraNdi" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">#E7A44C</item>
-        <item name="colorPrimaryDark">#8A5F22</item>
-        <item name="colorAccent">#E7A44C</item>
-        <item name="android:windowBackground">#05070A</item>
+    <style name="Theme.MantraNdi" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="colorPrimary">@color/amber</item>
+        <item name="colorAccent">@color/amber</item>
+        <item name="android:windowBackground">@color/ink</item>
     </style>
 
-    <!-- Mantra: amber on near-black, wide letter spacing, hairline rules -->
-    <style name="MantraSectionLabel">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginStart">26dp</item>
-        <item name="android:layout_marginTop">18dp</item>
-        <item name="android:layout_marginBottom">2dp</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:letterSpacing">0.28</item>
-        <item name="android:textSize">10sp</item>
-        <item name="android:textColor">#E7A44C</item>
-        <item name="android:alpha">0.75</item>
-    </style>
-
-    <!-- Settings rows, shaped like the phone's own settings so the eye knows
-         what it is looking at without being taught. -->
-    <!-- One of three, the selected one lit. -->
-    <style name="MantraModeTab">
+    <!-- A key. Slate ground, amber rule, sand word: the same key in every row,
+         so two controls doing the same kind of job look the same. -->
+    <style name="MantraKey">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:gravity">center</item>
-        <item name="android:paddingVertical">16dp</item>
-        <item name="android:textSize">15sp</item>
-        <item name="android:textColor">#7C8894</item>
-        <item name="android:background">?android:attr/selectableItemBackground</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-    </style>
-
-    <!-- The tiny title above each card. Small, spaced and quiet: it is a
-         signpost, not content. -->
-    <!-- A toggle in one of the two rails: text only, lit when on. -->
-    <style name="MantraRailToggle">
-        <item name="android:layout_width">52dp</item>
-        <item name="android:layout_height">30dp</item>
-        <item name="android:layout_marginVertical">2dp</item>
-        <item name="android:gravity">center</item>
+        <item name="android:layout_margin">3dp</item>
+        <item name="android:background">@drawable/key</item>
+        <item name="android:textColor">@color/sand</item>
         <item name="android:textSize">12sp</item>
-        <item name="android:letterSpacing">0.1</item>
-        <item name="android:fontFamily">monospace</item>
-        <item name="android:textColor">#6E7A86</item>
-        <item name="android:background">?android:attr/selectableItemBackground</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-    </style>
-
-    <style name="MantraSectionTitle">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginStart">14dp</item>
-        <item name="android:layout_marginBottom">6dp</item>
-        <item name="android:textSize">11sp</item>
-        <item name="android:letterSpacing">0.18</item>
-        <item name="android:textColor">#6E7A86</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:paddingVertical">12dp</item>
         <item name="android:textAllCaps">true</item>
-    </style>
-
-    <style name="MantraSettingsGroup">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:orientation">vertical</item>
-        <item name="android:layout_marginBottom">16dp</item>
-        <item name="android:background">@drawable/settings_group</item>
-    </style>
-
-    <style name="MantraSettingsRow">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:orientation">vertical</item>
-        <item name="android:paddingHorizontal">20dp</item>
-        <item name="android:paddingVertical">16dp</item>
-        <item name="android:background">?android:attr/selectableItemBackground</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-    </style>
-
-    <style name="MantraSettingsTitle">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">#ECEFF1</item>
-        <item name="android:textSize">16sp</item>
-    </style>
-
-    <style name="MantraSettingsValue">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">2dp</item>
-        <item name="android:textColor">#7C8894</item>
-        <item name="android:textSize">13sp</item>
-    </style>
-
-    <!-- One control column: an auto circle over a fader, fixed width so the
-         labels cannot collide with the column beside them. -->
-    <style name="MantraColumn">
-        <item name="android:layout_width">62dp</item>
-        <item name="android:layout_height">match_parent</item>
-        <item name="android:orientation">vertical</item>
-        <item name="android:gravity">center_horizontal</item>
-    </style>
-
-    <style name="MantraAuto">
-        <item name="android:layout_width">40dp</item>
-        <item name="android:layout_height">40dp</item>
-        <item name="android:layout_marginBottom">2dp</item>
-    </style>
-
-    <!-- The steppers, stacked under the track where the thumb already is. -->
-    <style name="MantraStep">
-        <item name="android:layout_width">44dp</item>
-        <item name="android:layout_height">44dp</item>
-        <item name="android:layout_marginTop">3dp</item>
-    </style>
-
-    <style name="MantraFader">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">0dp</item>
-        <item name="android:layout_weight">1</item>
+        <item name="android:stateListAnimator">@null</item>
     </style>
 </resources>
