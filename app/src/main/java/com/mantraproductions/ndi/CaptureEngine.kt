@@ -451,6 +451,14 @@ class CaptureEngine(private val context: Context) {
     fun sensorOrientation(): Int =
         characteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
 
+    /** The angle this sensor is mounted at, which nothing was asking for. */
+    val sensorOrientation: Int
+        get() = characteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+
+    val isFrontFacing: Boolean
+        get() = characteristics?.get(CameraCharacteristics.LENS_FACING) ==
+            CameraCharacteristics.LENS_FACING_FRONT
+
     fun isoRange(): Range<Int>? =
         characteristics?.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
 

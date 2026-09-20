@@ -157,66 +157,35 @@ class NdiSendService : Service() {
 
     /** Prepare the pipeline without streaming, so preview works on its own. */
     fun prepare(profile: CaptureProfile, onError: (String) -> Unit): Boolean {
-        // Ten bit takes the direct route; everything else stays on the pipeline
-        // that is already known to work on this phone.
-        // Ten bit only where the phone actually has it. A setting left on from
-        // another device, or turned on before the detection ran, must not send
-        // an eight bit phone down a pipeline it cannot complete.
+        /*
+         * One camera path, for every bit depth.
+         *
+         * There were two: RootEncoder for eight bit and Camera2 straight into
+         * MediaCodec for ten. That duplication was the cause of nearly every
+         * fault found this week, and each one looked like a different bug.
+         * Manual controls existed on one path only. Sensor orientation was
+         * handled by one. The preview buffer was sized by one. White balance
+         * was written for one. Fixing a symptom on either side left the other
+         * broken, and which side an operator was on depended on a setting they
+         * had changed for unrelated reasons.
+         *
+         * So the direct path is the path. It is the one that can do ten bit,
+         * HLG, a log curve on the sensor and two encoders at once, and eight
+         * bit is that same pipeline with the dynamic range profile left alone
+         * rather than a second stack with its own bugs.
+         */
         val settings = AppSettings(applicationContext)
         if (settings.tenBitWanted && !DeviceProfile.tenBitCapable) {
+            // A setting carried over from another phone, or set before the
+            // detection ran. The pipeline is the same either way; only the
+            // profile it asks for changes.
             settings.tenBitWanted = false
-            onError("This camera is 8-bit, staying on the standard pipeline")
+            onError("This camera is 8-bit, recording 8-bit")
         }
-        if (settings.tenBitWanted && DeviceProfile.tenBitCapable) {
-            return prepareDirect(profile, onError)
-        }
-        if (stream != null) return true
-
-        val ndiStream = NdiStream(applicationContext)
-        val prepared = try {
-            ndiStream.setVideoCodec(if (profile.useHevc) VideoCodec.H265 else VideoCodec.H264)
-            ndiStream.prepareVideo(
-                width = profile.width,
-                height = profile.height,
-                bitrate = profile.bitRate,
-                fps = profile.fps,
-                iFrameInterval = 2
-            ) && ndiStream.prepareAudio(sampleRate = 48000, isStereo = false, bitrate = 128_000)
-        } catch (e: IllegalArgumentException) {
-            false
-        }
-
-        if (!prepared) {
-            onError("This device can't encode ${profile.width}x${profile.height} @ ${profile.fps}")
-            ndiStream.release()
-            return false
-        }
-
-        // Keep the encoder pinned to the profile's fps rather than adapting.
-        ndiStream.forceFpsLimit(true)
-        // The NDI frame header carries resolution and rate on every frame.
-        ndiStream.setVideoFormat(profile.width, profile.height, profile.fps)
-
-        stream = ndiStream
-        activeProfile = profile
-        (ndiStream.audioSource as? com.pedro.encoder.input.sources.audio.MicrophoneSource)
-            ?.setAudioEffect(vuTap)
-        val source = ndiStream.videoSource as? Camera2Source
-        if (source != null) {
-            controls = ProControls(
-                source,
-                applicationContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            ).also { controls ->
-                controls.apply(profile)
-                // The curve the operator chose, applied to the sensor itself so
-                // it reaches preview, stream and recording at once.
-                if (DeviceProfile.logCapable) {
-                    controls.setLogCurve(AppSettings(applicationContext).logCurve)
-                }
-            }
-        }
-        return true
+        return prepareDirect(profile, onError)
     }
+
+    /** Kept only so the old eight bit code has somewhere to have been. */
 
     /**
      * Camera straight into the encoder, no GL stage, so a ten bit dynamic

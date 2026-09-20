@@ -618,6 +618,29 @@ object Mechanism {
         return out
     }
 
+    /**
+     * How far the preview has to be turned.
+     *
+     * A sensor is mounted at whatever angle suited the phone's assembly, not
+     * at whatever angle the app is held, and Camera2 delivers frames in the
+     * sensor's orientation without apology. RootEncoder used to do this sum
+     * for the eight bit path and nothing did it for the ten bit one, which is
+     * why a house appeared on its side in ten bit and upright in eight.
+     *
+     * @param sensorOrientation degrees, from the camera characteristics
+     * @param displayRotation Surface.ROTATION_0/90/180/270 as degrees
+     * @param frontFacing a front camera is mirrored, so its correction turns
+     *        the other way
+     */
+    fun previewRotation(
+        sensorOrientation: Int,
+        displayRotation: Int,
+        frontFacing: Boolean = false
+    ): Int {
+        val sign = if (frontFacing) -1 else 1
+        return ((sensorOrientation - displayRotation * sign) + 360) % 360
+    }
+
     // --- fitting a picture into a view ----------------------------------------
 
     /**
