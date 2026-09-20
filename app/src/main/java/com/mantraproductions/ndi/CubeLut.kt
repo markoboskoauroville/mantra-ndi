@@ -13,7 +13,7 @@ package com.mantraproductions.ndi
  * That is 35,937 entries, which is small enough to hold in a texture and dense
  * enough that interpolating between neighbours is invisible.
  */
-class CubeLut(val size: Int, val data: FloatArray) {
+class CubeLut(val size: Int, val data: FloatArray, val title: String = "") {
 
     init {
         require(size in 2..64) { "cube size $size" }
@@ -105,6 +105,7 @@ class CubeLut(val size: Int, val data: FloatArray) {
          */
         fun parse(text: String): CubeLut? {
             var size = 0
+            var title = ""
             var domainMin = floatArrayOf(0f, 0f, 0f)
             var domainMax = floatArrayOf(1f, 1f, 1f)
             val values = ArrayList<Float>(35937 * 3)
@@ -116,7 +117,7 @@ class CubeLut(val size: Int, val data: FloatArray) {
                 when (parts[0].uppercase()) {
                     "LUT_3D_SIZE" -> size = parts.getOrNull(1)?.toIntOrNull() ?: 0
                     "LUT_1D_SIZE" -> return null   // a different thing entirely
-                    "TITLE" -> Unit
+                    "TITLE" -> title = line.substringAfter("TITLE").trim().trim('"')
                     "DOMAIN_MIN" -> for (i in 0 until 3) {
                         domainMin[i] = parts.getOrNull(i + 1)?.toFloatOrNull() ?: 0f
                     }
@@ -145,8 +146,52 @@ class CubeLut(val size: Int, val data: FloatArray) {
                 val span = (domainMax[channel] - domainMin[channel]).takeIf { it != 0f } ?: 1f
                 data[i] = ((values[i] - domainMin[channel]) / span).coerceIn(0f, 1f)
             }
-            return CubeLut(size, data)
+            return CubeLut(size, data, title)
         }
+
+        /**
+         * A .cube file as text, for handing to an edit.
+         *
+         * The same three steps the monitor correction uses, written out so a
+         * grading system applies exactly what the operator was looking at on
+         * set. A LUT that differs from the monitor is worse than none, because
+         * the shot was lit against the monitor.
+         */
+        fun generate(from: LogCurves.Curve, to: LogCurves.Curve, size: Int): String {
+            val matrix = ColourSpaces.toRec709(ColourSpaces.gamutFor(from))
+            val n = (size - 1).toDouble()
+            return buildString {
+                append("TITLE \"").append(from.displayName).append(" to ")
+                    .append(to.displayName).append("\"\n")
+                append("LUT_3D_SIZE ").append(size).append("\n")
+                append("DOMAIN_MIN 0.0 0.0 0.0\nDOMAIN_MAX 1.0 1.0 1.0\n\n")
+                for (bi in 0 until size) for (gi in 0 until size) for (ri in 0 until size) {
+                    val rec = ColourSpaces.apply(
+                        matrix,
+                        LogCurves.decode(from, ri / n),
+                        LogCurves.decode(from, gi / n),
+                        LogCurves.decode(from, bi / n)
+                    )
+                    for (c in 0 until 3) {
+                        if (c > 0) append(' ')
+                        append(
+                            String.format(
+                                java.util.Locale.US, "%.6f",
+                                LogCurves.encode(to, rec[c].coerceAtLeast(0.0))
+                                    .coerceIn(0.0, 1.0)
+                            )
+                        )
+                    }
+                    append('\n')
+                }
+            }
+        }
+
+        /** A name that says what the file is without opening it. */
+        fun fileName(from: LogCurves.Curve, to: LogCurves.Curve, size: Int): String =
+            "${from.displayName}_to_${to.displayName}_${size}.cube"
+                .replace(' ', '_')
+                .replace(".7", "7")
 
         /**
          * The default for a curve, built from what is known about it.
