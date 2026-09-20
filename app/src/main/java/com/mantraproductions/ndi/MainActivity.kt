@@ -577,7 +577,15 @@ class MainActivity : AppCompatActivity() {
                 TimecodeLog.record(deviceName, hex, parsed)
             }
         }
-        if (!timecode.start()) say("Bluetooth is off, so there is no timecode")
+        // Wrapped because a Bluetooth call can throw for a permission this app
+        // does not hold, and no timecode source is worth closing a camera over.
+        val started = try {
+            timecode.start()
+        } catch (e: Throwable) {
+            CrashLog.trace("bluetooth refused: " + e.javaClass.simpleName)
+            false
+        }
+        if (!started) say("No Bluetooth timecode; LTC over audio still works")
     }
 
     /**

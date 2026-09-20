@@ -104,8 +104,32 @@ class TimecodeSource(private val context: Context) {
     private val callback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            // Everything in here runs on the main looper, so anything thrown
+            // reaches the top and closes the app. A scan callback is the last
+            // place that should be able to do that.
+            try {
+                handleResult(result)
+            } catch (e: Throwable) {
+                Log.w(TAG, "scan result", e)
+            }
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            Log.w(TAG, "scan failed $errorCode")
+            scanning = false
+            listener?.onLost()
+        }
+    }
+
+    private fun handleResult(result: ScanResult) {
+        run {
             val record = result.scanRecord ?: return
-            val name = record.deviceName ?: result.device?.name
+            // The name from the advertisement only. Reading it off the device
+            // calls getRemoteName, which needs BLUETOOTH_CONNECT, a permission
+            // this app has no business holding: it listens to broadcasts and
+            // never connects to anything. That call threw here and took the
+            // whole app down half a second after it opened.
+            val name = record.deviceName
             if (!TentacleParser.looksLikeTentacle(name)) return
 
             val manufacturer = record.manufacturerSpecificData ?: return
@@ -129,11 +153,6 @@ class TimecodeSource(private val context: Context) {
             }
         }
 
-        override fun onScanFailed(errorCode: Int) {
-            Log.w(TAG, "scan failed $errorCode")
-            scanning = false
-            listener?.onLost()
-        }
     }
 
     private companion object {
