@@ -1040,6 +1040,8 @@ class MainActivity : AppCompatActivity() {
     private fun updateFaderValue() {
         val controls = service?.controls
         binding.paramFader.valueText = when (param) {
+            Mechanism.Param.FOCUS -> if (focusProgress >= 99) "\u221E" else "$focusProgress%"
+            Mechanism.Param.GAIN -> binding.vGain.valueText
             Mechanism.Param.ISO ->
                 controls?.isoRange()?.let { "${it.lower + isoProgress}" } ?: "--"
 
@@ -1212,6 +1214,8 @@ class MainActivity : AppCompatActivity() {
                 Mechanism.Param.SHUTTER -> "SHUT"
                 Mechanism.Param.WHITE_BALANCE -> "WB"
                 Mechanism.Param.ZOOM -> "ZOOM"
+                Mechanism.Param.FOCUS -> "FOCUS"
+                Mechanism.Param.GAIN -> "GAIN"
             }
             fader.onChange = { onVerticalMoved(which, it) }
             fader.onRelease = { pump.flush() }
@@ -1466,7 +1470,8 @@ class MainActivity : AppCompatActivity() {
             Mechanism.Param.ISO, Mechanism.Param.SHUTTER ->
                 manualExposure = true
             Mechanism.Param.WHITE_BALANCE -> manualWhiteBalance = true
-            Mechanism.Param.ZOOM -> Unit
+            Mechanism.Param.FOCUS -> manualFocus = true
+            Mechanism.Param.ZOOM, Mechanism.Param.GAIN -> Unit
         }
 
         when (which) {
@@ -1514,6 +1519,15 @@ class MainActivity : AppCompatActivity() {
     private fun snapToAuto(which: Mechanism.Param) {
         val controls = service?.controls ?: return
         when (which) {
+            // Focus and gain have no camera side automatic to return to: one
+            // is a lens position and the other is a number applied to audio.
+            Mechanism.Param.FOCUS -> focusOnSquare()
+            Mechanism.Param.GAIN -> {
+                gainProgress = 50
+                applyGain()
+                refreshVerticalPanel()
+            }
+
             Mechanism.Param.ISO, Mechanism.Param.SHUTTER -> {
                 controls.setAutoExposure()
                 say("Reading the scene")
@@ -1555,6 +1569,14 @@ class MainActivity : AppCompatActivity() {
         val controls = service?.controls ?: return
         button.busy = true
         when (which) {
+            Mechanism.Param.FOCUS -> { focusOnSquare(); button.busy = false }
+            Mechanism.Param.GAIN -> {
+                gainProgress = 50
+                applyGain()
+                refreshVerticalPanel()
+                button.busy = false
+            }
+
             Mechanism.Param.ISO, Mechanism.Param.SHUTTER -> {
                 controls.setAutoExposure()
                 ui.postDelayed({
