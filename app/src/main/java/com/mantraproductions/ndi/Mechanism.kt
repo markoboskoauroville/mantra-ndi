@@ -208,7 +208,12 @@ object Mechanism {
         ISO("ISO"),
         SHUTTER("Shutter"),
         WHITE_BALANCE("Kelvin"),
-        ZOOM("Zoom");
+        ZOOM("Zoom"),
+        // No exceptions: every fader on the panel is a rocker parameter.
+        // Leaving two out meant two columns that could not be selected and
+        // could not be driven, with nothing on screen explaining why.
+        FOCUS("Focus"),
+        GAIN("Gain");
 
         fun next(): Param = entries[(ordinal + 1) % entries.size]
 
@@ -682,6 +687,41 @@ object Mechanism {
         } else {
             floatArrayOf(correction, 1f)
         }
+    }
+
+    /**
+     * The camera's own white balance preset nearest a colour temperature.
+     *
+     * Manual gains have now turned the picture green twice, and the reason is
+     * structural rather than a bad number: the gains are only half of white
+     * balance. The other half is the colour correction matrix, which differs
+     * per illuminant, is calibrated per sensor, and is not something an app
+     * can compute. Supplying our gains with somebody else's matrix leaves the
+     * two disagreeing, and on a Bayer sensor that disagreement is green,
+     * because green is the channel with twice the samples.
+     *
+     * The presets are the camera's own calibrated pairs. Fewer steps than a
+     * continuous slider, and every one of them correct.
+     *
+     * @return a CONTROL_AWB_MODE value
+     */
+    fun awbPresetFor(kelvin: Int): Int = when {
+        kelvin < 3000 -> 2   // INCANDESCENT, about 2700K
+        kelvin < 4200 -> 3   // FLUORESCENT, about 4000K
+        kelvin < 4800 -> 4   // WARM_FLUORESCENT
+        kelvin < 6000 -> 5   // DAYLIGHT, about 5500K
+        kelvin < 7000 -> 6   // CLOUDY_DAYLIGHT, about 6500K
+        else -> 7            // TWILIGHT and above
+    }
+
+    /** What that preset actually is, for the number on screen. */
+    fun kelvinForPreset(mode: Int): Int = when (mode) {
+        2 -> 2700
+        3 -> 4000
+        4 -> 4600
+        5 -> 5500
+        6 -> 6500
+        else -> 7500
     }
 
     // --- how sharp the frame is, where it matters -----------------------------

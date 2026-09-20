@@ -326,6 +326,21 @@ class MainActivity : AppCompatActivity() {
         } else {
             CrashLog.trace("applyCameraSource")
             applyCameraSource()
+
+            // Coming back from the background with the same surface produced
+            // no events at all and a picture frozen on the last frame, because
+            // the camera session had been taken away while the app was away
+            // and nothing asked for it back. A session that is gone cannot be
+            // detected reliably, so it is simply rebuilt: it costs a few
+            // hundred milliseconds on a screen nobody is shooting with yet.
+            if (appSettings.appMode == AppMode.LOCAL && surfaceReady) {
+                CrashLog.trace("rebuilding session on resume")
+                runCatching { service?.releasePipeline() }
+                activeProfile?.let { p ->
+                    service?.prepare(p) { e -> say(e) }
+                    service?.attachPreview(binding.preview)
+                }
+            }
         }
         CrashLog.trace("log curve")
         applyLogCurve()
@@ -509,6 +524,8 @@ class MainActivity : AppCompatActivity() {
             Mechanism.Param.SHUTTER -> binding.vShutter
             Mechanism.Param.WHITE_BALANCE -> binding.vWhiteBalance
             Mechanism.Param.ZOOM -> binding.vZoom
+            Mechanism.Param.FOCUS -> binding.vFocus
+            Mechanism.Param.GAIN -> binding.vGain
         }
         fader.step(direction)
     }
@@ -957,6 +974,8 @@ class MainActivity : AppCompatActivity() {
             Mechanism.Param.SHUTTER -> "SH"
             Mechanism.Param.WHITE_BALANCE -> "WB"
             Mechanism.Param.ZOOM -> "Z"
+            Mechanism.Param.FOCUS -> "F"
+            Mechanism.Param.GAIN -> "G"
         }
         binding.paramFader.label = param.label
 
@@ -987,6 +1006,18 @@ class MainActivity : AppCompatActivity() {
                 binding.paramFader.isEnabled = true
                 binding.paramFader.progress = zoomProgress
             }
+
+            Mechanism.Param.FOCUS -> {
+                binding.paramFader.max = 100
+                binding.paramFader.isEnabled = true
+                binding.paramFader.progress = focusProgress
+            }
+
+            Mechanism.Param.GAIN -> {
+                binding.paramFader.max = 100
+                binding.paramFader.isEnabled = true
+                binding.paramFader.progress = gainProgress
+            }
         }
         updateFaderValue()
     }
@@ -1000,6 +1031,8 @@ class MainActivity : AppCompatActivity() {
                 pump.setKelvin(ProControls.KELVIN_MIN + progress)
             }
             Mechanism.Param.ZOOM -> { zoomProgress = progress; pushZoom(progress) }
+            Mechanism.Param.FOCUS -> { focusProgress = progress; manualFocus = true; pushFocus() }
+            Mechanism.Param.GAIN -> { gainProgress = progress; applyGain() }
         }
         updateFaderValue()
     }
@@ -1362,7 +1395,9 @@ class MainActivity : AppCompatActivity() {
             Mechanism.Param.ISO to binding.vIso,
             Mechanism.Param.SHUTTER to binding.vShutter,
             Mechanism.Param.WHITE_BALANCE to binding.vWhiteBalance,
-            Mechanism.Param.ZOOM to binding.vZoom
+            Mechanism.Param.ZOOM to binding.vZoom,
+            Mechanism.Param.FOCUS to binding.vFocus,
+            Mechanism.Param.GAIN to binding.vGain
         ).forEach { (which, fader) ->
             fader.focused = which == focusedColumn
         }
@@ -1372,8 +1407,8 @@ class MainActivity : AppCompatActivity() {
         // focused column and were lighting for nobody. They light when they
         // are the fader being touched, which is what the operator means by
         // selected.
-        binding.vFocus.focused = touchedFader === binding.vFocus
-        binding.vGain.focused = touchedFader === binding.vGain
+        binding.vFocus.focused = focusedColumn == Mechanism.Param.FOCUS
+        binding.vGain.focused = focusedColumn == Mechanism.Param.GAIN
     }
 
     private fun refreshVerticalPanel() {
@@ -1462,6 +1497,8 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             Mechanism.Param.ZOOM -> { zoomProgress = progress; pushZoom(progress) }
+            Mechanism.Param.FOCUS -> { focusProgress = progress; manualFocus = true; pushFocus() }
+            Mechanism.Param.GAIN -> { gainProgress = progress; applyGain() }
         }
         refreshVerticalPanel()
     }
@@ -1835,9 +1872,17 @@ class MainActivity : AppCompatActivity() {
      */
     private fun applyPreviewTransform() {
         val view = binding.preview
-        if (view.width <= 0 || view.height <= 0) return
+        if (view.width <= 0 || view.height <= 0) {
+            CrashLog.trace("transform skipped: view not laid out")
+            return
+        }
 
-        val size = currentVideoSize() ?: return
+        // The tap produced no trace line at all, which means this returned
+        // before reaching the maths. A missing profile is not a reason to
+        // leave the picture sideways, so the view's own shape stands in.
+        val size = currentVideoSize() ?: (view.width to view.height).also {
+            CrashLog.trace("transform: no profile, using view shape")
+        }
         val scale = Mechanism.previewTransform(
             view.width, view.height, size.first, size.second, fill = false
         )

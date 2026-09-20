@@ -337,48 +337,32 @@ class CaptureEngine(private val context: Context) {
         return apply()
     }
 
+    /**
+     * White balance by the camera's own presets.
+     *
+     * Gains alone are half of white balance; the other half is a colour
+     * correction matrix that is calibrated per sensor and per illuminant and
+     * is not something an app can compute. Supplying our gains beside somebody
+     * else's matrix leaves the two disagreeing, and on a Bayer sensor that
+     * disagreement reads as green, because green is the channel with twice the
+     * samples. That is what happened twice, and no slider position undid it
+     * because the slider was only ever moving one of the two halves.
+     *
+     * A preset moves both together, calibrated, by the people who measured the
+     * sensor. Six steps instead of a continuous sweep, and all six correct.
+     */
     fun setManualWhiteBalance(kelvin: Int): Boolean {
         val request = builder ?: return false
-        val caps = capabilities ?: return false
-        if (!caps.supportsToneCurve && !supportsManualPostProcessing()) return false
         manualWhiteBalance = true
-        val gains = Mechanism.kelvinToGains(kelvin)
-        request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+        val preset = Mechanism.awbPresetFor(kelvin)
+
+        request.set(CaptureRequest.CONTROL_AWB_MODE, preset)
+        // Back to the camera's own colour pipeline: it owns both halves again.
         request.set(
             CaptureRequest.COLOR_CORRECTION_MODE,
-            CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
+            CaptureRequest.COLOR_CORRECTION_MODE_FAST
         )
-        request.set(
-            CaptureRequest.COLOR_CORRECTION_GAINS,
-            android.hardware.camera2.params.RggbChannelVector(gains[0], gains[1], gains[1], gains[2])
-        )
-        // TRANSFORM_MATRIX mode requires the transform as well as the gains.
-        // Setting the mode and supplying only gains leaves the transform
-        // whatever it was, which on some devices is nothing, and a repeating
-        // request missing a key it declared it would provide stops the camera
-        // rather than being ignored. That is the frozen picture after touching
-        // white balance.
-        /*
-         * The camera's own matrix, never a textbook identity.
-         *
-         * A Bayer sensor is roughly twice as sensitive to green as to red or
-         * blue, and the colour correction matrix is what undoes that. Handing
-         * the camera an identity removes it, so the picture goes violently
-         * green the moment white balance is touched and no amount of moving
-         * the slider brings it back, because the slider only changes gains and
-         * the missing matrix is a different key.
-         *
-         * If no result has carried a transform yet there is nothing honest to
-         * send, so manual white balance is refused rather than guessed at and
-         * the camera keeps its own.
-         */
-        val transform = lastReportedTransform
-        if (transform == null) {
-            CrashLog.trace("wb refused: no transform reported yet")
-            return false
-        }
-        request.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, transform)
-        CrashLog.trace("wb kelvin=" + kelvin)
+        CrashLog.trace("wb kelvin=" + kelvin + " preset=" + preset)
         return apply()
     }
 
