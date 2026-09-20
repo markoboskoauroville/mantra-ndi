@@ -278,7 +278,10 @@ object PreviewEffects {
                 RenderEffect.createRuntimeShaderEffect(shader, "content")
             )
             true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Throwable, not Exception. A rejected shader can come back as an
+            // Error from the graphics layer rather than an Exception, and
+            // catching only the latter lets it reach the top and close the app.
             Log.w(TAG, "preview effects", e)
             runCatching { view.setRenderEffect(null) }
             false

@@ -205,7 +205,24 @@ class CubeLut(val size: Int, val data: FloatArray, val title: String = "") {
          * a screen. Skip the matrix and saturated colour lands somewhere no
          * real scene contains.
          */
-        fun generate(curve: LogCurves.Curve, size: Int = 33): CubeLut {
+        /**
+         * Generated tables, kept.
+         *
+         * A 33 cube is 35,937 entries and each one costs three decodes and
+         * three encodes: about a hundred and eight thousand logarithms and
+         * powers. That was being rebuilt on every call, which includes
+         * every resume and every press of any overlay toggle, on the thread
+         * drawing the picture. Once per curve per launch is enough, because
+         * the table depends on nothing else.
+         */
+        private val generatedCache = HashMap<String, CubeLut>()
+
+        fun generate(curve: LogCurves.Curve, size: Int = 33): CubeLut =
+            synchronized(generatedCache) {
+                generatedCache.getOrPut(curve.name + size) { build(curve, size) }
+            }
+
+        private fun build(curve: LogCurves.Curve, size: Int): CubeLut {
             val matrix = ColourSpaces.toRec709(ColourSpaces.gamutFor(curve))
             val data = FloatArray(size * size * size * 3)
             val n = (size - 1).toDouble()

@@ -310,10 +310,24 @@ class MainActivity : AppCompatActivity() {
             applyCameraSource()
         }
         applyLogCurve()
-        refreshRail()
         applyScreenPolicy()
-        applyPreviewEffects()
-        refreshLutButton()
+
+        // The overlay work is the newest part of this screen and the part most
+        // likely to fail on a phone I cannot test on. A camera that will not
+        // open because a waveform shader was rejected is a far worse failure
+        // than a camera with no waveform, so this cannot take the app down.
+        try {
+            refreshRail()
+            applyPreviewEffects()
+            refreshLutButton()
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "overlays", e)
+            appSettings.previewLut = false
+            appSettings.focusPeaking = false
+            appSettings.waveformChannels = emptySet()
+            runCatching { binding.preview.setRenderEffect(null) }
+            say("Overlays turned off after an error")
+        }
         // Coming back from the background resizes the view without touching
         // the buffer, which is the other half of the stretch.
         // Three times, spread out: the buffer size changes when the session
