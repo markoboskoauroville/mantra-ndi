@@ -5,7 +5,7 @@ decided and what is not tested.
 
 ## State
 
-**v67. Phase 0, logging. No camera in this build.**
+**v68. Phase 0, logging. No camera in this build.**
 
 The previous build ended at v65 and is in git history. It was not extended;
 it was taken apart, because the half-finished parts of it looked finished.
@@ -90,6 +90,29 @@ the actual output rather than the code.
 **Not done, and worth knowing:** the report tail is capped by the ring at 400
 entries. That was fine at 20 and will make a large crash file once the camera
 is logging. Left alone deliberately rather than changed unasked.
+
+## v68: three faults only a screenshot showed
+
+The files said everything was right. The screen said otherwise. None of these
+could have been found by reading a log, which is worth remembering before
+phase 1 is judged by its trace alone.
+
+1. **The side padding was gone and the title was clipped at both edges.**
+   `updatePadding(left, top, right, bottom)` sets all four sides, so the 12dp
+   margin the layout asked for was replaced by the inset, which is zero down
+   the sides of an upright phone. The base padding is now read once, before
+   the first inset arrives, and the insets are added to it. This one matters
+   beyond the panel: phase 1's controls sit on this same code.
+2. **The keys were solid amber, not slate with an amber rule.** A `Button`
+   under a Material theme inflates as a `MaterialButton`, which ignores
+   `android:background` and tints itself from `colorPrimary`. `key.xml` was
+   present and did nothing. They are outlined Material buttons now and the
+   drawable is deleted.
+3. **Wrapped trace lines restarted at column zero**, throwing away the
+   alignment the format exists for. A `LeadingMarginSpan` gives a hanging
+   indent, so a continuation reads as one.
+
+Three-button navigation is confirmed, by screenshot: the keys clear the bar.
 
 ## What the phone actually reported, against REBUILD.md
 

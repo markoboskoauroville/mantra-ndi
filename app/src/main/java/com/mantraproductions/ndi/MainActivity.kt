@@ -10,13 +10,13 @@ import android.os.Bundle
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.text.style.LeadingMarginSpan
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
 import com.mantraproductions.ndi.databinding.ActivityMainBinding
 
 /**
@@ -41,6 +41,17 @@ class MainActivity : AppCompatActivity() {
     /** The last inset values written down, so the same four numbers are not written twice. */
     private var lastInsets: String? = null
 
+    /**
+     * The padding the layout asked for, before any inset was added to it.
+     *
+     * Read once, because it has to be read before the first inset is applied
+     * or it reads back whatever the last one left behind. v67 shipped with
+     * the side margin gone and the title clipped at both edges, because
+     * updatePadding sets all four sides and the sides of an upright phone
+     * have no inset at all.
+     */
+    private var basePadding = intArrayOf(0, 0, 0, 0)
+
     /** Repaints the trace on screen. It must never write to the trace itself. */
     private val repaint = object : Runnable {
         override fun run() {
@@ -64,11 +75,18 @@ class MainActivity : AppCompatActivity() {
         // underneath keeps the whole screen when phase 1 fills it. The values
         // are traced, because a control under a bar is invisible in a
         // screenshot taken on a desk and obvious in a number.
+        basePadding = intArrayOf(
+            ui.content.paddingLeft, ui.content.paddingTop,
+            ui.content.paddingRight, ui.content.paddingBottom
+        )
         ViewCompat.setOnApplyWindowInsetsListener(ui.content) { view, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            view.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
+            view.setPadding(
+                basePadding[0] + bars.left, basePadding[1] + bars.top,
+                basePadding[2] + bars.right, basePadding[3] + bars.bottom
+            )
 
             // Android offers the insets more than once for one layout pass.
             // Only a change is worth a line; the same four numbers twice is
@@ -173,10 +191,15 @@ class MainActivity : AppCompatActivity() {
      */
     private fun showTrace() {
         val lines = Trace.lines()
+        val indent = (CONTINUATION_INDENT_DP * resources.displayMetrics.density).toInt()
         val out = SpannableStringBuilder()
         for (line in lines) {
             val start = out.length
             out.append(line).append('\n')
+            out.setSpan(
+                LeadingMarginSpan.Standard(0, indent), start, out.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
             val colour = when {
                 line.contains(TraceFormat.FAULT) || line.contains(TraceFormat.REFUSED) ->
                     getColor(R.color.fault)
@@ -292,5 +315,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val REFRESH_MS = 300L
+        const val CONTINUATION_INDENT_DP = 22
     }
 }

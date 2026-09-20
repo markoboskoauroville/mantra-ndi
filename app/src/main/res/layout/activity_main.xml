@@ -93,12 +93,12 @@
             android:orientation="horizontal"
             android:layout_marginTop="6dp">
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/throwException"
                 style="@style/MantraKey"
                 android:text="Throw exception" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/throwError"
                 style="@style/MantraKey"
                 android:text="Throw error" />
@@ -109,12 +109,12 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/export"
                 style="@style/MantraKey"
                 android:text="Export trace" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/copyPath"
                 style="@style/MantraKey"
                 android:text="Copy path" />

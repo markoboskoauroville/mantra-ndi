@@ -12,11 +12,11 @@ the faults from the previous attempt that each cost a day.
 
 ## Where it is
 
-**Phase 0, logging. Complete at v67.** There is no camera in this build.
+**Phase 0, logging. Complete at v68.** There is no camera in this build.
 
 | Phase | What | State |
 |---|---|---|
-| 0 | Logging: trace file, crash reports, the state panel | built and confirmed on the phone, v67 |
+| 0 | Logging: trace file, crash reports, the state panel | built and confirmed on the phone, v68 |
 | 1 | 10-bit HDR camera and nothing else | not started |
 | 2 | Recording | not started |
 | 3 | NDI streaming | not started |

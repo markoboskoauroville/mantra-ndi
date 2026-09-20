@@ -6,19 +6,32 @@
         <item name="android:windowBackground">@color/ink</item>
     </style>
 
-    <!-- A key. Slate ground, amber rule, sand word: the same key in every row,
-         so two controls doing the same kind of job look the same. -->
-    <style name="MantraKey">
+    <!-- A key. Slate ground, amber rule, sand word.
+
+         Built on the outlined Material button rather than on a plain Button
+         with a background drawable. v67 shipped four solid amber keys because
+         a Button under a Material theme is inflated as a MaterialButton, which
+         ignores android:background and tints itself from colorPrimary. The
+         drawable was there and did nothing, which is the same fault as a
+         setting that does nothing: it looked done. -->
+    <style name="MantraKey" parent="Widget.MaterialComponents.Button.OutlinedButton">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
         <item name="android:layout_margin">3dp</item>
-        <item name="android:background">@drawable/key</item>
+        <item name="backgroundTint">@color/slate</item>
+        <item name="strokeColor">@color/amber</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="cornerRadius">6dp</item>
+        <item name="rippleColor">@color/amber</item>
         <item name="android:textColor">@color/sand</item>
         <item name="android:textSize">12sp</item>
-        <item name="android:letterSpacing">0.08</item>
+        <item name="android:letterSpacing">0.06</item>
         <item name="android:paddingVertical">12dp</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:stateListAnimator">@null</item>
+        <!-- The outlined button ships with insets that shrink what a finger
+             can actually hit. A key is the size it looks. -->
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
     </style>
+
 </resources>
