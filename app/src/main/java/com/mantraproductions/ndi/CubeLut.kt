@@ -158,6 +158,9 @@ class CubeLut(val size: Int, val data: FloatArray, val title: String = "") {
          * the shot was lit against the monitor.
          */
         fun generate(from: LogCurves.Curve, to: LogCurves.Curve, size: Int): String {
+            // 512 cubed is 134 million entries and several gigabytes of text.
+            // A size nobody ships is a typo, not a request.
+            require(size in 2..65) { "cube size $size" }
             val matrix = ColourSpaces.toRec709(ColourSpaces.gamutFor(from))
             val n = (size - 1).toDouble()
             return buildString {

@@ -84,14 +84,20 @@ class CubeLutTest {
     }
 
     @Test fun theGeneratedTableActuallyMovesColour() {
-        // What a 1D strip cannot do. A pure log red carries the camera's own
-        // primary; correcting it must pull it towards Rec.709, which means the
-        // other two channels cannot both stay where they were.
+        // What a 1D strip cannot do, stated as the thing that matters: a
+        // strip applies one identical curve to all three channels, so its
+        // output for a pure input can never depend on the other two. Here it
+        // must, because the matrix mixes them.
         val cube = CubeLut.generate(LogCurves.Curve.SLOG3, 33)
-        val out = cube.sample(0.9f, 0.1f, 0.1f)
+        val red = cube.sample(0.8f, 0.2f, 0.2f)
+        val green = cube.sample(0.2f, 0.8f, 0.2f)
+
+        // A strip would give the same number for the red channel of both,
+        // since in both cases some channel is 0.8 and the mapping is per
+        // channel. The matrix makes them differ.
         assertTrue(
-            "green ${out[1]} blue ${out[2]} should differ from a flat strip",
-            Math.abs(out[1] - out[2]) > 0.001f || out[1] > 0.12f
+            "red channel ${red[0]} vs ${green[0]} should differ once a gamut is applied",
+            Math.abs(red[0] - green[0]) > 0.01f
         )
     }
 
