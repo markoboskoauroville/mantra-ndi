@@ -1035,6 +1035,19 @@ class MainActivity : AppCompatActivity() {
      * hand rather than the one across the room.
      */
     private fun pushExposure() {
+        // Everything that can make a fader do nothing, in one line. Each of
+        // these has been the cause at least once this week, and from here
+        // there is no way to tell which without being told.
+        val probe = activeLink()
+        CrashLog.trace(
+            "pushExposure manual=" + manualExposure +
+                " link=" + (probe?.javaClass?.simpleName ?: "NONE") +
+                " engine=" + (service?.engineControls != null) +
+                " controls=" + (service?.controls != null) +
+                " iso=" + (probe?.isoRange() != null) +
+                " shutter=" + (shutterRange() != null)
+        )
+
         if (!manualExposure) return
         val active = activeLink() ?: return
         val isoRange = active.isoRange() ?: return
@@ -2577,6 +2590,13 @@ class MainActivity : AppCompatActivity() {
         }
         val svc = service ?: return
         val profile = activeProfile ?: return
+        svc.pipelineReady = {
+            runOnUiThread {
+                applyPreviewTransform()
+                bindControlRanges()
+                refreshVerticalPanel()
+            }
+        }
         val ok = svc.prepare(profile) { error ->
             runOnUiThread { say(error) }
         }

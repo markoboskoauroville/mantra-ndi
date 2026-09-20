@@ -60,6 +60,9 @@ class NdiSendService : Service() {
      */
     val engineControls: CaptureEngine? get() = if (hdr?.isRunning == true) hdr?.controls else null
 
+    /** Called on the camera thread the moment the session is live. */
+    @Volatile var pipelineReady: (() -> Unit)? = null
+
     var isStreaming: Boolean = false
         private set
 
@@ -211,6 +214,10 @@ class NdiSendService : Service() {
 
         pipeline.listener = object : HdrPipeline.Listener {
             override fun onReady(tenBit: Boolean, codec: String) {
+                // The screen cannot know the sensor's angle until the camera is
+                // open, so it is told rather than left to guess on a timer.
+                CrashLog.trace("pipeline ready tenBit=" + tenBit + " codec=" + codec)
+                pipelineReady?.invoke()
                 Log.i(TAG, "Direct pipeline: ${if (tenBit) "10-bit HLG" else "8-bit"} $codec")
             }
 
