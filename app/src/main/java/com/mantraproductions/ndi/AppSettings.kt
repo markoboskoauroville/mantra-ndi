@@ -264,6 +264,17 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit()
             .putStringSet(KEY_TC_FIELDS, value.map { it.name }.toSet()).apply()
 
+    /**
+     * Extra quarter turns for the preview.
+     *
+     * The automatic calculation is right on paper and has been wrong on this
+     * phone twice, and an operator staring at a sideways picture does not care
+     * whose arithmetic is at fault. A turn they can apply themselves ends it.
+     */
+    var previewRotationOffset: Int
+        get() = prefs.getInt(KEY_ROTATION, 0)
+        set(value) = prefs.edit().putInt(KEY_ROTATION, ((value % 360) + 360) % 360).apply()
+
     var showTimecode: Boolean
         get() = prefs.getBoolean(KEY_SHOW_TC, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_TC, value).apply()
@@ -315,6 +326,7 @@ class AppSettings(context: Context) {
         const val KEY_KEEP_AWAKE = "keep_awake"
         const val KEY_TC_SIZE = "timecode_size"
         const val KEY_SHOW_TC = "show_timecode"
+        const val KEY_ROTATION = "preview_rotation"
         const val KEY_PREVIEW_LUT = "preview_lut"
         const val KEY_LUT_PREFIX = "lut_for_"
         const val KEY_PEAK = "focus_peaking"

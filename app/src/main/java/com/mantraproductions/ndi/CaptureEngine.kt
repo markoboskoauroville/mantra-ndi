@@ -358,10 +358,26 @@ class CaptureEngine(private val context: Context) {
         // request missing a key it declared it would provide stops the camera
         // rather than being ignored. That is the frozen picture after touching
         // white balance.
-        request.set(
-            CaptureRequest.COLOR_CORRECTION_TRANSFORM,
-            lastReportedTransform ?: IDENTITY_TRANSFORM
-        )
+        /*
+         * The camera's own matrix, never a textbook identity.
+         *
+         * A Bayer sensor is roughly twice as sensitive to green as to red or
+         * blue, and the colour correction matrix is what undoes that. Handing
+         * the camera an identity removes it, so the picture goes violently
+         * green the moment white balance is touched and no amount of moving
+         * the slider brings it back, because the slider only changes gains and
+         * the missing matrix is a different key.
+         *
+         * If no result has carried a transform yet there is nothing honest to
+         * send, so manual white balance is refused rather than guessed at and
+         * the camera keeps its own.
+         */
+        val transform = lastReportedTransform
+        if (transform == null) {
+            CrashLog.trace("wb refused: no transform reported yet")
+            return false
+        }
+        request.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, transform)
         CrashLog.trace("wb kelvin=" + kelvin)
         return apply()
     }
@@ -496,13 +512,6 @@ class CaptureEngine(private val context: Context) {
     private companion object {
         const val TAG = "CaptureEngine"
 
-        /** Diagonal ones, as nine rationals. What "leave the colour alone" is. */
-        val IDENTITY_TRANSFORM = android.hardware.camera2.params.ColorSpaceTransform(
-            intArrayOf(
-                1, 1, 0, 1, 0, 1,
-                0, 1, 1, 1, 0, 1,
-                0, 1, 0, 1, 1, 1
-            )
-        )
+
     }
 }

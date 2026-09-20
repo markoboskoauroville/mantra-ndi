@@ -209,8 +209,14 @@ class MainActivity : AppCompatActivity() {
 
         binding.preview.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) {
+                // A new texture, so the pipeline has to be built against it.
+                // Attaching to a session that was configured for the old one
+                // is how the picture came back frozen.
+                CrashLog.trace("surface available " + w + "x" + h)
                 surfaceReady = true
+                activeProfile?.let { service?.prepare(it) { e -> say(e) } }
                 service?.attachPreview(binding.preview)
+                applyPreviewTransform()
             }
 
             override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) {
@@ -220,6 +226,14 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onSurfaceTextureDestroyed(t: SurfaceTexture): Boolean {
+                // The session's output surface dies with this texture. Leaving
+                // the pipeline running means it keeps writing to a surface
+                // that no longer exists, and on return the new texture gets
+                // nothing: a picture frozen on the last frame before the app
+                // went away.
+                CrashLog.trace("surface destroyed, releasing pipeline")
+                surfaceReady = false
+                runCatching { service?.releasePipeline() }
                 surfaceReady = false
                 service?.detachPreview()
                 return true
@@ -485,6 +499,9 @@ class MainActivity : AppCompatActivity() {
 
     /** The rocker drives whichever column was touched last. */
     private var focusedColumn: Mechanism.Param = Mechanism.Param.ISO
+
+    /** The fader last touched, including the two the rocker cannot drive. */
+    private var touchedFader: VerticalFaderView? = null
 
     private fun nudgeFocusedColumn(direction: Int) {
         val fader = when (focusedColumn) {
@@ -916,7 +933,13 @@ class MainActivity : AppCompatActivity() {
         binding.paramBar.alpha = 0f
         binding.paramBar.animate().alpha(1f).setDuration(140).start()
         // Reaching for a fader means wanting the sensor, not the auto routine.
-        if (activeLink()?.supportsManualSensor() == true) manualExposure = true
+        // Unconditional. The log showed manual=false on every exposure move
+        // with the link, the engine and both ranges all present, because this
+        // phone reports supportsManualSensor false and takes the request
+        // anyway. The camera is the authority on what it accepts, and a
+        // refused request now restores the last good one, so asking and being
+        // told no costs nothing while not asking costs the whole control.
+        manualExposure = true
         showParam()
     }
 
@@ -1160,7 +1183,8 @@ class MainActivity : AppCompatActivity() {
             fader.onChange = { onVerticalMoved(which, it) }
             fader.onRelease = { pump.flush() }
             fader.onTouchedWhileAutomatic = { leaveAuto(which) }
-            fader.setOnTouchListener { _, _ ->
+            fader.setOnTouchListener { view, _ ->
+                touchedFader = view as? VerticalFaderView
                 // Touching a column is also choosing it for the rocker, so the
                 // hardware keys follow the hand rather than a separate choice.
                 focusedColumn = which
@@ -1342,8 +1366,14 @@ class MainActivity : AppCompatActivity() {
         ).forEach { (which, fader) ->
             fader.focused = which == focusedColumn
         }
-        binding.vFocus.focused = false
-        binding.vGain.focused = false
+        // Focus and gain were excluded here, so selecting either lit nothing
+        // and looked like a column that could not be chosen at all.
+        // Focus and gain are not rocker parameters, so they can never be the
+        // focused column and were lighting for nobody. They light when they
+        // are the fader being touched, which is what the operator means by
+        // selected.
+        binding.vFocus.focused = touchedFader === binding.vFocus
+        binding.vGain.focused = touchedFader === binding.vGain
     }
 
     private fun refreshVerticalPanel() {
@@ -1399,7 +1429,7 @@ class MainActivity : AppCompatActivity() {
         val controls = service?.controls
         when (which) {
             Mechanism.Param.ISO, Mechanism.Param.SHUTTER ->
-                if (controls?.supportsManualSensor() == true) manualExposure = true
+                manualExposure = true
             Mechanism.Param.WHITE_BALANCE -> manualWhiteBalance = true
             Mechanism.Param.ZOOM -> Unit
         }
@@ -1651,6 +1681,14 @@ class MainActivity : AppCompatActivity() {
             killApp()
             true
         }
+        // Tap the format field to turn the picture a quarter, for when the
+        // automatic answer is wrong on this phone.
+        binding.timecodeView.setOnClickListener {
+            appSettings.previewRotationOffset = appSettings.previewRotationOffset + 90
+            applyPreviewTransform()
+            say("Preview turned " + appSettings.previewRotationOffset)
+        }
+
         binding.resetButton.setOnClickListener {
             say("Hold RST to reset to a safe state")
         }
