@@ -287,6 +287,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        CrashLog.trace("onResume")
         binding.focusSquare.boxSize = appSettings.focusBoxSize
         // A mode change in settings takes effect here, including handing the
         // preview from the camera to the decoder or back.
@@ -304,12 +305,17 @@ class MainActivity : AppCompatActivity() {
             // local camera showing black: the decoder still held the surface
             // and the sensor could not have it. So everything goes, and the
             // new mode starts from nothing.
+            CrashLog.trace("mode reset")
             resetForModeChange()
+            CrashLog.trace("preparePipeline")
             preparePipeline()
         } else {
+            CrashLog.trace("applyCameraSource")
             applyCameraSource()
         }
+        CrashLog.trace("log curve")
         applyLogCurve()
+        CrashLog.trace("screen policy")
         applyScreenPolicy()
 
         // The overlay work is the newest part of this screen and the part most
@@ -317,9 +323,13 @@ class MainActivity : AppCompatActivity() {
         // open because a waveform shader was rejected is a far worse failure
         // than a camera with no waveform, so this cannot take the app down.
         try {
+            CrashLog.trace("refreshRail")
             refreshRail()
+            CrashLog.trace("previewEffects")
             applyPreviewEffects()
+            CrashLog.trace("lutButton")
             refreshLutButton()
+            CrashLog.trace("overlays ok")
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "overlays", e)
             appSettings.previewLut = false
@@ -1602,6 +1612,7 @@ class MainActivity : AppCompatActivity() {
         // A tap says what it would do; a hold does it. An accidental tap that
         // kills a live stream is worse than an extra second of deliberation,
         // and these two sit beside buttons that are pressed constantly.
+        CrashLog.trace("rail")
         setUpOverlayRail()
 
         binding.killButton.setOnClickListener {

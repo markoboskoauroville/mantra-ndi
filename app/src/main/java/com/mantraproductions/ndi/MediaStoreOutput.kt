@@ -91,7 +91,21 @@ object MediaStoreOutput {
      * Anything that is not a recording, such as a generated LUT. Documents go
      * beside the footage rather than into a second place nobody looks.
      */
-    fun writeText(context: Context, name: String, content: String): Target? = try {
+    /**
+     * Text files go to Downloads through MediaStore.
+     *
+     * This used to write a raw File path into public DCIM, which Android has
+     * forbidden since version ten and refuses silently, so every report this
+     * app offered to save was quietly going nowhere.
+     */
+    fun writeText(context: Context, name: String, content: String): Target? {
+        CrashLog.toDownloads(context, name, content)?.let { where ->
+            return Target(uri = null, file = null, displayName = where)
+        }
+        return legacyWriteText(context, name, content)
+    }
+
+    private fun legacyWriteText(context: Context, name: String, content: String): Target? = try {
         val dir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
             FOLDER
