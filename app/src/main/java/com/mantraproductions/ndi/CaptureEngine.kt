@@ -223,14 +223,30 @@ class CaptureEngine(private val context: Context) {
      * calls this, so a movement that changes ISO and shutter together is one
      * request, not two.
      */
+    /** The last request the camera actually accepted, to fall back to. */
+    private var lastGood: CaptureRequest? = null
+
+    /**
+     * Sends the request, and puts the last working one back if it is refused.
+     *
+     * A refused repeating request leaves the camera with nothing to repeat, so
+     * the preview freezes and stays frozen. Restoring the previous one means a
+     * value the sensor will not take costs the operator that one change rather
+     * than the rest of the take.
+     */
     private fun apply(): Boolean {
         val session = session ?: return false
         val request = builder ?: return false
         return try {
-            session.setRepeatingRequest(request.build(), captureCallback, handler)
+            val built = request.build()
+            session.setRepeatingRequest(built, captureCallback, handler)
+            lastGood = built
             true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w(TAG, "Repeating request refused", e)
+            runCatching {
+                lastGood?.let { session.setRepeatingRequest(it, captureCallback, handler) }
+            }
             false
         }
     }
@@ -278,13 +294,28 @@ class CaptureEngine(private val context: Context) {
 
     // --- manual controls ------------------------------------------------------
 
+    /**
+     * Clamped to what this sensor actually accepts.
+     *
+     * A repeating request carrying a value outside the reported range is not
+     * refused politely: the camera stops delivering frames and the preview sits
+     * frozen while the app carries on as though nothing happened. Asking the
+     * characteristics costs nothing and makes that impossible.
+     */
     fun setManualExposure(iso: Int, shutterNs: Long): Boolean {
         val request = builder ?: return false
         manualExposure = true
+
         val frameDuration = Mechanism.frameDurationForFps(targetFps)
+        val sensitivity = isoRange()?.let { iso.coerceIn(it.lower, it.upper) } ?: iso
+        val exposure = exposureRange()
+            ?.let { shutterNs.coerceIn(it.lower, it.upper) }
+            ?: shutterNs
+        val safeExposure = minOf(exposure, frameDuration).coerceAtLeast(1_000L)
+
         request.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-        request.set(CaptureRequest.SENSOR_SENSITIVITY, iso)
-        request.set(CaptureRequest.SENSOR_EXPOSURE_TIME, minOf(shutterNs, frameDuration))
+        request.set(CaptureRequest.SENSOR_SENSITIVITY, sensitivity)
+        request.set(CaptureRequest.SENSOR_EXPOSURE_TIME, safeExposure)
         request.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDuration)
         return apply()
     }
@@ -326,6 +357,12 @@ class CaptureEngine(private val context: Context) {
      * Manual focus, in dioptres. Zero is infinity and the maximum is the
      * closest the lens goes, which differs per phone, so the UI works in a
      * fraction and this converts.
+     */
+    /**
+     * Dioptres, clamped to this lens.
+     *
+     * Beyond the minimum focus distance the request is invalid, and an invalid
+     * repeating request stops the camera rather than being ignored.
      */
     fun setManualFocus(fraction: Float): Boolean {
         val request = builder ?: return false

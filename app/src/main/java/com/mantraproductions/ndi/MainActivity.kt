@@ -1007,14 +1007,22 @@ class MainActivity : AppCompatActivity() {
         return Mechanism.shutterRangeForFps(activeProfile?.fps ?: 25, sensor.lower, sensor.upper)
     }
 
+    /**
+     * The pump drives whichever camera is running, not whichever one existed
+     * when this app was first written.
+     *
+     * It bound straight to ProControls and gave up if there was none, and in
+     * ten bit there never is: that path has a CaptureEngine instead. So the
+     * pump had no bindings at all and every coalesced move went into nothing.
+     * Bound through the link, it reaches either.
+     */
     private fun bindPump() {
-        val controls = service?.controls ?: return
         val frameDuration = Mechanism.frameDurationForFps(activeProfile?.fps ?: 25)
         pump.applyExposure = { iso, shutterNs ->
-            controls.setManualExposure(iso, shutterNs, frameDuration)
+            activeLink()?.setManualExposure(iso, shutterNs, frameDuration)
         }
-        pump.applyWhiteBalance = { kelvin -> controls.setManualWhiteBalance(kelvin) }
-        pump.applyZoom = { zoom -> controls.setZoom(zoom) }
+        pump.applyWhiteBalance = { kelvin -> activeLink()?.setManualWhiteBalance(kelvin) }
+        pump.applyZoom = { zoom -> activeLink()?.setZoom(zoom) }
     }
 
     /**
@@ -2249,6 +2257,11 @@ class MainActivity : AppCompatActivity() {
 
         if (!surfaceReady) return
         val texture = binding.preview.surfaceTexture ?: return
+        // Without this the texture keeps the view's own size, so the camera
+        // scales its frame into a view shaped buffer and the picture arrives
+        // stretched. RootEncoder does this for the eight bit path; the direct
+        // pipeline had nobody doing it.
+        activeProfile?.let { texture.setDefaultBufferSize(it.width, it.height) }
         val engine = MonitorEngine(
             surface = Surface(texture),
             onStatus = { message -> runOnUiThread { say(message) } },
