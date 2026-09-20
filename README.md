@@ -1,5 +1,8 @@
 ### [Download the latest build](https://github.com/markoboskoauroville/mantra-ndi/releases/latest)
 
+
+**Starting again: read [REBUILD.md](REBUILD.md) first.** It carries the phases, the SDK location, and the faults that cost days in the previous build.
+
 # Mantra NDI
 
 Turns the phone into an NDI camera: hardware H.264/H.265 straight from
