@@ -5,7 +5,7 @@ decided and what is not tested.
 
 ## State
 
-**v66. Phase 0, logging. No camera in this build.**
+**v67. Phase 0, logging. No camera in this build.**
 
 The previous build ended at v65 and is in git history. It was not extended;
 it was taken apart, because the half-finished parts of it looked finished.
@@ -68,21 +68,55 @@ the explanation. `verify.py` now strips comments before any check that reads
 what the code does. This is `checking-the-checks.md`, "a check that matches
 its own comment", met again.
 
+## v67: the three faults the phone showed
+
+Phase 0 was confirmed working on the phone at v66. Both crash kinds produced
+a report, both reached `Download/Mantra NDI`, and the run that died carried
+its own fault lines in its own trace file. These three came out of reading
+the actual output rather than the code.
+
+1. **The tail was counted in lines and printed as lines.** One FAULT entry
+   carries a stack seventeen lines long, so a report saying "the last 20
+   trace lines" sat over a block a reader counts thirty-seven of. It is
+   counted in entries and now says entries.
+2. **The stack was in every report twice**, once under what killed it and
+   once again in the tail. The tail is now snapshotted before the fault is
+   written, so it reads as what the app was doing up to the moment it died
+   and the stack appears once.
+3. **`insets applied` was written twice** with identical values, because
+   Android offers the insets more than once for one layout pass. Only a
+   change is written now.
+
+**Not done, and worth knowing:** the report tail is capped by the ring at 400
+entries. That was fine at 20 and will make a large crash file once the camera
+is logging. Left alone deliberately rather than changed unasked.
+
+## What the phone actually reported, against REBUILD.md
+
+REBUILD.md §6 says `supportsManualSensor` answers false on this phone. The
+Pixel 7 reports `MANUAL_SENSOR` **true** in
+`REQUEST_AVAILABLE_CAPABILITIES`, on both cameras, measured at v66. The old
+note must be about a different call, and §6 does not say which. The rule
+stands either way: send the request and let the camera refuse it.
+
+Sensor orientation, measured: **back 90, front 270.**
+
 ## NOT TESTED
 
 Everything below is code inspection only. Nothing in this build has run on a
 phone.
 
-- **The trace file has never been written on a device.** The formatting is
-  covered by 31 unit cases; the file, the directory and the permissions are not
-- **No crash has been taken.** Both crash keys are unexercised. Whether the
-  report reaches Downloads while the process is dying is the open question of
-  this phase, and it is the one thing phase 0 exists to settle
-- **The MediaStore path is unproven on Android 16.** The API 26–28 branch will
-  never run on a Pixel 7 and is untested anywhere
-- **The insets are unmeasured.** They must be looked at on the phone in both
-  navigation modes, per `system-bars.md` §5, and the lowest key pressed rather
-  than merely seen
-- **Rotation is logged, not handled.** There is nothing yet for it to break
+The trace file, both crash kinds and the MediaStore route were all confirmed
+on the phone at v66. What remains unproven:
+
+- **The three v67 fixes have not run on the phone.** They are covered by unit
+  cases for the wording and the count; the tail snapshot and the inset
+  de-duplication are code inspection only
+- **Portrait only.** The phone was not rotated at v66, so no
+  `configuration changed` line has ever been produced by a real turn
+- **Three-button navigation was not tried.** `system-bars.md` §5 wants both
+  modes, and the lowest key pressed rather than merely seen
+- **The API 26–28 Downloads branch** will never run on a Pixel 7 and is
+  untested anywhere
 - **The Android half has never been compiled locally**, because it cannot be.
   Only CI has an Android SDK

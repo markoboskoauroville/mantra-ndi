@@ -170,15 +170,27 @@ class TraceFormatTest {
         assertTrue(r.contains("STEP"))
     }
 
-    @Test fun aCrashReportSaysHowManyTraceLinesItCarries() {
+    @Test fun aCrashReportSaysHowManyTraceEntriesItCarries() {
         val r = TraceFormat.crashReport(emptyList(), "x", listOf("a", "b", "c"))
-        assertTrue(r.contains("the last 3 trace lines"))
+        assertTrue(r.contains("the last 3 trace entries"))
     }
 
     @Test fun aCrashReportWithNoTraceAtAllIsStillAReport() {
         val r = TraceFormat.crashReport(listOf("version" to "66"), "boom", emptyList())
         assertTrue(r.contains("boom"))
-        assertTrue(r.contains("the last 0 trace lines"))
+        assertTrue(r.contains("the last 0 trace entries"))
+    }
+
+    @Test fun theTailIsCountedInEntriesAndNotInLines() {
+        // The fault this replaces: a report said "the last 20 trace lines"
+        // over a block a reader counted thirty-seven of, because one FAULT
+        // entry carried a stack seventeen lines long. The count is of
+        // entries and the word has to agree with it.
+        val r = TraceFormat.crashReport(
+            emptyList(), "x",
+            listOf("one line", "a fault\n\tat a\n\tat b\n\tat c")
+        )
+        assertTrue(r.contains("the last 2 trace entries"))
     }
 
     @Test fun headerKeysLineUpWithEachOther() {

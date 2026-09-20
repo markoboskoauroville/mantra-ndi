@@ -155,8 +155,11 @@ object TraceFormat {
         for ((k, v) in header) out.append(padRight(k, width)).append("  ").append(v).append('\n')
         out.append("\n--- what killed it ").append("-".repeat(40)).append("\n\n")
         out.append(stack.trimEnd()).append('\n')
-        out.append("\n--- the last ").append(tail.size).append(" trace lines ")
-            .append("-".repeat(28)).append("\n\n")
+        // Entries, not lines. One entry can be a stack seventeen lines long,
+        // and a count that disagrees with what the eye counts is a number
+        // nobody trusts afterwards, including the ones that are right.
+        out.append("\n--- the last ").append(tail.size).append(" trace entries ")
+            .append("-".repeat(26)).append("\n\n")
         for (l in tail) out.append(l).append('\n')
         return out.toString()
     }

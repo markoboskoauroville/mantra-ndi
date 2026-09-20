@@ -49,6 +49,12 @@ object CrashLog {
     }
 
     private fun report(context: Context, thread: Thread, throwable: Throwable) {
+        // Taken before the fault is written. The stack already has a section
+        // of its own above; repeating it in the tail made half of every
+        // report a duplicate of the other half, and pushed the lines that say
+        // what the app was DOING off the top of what anybody reads.
+        val tail = Trace.lines()
+
         Trace.fault("uncaught on thread " + thread.name, throwable)
 
         val now = System.currentTimeMillis()
@@ -57,7 +63,7 @@ object CrashLog {
         header.add("thread" to thread.name)
         header.add("trace file" to (Trace.file()?.name ?: "none"))
 
-        val text = TraceFormat.crashReport(header, Trace.stackOf(throwable), Trace.lines())
+        val text = TraceFormat.crashReport(header, Trace.stackOf(throwable), tail)
 
         writeBeside(context, name, text)
         Downloads.writeText(context, name, text)

@@ -38,6 +38,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var ui: ActivityMainBinding
 
+    /** The last inset values written down, so the same four numbers are not written twice. */
+    private var lastInsets: String? = null
+
     /** Repaints the trace on screen. It must never write to the trace itself. */
     private val repaint = object : Runnable {
         override fun run() {
@@ -66,10 +69,16 @@ class MainActivity : AppCompatActivity() {
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
             view.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
-            Trace.state(
-                "insets applied  left=${bars.left} top=${bars.top} " +
-                    "right=${bars.right} bottom=${bars.bottom}"
-            )
+
+            // Android offers the insets more than once for one layout pass.
+            // Only a change is worth a line; the same four numbers twice is
+            // noise, and noise is what makes a trace stop being read.
+            val now = "left=${bars.left} top=${bars.top} " +
+                "right=${bars.right} bottom=${bars.bottom}"
+            if (now != lastInsets) {
+                lastInsets = now
+                Trace.state("insets applied  $now")
+            }
             insets
         }
 
