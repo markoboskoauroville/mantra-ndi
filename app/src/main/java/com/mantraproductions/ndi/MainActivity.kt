@@ -1791,9 +1791,46 @@ class MainActivity : AppCompatActivity() {
             view.width, view.height, size.first, size.second, fill = false
         )
 
+        val cx = view.width / 2f
+        val cy = view.height / 2f
         val matrix = android.graphics.Matrix()
-        matrix.setScale(scale[0], scale[1], view.width / 2f, view.height / 2f)
+        matrix.setScale(scale[0], scale[1], cx, cy)
+
+        // The sensor is mounted turned, and the direct pipeline hands the
+        // camera to the view untouched, so the picture arrives on its side.
+        // RootEncoder does this for the eight bit path and nothing was doing
+        // it for ten bit.
+        val turn = previewRotation()
+        if (turn != 0) {
+            matrix.postRotate(turn.toFloat(), cx, cy)
+            // A quarter turn puts the long edge against the short one, so the
+            // rotated buffer has to be scaled back to cover the view.
+            if (turn % 180 != 0 && view.height > 0 && view.width > 0) {
+                val cover = maxOf(
+                    view.width.toFloat() / view.height,
+                    view.height.toFloat() / view.width
+                )
+                matrix.postScale(cover, cover, cx, cy)
+            }
+        }
         view.setTransform(matrix)
+    }
+
+    /**
+     * How far the preview has to be turned, if anyone is turning it.
+     *
+     * Only the direct pipeline needs this. RootEncoder already orients its own
+     * output, so applying it there would turn a correct picture wrong.
+     */
+    private fun previewRotation(): Int {
+        val engine = service?.engineControls ?: return 0
+        val display = when (windowManager.defaultDisplay.rotation) {
+            android.view.Surface.ROTATION_90 -> 90
+            android.view.Surface.ROTATION_180 -> 180
+            android.view.Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+        return ((engine.sensorOrientation() - display) + 360) % 360
     }
 
     /** What is actually filling the preview, whichever mode this is. */

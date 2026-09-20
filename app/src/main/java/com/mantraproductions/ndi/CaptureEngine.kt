@@ -223,6 +223,9 @@ class CaptureEngine(private val context: Context) {
      * calls this, so a movement that changes ISO and shutter together is one
      * request, not two.
      */
+    @Volatile private var lastReportedTransform:
+        android.hardware.camera2.params.ColorSpaceTransform? = null
+
     /** The last request the camera actually accepted, to fall back to. */
     private var lastGood: CaptureRequest? = null
 
@@ -244,6 +247,7 @@ class CaptureEngine(private val context: Context) {
             true
         } catch (e: Throwable) {
             Log.w(TAG, "Repeating request refused", e)
+            CrashLog.trace("request REFUSED: " + e.javaClass.simpleName + " " + e.message)
             runCatching {
                 lastGood?.let { session.setRepeatingRequest(it, captureCallback, handler) }
             }
@@ -260,6 +264,10 @@ class CaptureEngine(private val context: Context) {
             lastReportedIso = result.get(CaptureResult.SENSOR_SENSITIVITY)
             lastReportedExposureNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
             lastReportedFocus = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
+            // Kept so a manual white balance can hand back a transform the
+            // camera itself produced rather than a textbook identity.
+            result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)
+                ?.let { lastReportedTransform = it }
             listener?.onCaptureValues(lastReportedIso, lastReportedExposureNs, lastReportedFocus)
         }
     }
@@ -317,6 +325,7 @@ class CaptureEngine(private val context: Context) {
         request.set(CaptureRequest.SENSOR_SENSITIVITY, sensitivity)
         request.set(CaptureRequest.SENSOR_EXPOSURE_TIME, safeExposure)
         request.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDuration)
+        CrashLog.trace("exposure iso=" + sensitivity + " shutter=" + safeExposure)
         return apply()
     }
 
@@ -343,6 +352,17 @@ class CaptureEngine(private val context: Context) {
             CaptureRequest.COLOR_CORRECTION_GAINS,
             android.hardware.camera2.params.RggbChannelVector(gains[0], gains[1], gains[1], gains[2])
         )
+        // TRANSFORM_MATRIX mode requires the transform as well as the gains.
+        // Setting the mode and supplying only gains leaves the transform
+        // whatever it was, which on some devices is nothing, and a repeating
+        // request missing a key it declared it would provide stops the camera
+        // rather than being ignored. That is the frozen picture after touching
+        // white balance.
+        request.set(
+            CaptureRequest.COLOR_CORRECTION_TRANSFORM,
+            lastReportedTransform ?: IDENTITY_TRANSFORM
+        )
+        CrashLog.trace("wb kelvin=" + kelvin)
         return apply()
     }
 
@@ -370,6 +390,7 @@ class CaptureEngine(private val context: Context) {
         val dioptres = minimumFocusDistance() * fraction.coerceIn(0f, 1f)
         request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
         request.set(CaptureRequest.LENS_FOCUS_DISTANCE, dioptres)
+        CrashLog.trace("focus dioptres=" + dioptres)
         return apply()
     }
 
@@ -419,6 +440,17 @@ class CaptureEngine(private val context: Context) {
 
     // --- what this camera can do ---------------------------------------------
 
+    /**
+     * How far the sensor is turned relative to the phone's natural position.
+     *
+     * Ninety degrees on nearly every phone. RootEncoder applies this for the
+     * eight bit path; the direct pipeline sends the camera straight to the
+     * view, so without it the picture arrives on its side, which is what the
+     * ten bit preview has been doing.
+     */
+    fun sensorOrientation(): Int =
+        characteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+
     fun isoRange(): Range<Int>? =
         characteristics?.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
 
@@ -455,5 +487,14 @@ class CaptureEngine(private val context: Context) {
 
     private companion object {
         const val TAG = "CaptureEngine"
+
+        /** Diagonal ones, as nine rationals. What "leave the colour alone" is. */
+        val IDENTITY_TRANSFORM = android.hardware.camera2.params.ColorSpaceTransform(
+            intArrayOf(
+                1, 1, 0, 1, 0, 1,
+                0, 1, 1, 1, 0, 1,
+                0, 1, 0, 1, 1, 1
+            )
+        )
     }
 }
