@@ -179,7 +179,7 @@ object PreviewEffects {
      * How every GPU has carried a 3D LUT since before there were 3D textures
      * to put one in. One fetch per neighbour rather than a loop.
      */
-    fun stripFor(table: CubeLut.Table): Bitmap {
+    fun stripFor(table: CubeLut): Bitmap {
         val size = table.size
         val bitmap = Bitmap.createBitmap(size * size, size, Bitmap.Config.ARGB_8888)
         val pixels = IntArray(size * size * size)
@@ -214,7 +214,7 @@ object PreviewEffects {
         peakColour: PeakColour = PeakColour.RED,
         sensitivity: Int = 50,
         waveform: Set<Mechanism.WaveformChannel> = emptySet(),
-        uploaded: CubeLut.Table? = null
+        uploaded: CubeLut? = null
     ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return !lut && !peak

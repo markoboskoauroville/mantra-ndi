@@ -78,8 +78,6 @@ class MainActivity : AppCompatActivity() {
     /** Timecode over audio: this phone either makes it, follows it, or neither. */
     private val ltcEngine = LtcEngine()
 
-    /** One cube per log curve, generated until one is loaded. */
-    private val lutStore by lazy { LutStore(this) }
 
 
     /** The generator in the room, if there is one. */
@@ -1836,21 +1834,21 @@ class MainActivity : AppCompatActivity() {
      * two features that each set their own would silently cancel each other.
      */
     private var loadedLutCurve: LogCurves.Curve? = null
-    private var loadedLut: CubeLut.Table? = null
+    private var loadedLut: CubeLut? = null
 
     /**
      * The cube for the curve in use, read once and kept until the curve
      * changes. Parsing 35,937 triples on every touch event would be its own
      * kind of bug.
      */
-    private fun lutForCurrentCurve(): CubeLut.Table? {
+    private fun lutForCurrentCurve(): CubeLut? {
         val curve = appSettings.logCurve
         if (loadedLutCurve == curve) return loadedLut
         loadedLutCurve = curve
         loadedLut = appSettings.lutForCurve(curve)?.let { uri ->
             try {
                 contentResolver.openInputStream(android.net.Uri.parse(uri))
-                    ?.use { CubeLut.parse(it) }
+                    ?.bufferedReader()?.use { CubeLut.parse(it.readText()) }
             } catch (e: Exception) {
                 null
             }
