@@ -6,6 +6,10 @@ An Android broadcast camera for Baba's own phones over Wi-Fi. 10-bit HDR with
 real manual controls, recording to the phone, NDI out, and one phone driving
 or watching another.
 
+**Building a different NDI app from these repos?** Start with
+[NDI_ANDROID_GUIDE.md](NDI_ANDROID_GUIDE.md): the SDK, the build, the
+thirty-minute restart, and the Android rules that fail silently.
+
 **Being rebuilt from scratch, phase by phase. Read [REBUILD.md](REBUILD.md)
 before writing any code** — it carries the phases, where the SDK lives, and
 the faults from the previous attempt that each cost a day.
