@@ -253,11 +253,22 @@ class CaptureEngine(private val context: Context) {
             add(Triple("preview only", emptyList(), emptyList()))
         }.distinctBy { (_, d, st) -> d.size to st.size }
 
+        // Ten bit is given up LAST, not first.
+        //
+        // This was backwards, and his Pixel 7 paid for it: the first attempt
+        // (everything, 10-bit) was refused, the very next entry was
+        // (everything, 8-bit) — which the camera took — and a phone that had
+        // been giving 10-bit the version before silently dropped to 8, to make
+        // room for a full-NDI reader and a 4032x3016 RAW stream he was not
+        // using. Every shape is now tried at ten bit before any of them is
+        // tried at eight.
         return buildList {
-            for ((label, deferred, standard) in shapes) {
-                if (wantTenBit) {
+            if (wantTenBit) {
+                for ((label, deferred, standard) in shapes) {
                     add(Attempt("$label, 10-bit", wantedRepeating, deferred, standard, true))
                 }
+            }
+            for ((label, deferred, standard) in shapes) {
                 add(Attempt("$label, 8-bit", wantedRepeating, deferred, standard, false))
             }
         }
@@ -393,6 +404,7 @@ class CaptureEngine(private val context: Context) {
                 CaptureRequest.CONTROL_AF_MODE,
                 CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
             )
+            applyDistortionCorrection(request)
 
             builder = request
             applyToneCurve(request)
@@ -533,6 +545,49 @@ class CaptureEngine(private val context: Context) {
         val samples = Mechanism.toneCurvePoints(activeCurve, points)
         request.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE)
         request.set(CaptureRequest.TONEMAP_CURVE, TonemapCurve(samples, samples, samples))
+    }
+
+    /**
+     * The lens's own distortion, undone by the phone that measured it.
+     *
+     * **This is very probably the "stretch".** An ultra wide is a fisheye with
+     * the worst of it taken off: straight lines bow, and everything near an
+     * edge is pulled outward. Camera2 hands over the sensor's raw geometry and
+     * leaves the correction switched off unless it is asked for — while the
+     * phone's own camera app always asks. So the same lens looks right in
+     * Google's app and stretched in this one, which is exactly the complaint,
+     * on exactly the lens he has had selected in every screenshot.
+     *
+     * It is not a scale factor and no transform could have fixed it: the
+     * geometry readout says `squeeze 1.000` and is telling the truth. The
+     * distortion is optical, it varies across the frame, and the only thing
+     * that can undo it is the per-lens calibration the phone was measured with.
+     *
+     * HIGH_QUALITY where it is offered, FAST otherwise, and nothing at all on a
+     * lens that does not list it — asking for a mode a camera did not advertise
+     * stops the repeating request, which stops the preview.
+     */
+    private fun applyDistortionCorrection(request: CaptureRequest.Builder) {
+        val modes = lensCharacteristics?.get(
+            CameraCharacteristics.DISTORTION_CORRECTION_AVAILABLE_MODES
+        ) ?: return
+        val wanted = when {
+            modes.contains(CaptureRequest.DISTORTION_CORRECTION_MODE_HIGH_QUALITY) ->
+                CaptureRequest.DISTORTION_CORRECTION_MODE_HIGH_QUALITY
+            modes.contains(CaptureRequest.DISTORTION_CORRECTION_MODE_FAST) ->
+                CaptureRequest.DISTORTION_CORRECTION_MODE_FAST
+            else -> {
+                Trace.state("this lens corrects no distortion: modes " + modes.joinToString(","))
+                return
+            }
+        }
+        request.set(CaptureRequest.DISTORTION_CORRECTION_MODE, wanted)
+        Trace.control(
+            "distortion correction",
+            "modes " + modes.joinToString(","),
+            if (wanted == CaptureRequest.DISTORTION_CORRECTION_MODE_HIGH_QUALITY)
+                "HIGH_QUALITY" else "FAST"
+        )
     }
 
     // --- the light ------------------------------------------------------------
