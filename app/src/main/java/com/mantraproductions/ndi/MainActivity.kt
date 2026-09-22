@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var geometry: TextView
     private lateinit var vu: VuMeterView
+    private lateinit var iris: TextView
     private lateinit var stage: LinearLayout
     private lateinit var railLeft: LinearLayout
     private lateinit var railRight: LinearLayout
@@ -143,6 +144,7 @@ class MainActivity : AppCompatActivity() {
         status = findViewById(R.id.status)
         geometry = findViewById(R.id.geometry)
         vu = findViewById(R.id.vu)
+        iris = findViewById(R.id.iris)
         stage = findViewById(R.id.stage)
         railLeft = findViewById(R.id.railLeft)
         railRight = findViewById(R.id.railRight)
@@ -164,7 +166,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         buildRails()
-        layoutRails()
+        layoutForOrientation(resources.configuration.orientation)
 
         // Android draws its camera-in-use indicator over the top of the screen
         // whenever this app is doing its job, and on the first run it sat on
@@ -352,34 +354,42 @@ class MainActivity : AppCompatActivity() {
         }
 
     /**
-     * The rails down either side of the picture. Across, always.
+     * Across in landscape, down in portrait. Both, like any app on a phone.
      *
-     * This used to answer the phone's orientation and lay the rails out in
-     * bands above and below the picture when it was held upright. That branch
-     * is gone with the portrait layout it existed for: the activity is locked
-     * to landscape now, the picture is 16:9 across the height, and the keys
-     * live in the black at both ends where they take nothing from the shot.
+     * The keys keep their order and their meaning; only the direction of the
+     * rail changes, so a hand that has learned this camera keeps it when the
+     * phone turns. Every key is re-sized here because a rail that runs down the
+     * side wants square-ish keys and one that runs across the top wants wide
+     * ones.
      *
-     * Turning the phone end for end still reaches here, because sensorLandscape
-     * allows both ways round — the rails swap sides with the phone and the
-     * preview transform is recomputed, which is what a camera does.
+     * This was locked to landscape for two versions, to get the rotation
+     * argument down to one case while it was being solved. It is solved — the
+     * camera's own quarter turn is read and taken off — so the lock has done
+     * its job and the phone can be held either way again.
      */
-    private fun layoutRails() {
-        stage.orientation = LinearLayout.HORIZONTAL
-        railLeft.orientation = LinearLayout.VERTICAL
-        railRight.orientation = LinearLayout.VERTICAL
+    private fun layoutForOrientation(orientation: Int) {
+        val landscape = orientation != Configuration.ORIENTATION_PORTRAIT
+        stage.orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        railLeft.orientation = if (landscape) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        railRight.orientation = if (landscape) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
 
         val thickness = (44 * resources.displayMetrics.density).toInt()
         val margin = (2 * resources.displayMetrics.density).toInt()
         for (rail in listOf(railLeft, railRight)) {
             val lp = rail.layoutParams as LinearLayout.LayoutParams
-            lp.width = thickness
-            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+            if (landscape) {
+                lp.width = thickness
+                lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+            } else {
+                lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                lp.height = thickness
+            }
             rail.layoutParams = lp
 
             for (i in 0 until rail.childCount) {
                 rail.getChildAt(i).layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, 0
+                    if (landscape) ViewGroup.LayoutParams.MATCH_PARENT else 0,
+                    if (landscape) 0 else ViewGroup.LayoutParams.MATCH_PARENT
                 ).apply {
                     weight = 1f
                     setMargins(margin, margin, margin, margin)
@@ -388,8 +398,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         val stageLp = (findViewById<View>(R.id.picture)).layoutParams as LinearLayout.LayoutParams
-        stageLp.width = 0
-        stageLp.height = ViewGroup.LayoutParams.MATCH_PARENT
+        if (landscape) {
+            stageLp.width = 0
+            stageLp.height = ViewGroup.LayoutParams.MATCH_PARENT
+        } else {
+            stageLp.width = ViewGroup.LayoutParams.MATCH_PARENT
+            stageLp.height = 0
+        }
         stageLp.weight = 1f
         findViewById<View>(R.id.picture).layoutParams = stageLp
 
@@ -399,7 +414,7 @@ class MainActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         Trace.state("rotated: orientation=${newConfig.orientation}")
-        layoutRails()
+        layoutForOrientation(newConfig.orientation)
     }
 
     // --- the camera ----------------------------------------------------------
@@ -422,6 +437,9 @@ class MainActivity : AppCompatActivity() {
         val texture = preview.surfaceTexture ?: return
         val lens = lenses.getOrNull(activeLens) ?: lenses.first()
 
+        // The resolution first: it decides the session, and a session cannot
+        // be resized once it is built.
+        pipeline.maxWidth = settings.captureWidth
         // The buffer size has to be right before the session is built.
         bufferSize = pipeline.previewSizeFor(lens.id, lens.physicalId)
         holdBufferSize()
@@ -631,15 +649,30 @@ class MainActivity : AppCompatActivity() {
         val auto = Mechanism.previewRotation(sensor, displayDegrees, front, producerDegrees)
         val applied = ((auto + manualQuarterTurns * 90) % 360 + 360) % 360
 
-        val scale = Mechanism.previewFit(vw, vh, bufferSize.width, bufferSize.height, applied)
+        // THE SQUASH.
+        //
+        // A producer transform moves texture coordinates, not the view: the
+        // quad is still drawn at the view's own size, so a camera that
+        // transposes the frame hands over content whose width and height have
+        // swapped while the quad has not. v76 took the turn off the angle and
+        // the picture came up the right way round — which is why it looked so
+        // nearly right — but the fit was still computed against 1920x1080 when
+        // 1080x1920 had arrived, and left the picture in a strip down the
+        // middle instead of filling the frame edge to edge.
+        val effective = Mechanism.effectiveBuffer(
+            bufferSize.width, bufferSize.height, producerDegrees
+        )
+        val scale = Mechanism.previewFit(vw, vh, effective[0], effective[1], applied)
         val matrix = Matrix()
         matrix.postRotate(applied.toFloat(), vw / 2f, vh / 2f)
         matrix.postScale(scale[0], scale[1], vw / 2f, vh / 2f)
         preview.setTransform(matrix)
 
-        val bufAspect = bufferSize.width.toDouble() / bufferSize.height
-        val viewAspect = vw.toDouble() / vh
-        val squeeze = viewAspect / bufAspect
+        // Measured on what actually reaches the screen, turned and fitted,
+        // against the shape the picture is really meant to be.
+        val shown = Mechanism.displayedAspect(vw, vh, effective[0], effective[1], applied)
+        val squeeze = if (shown > 0.0) shown / (bufferSize.width.toDouble() / bufferSize.height)
+        else 1.0
 
         val line = "sensor $sensor · disp $displayDegrees · cam $producerDegrees · rot $applied" +
             (if (manualQuarterTurns != 0) " (auto $auto +${manualQuarterTurns * 90})" else "") +
@@ -767,6 +800,7 @@ class MainActivity : AppCompatActivity() {
     private fun toggleZones() {
         zonesOn = !zonesOn
         zones.visibility = if (zonesOn) View.VISIBLE else View.GONE
+        iris.visibility = if (zonesOn) View.VISIBLE else View.GONE
         focusSquare.visibility = if (zonesOn) View.GONE else View.VISIBLE
         Trace.control("controls", if (zonesOn) "on" else "off",
             if (zonesOn) "focus box put away" else "focus box back")
@@ -787,21 +821,23 @@ class MainActivity : AppCompatActivity() {
         val engine = pipeline.engine
         when (index) {
             0 -> {
-                if (!manual) return
+                // Dragging a fader takes it, rather than doing nothing until a
+                // key somewhere else has been pressed first. A fader that has
+                // to be armed is a fader that looks broken.
+                if (!manual) { toggleManual(); if (!manual) return }
                 val range = engine.isoRange() ?: return
                 iso = (iso * Math.pow(2.0, (delta * 6f).toDouble())).toInt()
                     .coerceIn(range.lower, range.upper)
                 engine.setManualExposure(iso, shutterNs)
             }
             1 -> {
-                if (!manual) return
+                if (!manual) { toggleManual(); if (!manual) return }
                 val range = engine.exposureRange() ?: return
                 shutterNs = (shutterNs * Math.pow(2.0, (delta * 6f).toDouble())).toLong()
                     .coerceIn(range.lower, range.upper)
                 engine.setManualExposure(iso, shutterNs)
             }
-            2 -> Unit    // the iris is fixed on a phone; the row says so
-            3 -> {
+            2 -> {
                 // A lens with no focus motor is said outright rather than
                 // letting the number move while the picture does not. This was
                 // the whole of "focus doesn't change focus at all": the ultra
@@ -817,7 +853,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 engine.setManualFocus(focusFraction)
             }
-            4 -> {
+            3 -> {
                 // Left is tungsten, right is daylight — the way the numbers on
                 // a colour meter run, and the way every white balance dial ever
                 // made is laid out.
@@ -841,10 +877,9 @@ class MainActivity : AppCompatActivity() {
     private fun handBack(index: Int) {
         when (index) {
             0, 1 -> toggleManual()
-            2 -> say("A phone has one aperture; there is nothing to set")
-            3 -> if (pipeline.engine.supportsManualFocus()) toggleAutoFocus()
+            2 -> if (pipeline.engine.supportsManualFocus()) toggleAutoFocus()
                  else say("This lens is fixed focus; there is nothing to pull")
-            4 -> {
+            3 -> {
                 wbAuto = !wbAuto
                 if (wbAuto) {
                     pipeline.engine.setAutoWhiteBalance()
@@ -891,37 +926,40 @@ class MainActivity : AppCompatActivity() {
             else -> "∞"
         }
 
+        // Four faders, and every one of them has a track.
+        //
+        // The iris used to be here with no track and the width of one, which is
+        // a row of empty space where a control should be. A phone has one
+        // aperture; it is a fact about the lens, so it is a readout in the
+        // corner beside the rest of the facts, not a fader that cannot move.
         zones.zones = listOf(
             ControlZones.Zone(
-                "ISO", liveIso.toString(), manual,
-                engine.isoRange()?.let { travel(liveIso.toDouble(), it.lower.toDouble(), it.upper.toDouble()) } ?: 0f
+                "ISO", liveIso.toString(), true,
+                engine.isoRange()?.let {
+                    travel(liveIso.toDouble(), it.lower.toDouble(), it.upper.toDouble())
+                } ?: 0f
             ),
             ControlZones.Zone(
-                "SHUTTER", Mechanism.formatShutter(liveShutter), manual,
+                "SHUTTER", Mechanism.formatShutter(liveShutter), true,
                 engine.exposureRange()?.let {
                     // Longer is more light, so the knob travels the way the
                     // picture brightens: right is a slower shutter.
                     travel(liveShutter.toDouble(), it.lower.toDouble(), it.upper.toDouble())
                 } ?: 0f
             ),
-            // The f-stop is shown for every lens, because it changes with the
-            // lens and it is worth knowing. There is no fader behind it: a
-            // phone has one aperture and a slider that cannot move is furniture.
-            ControlZones.Zone(
-                "IRIS",
-                apertures.firstOrNull()?.let { String.format("f/%.2f", it) } ?: "—",
-                apertures.size > 1
-            ),
             ControlZones.Zone("FOCUS", focusText, canFocus, focusFraction),
-            // Tungsten on the left, daylight on the right. A tap hands it back
-            // to the camera; the fader takes it again.
+            // Tungsten on the left, daylight on the right. Dragging it takes it
+            // off auto; a tap hands it back.
             ControlZones.Zone(
                 "WB",
                 if (wbAuto) "AUTO" else WhiteBalance.format(wbKelvin),
-                running && !wbAuto,
+                running,
                 WhiteBalance.travel(wbKelvin)
             )
         )
+
+        iris.text = apertures.firstOrNull()?.let { String.format("IRIS  f/%.2f", it) } ?: ""
+        iris.visibility = if (zonesOn && apertures.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
     /**

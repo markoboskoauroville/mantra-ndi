@@ -78,6 +78,19 @@ class Settings(context: Context) {
         get() = prefs.getInt(TURNS, 0)
         set(value) = prefs.edit().putInt(TURNS, ((value % 4) + 4) % 4).apply()
 
+    /**
+     * The longest side the camera is asked for: 3840, 1920 or 1280.
+     *
+     * It was pinned to 1920 in the code with a paragraph about the wire, and
+     * that reasoning is sound for NDI over a hall's Wi-Fi and wrong for a phone
+     * recording to its own card. It is a decision, so it is a setting, and the
+     * list offered is filtered against what the lens actually publishes rather
+     * than hard-coded — a resolution a lens does not have is a black screen.
+     */
+    var captureWidth: Int
+        get() = prefs.getInt(WIDTH, 1920)
+        set(value) = prefs.edit().putInt(WIDTH, value).apply()
+
     /** Ten bit is asked for unless somebody has a reason not to. */
     var wantTenBit: Boolean
         get() = prefs.getBoolean(TEN_BIT, true)
@@ -92,5 +105,6 @@ class Settings(context: Context) {
         const val BITRATE = "bitRateMbps"
         const val TEN_BIT = "wantTenBit"
         const val TURNS = "quarterTurns"
+        const val WIDTH = "captureWidth"
     }
 }

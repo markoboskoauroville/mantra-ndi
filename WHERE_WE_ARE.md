@@ -6,6 +6,66 @@ working state of *this* app.
 
 ---
 
+## 22.9.2026, late afternoon — v78, the squash, the zones, resolution, both ways up
+
+### The squash — the other half of the rotation bug
+
+v77 got the picture the right way up and left it in a strip a third of the screen
+wide. He saw it immediately: *"This is the right picture, just it is squashed. If
+you stretch it edge to edge, it will be correct."* He was right, and here is why.
+
+**A producer transform moves texture coordinates, not the view.** A
+`TextureView` still draws its quad at the view's own size, so a camera that
+transposes the frame hands over content whose width and height have swapped
+**while the quad has not**. v76 took the camera's quarter turn off the *angle* —
+which is why the picture came up the right way round — but went on computing the
+*fit* against 1920x1080 when what had arrived was 1080x1920. So the picture was
+fitted as though it were portrait, and pillarboxed into the middle.
+
+`Mechanism.effectiveBuffer(w, h, producerDegrees)` swaps the shape when the
+camera turned a quarter, and the fit, the squeeze readout and the box are all
+told the swapped one. The test asserts his exact case end to end: view 1788x1006,
+buffer 1920x1080, camera 90 → rotation 270 **and a displayed aspect of 16:9**,
+not 9:16 in a strip.
+
+### The zones are zones now
+
+*"You gave me f-stop as control without slider. Nonsense. And it takes the space
+of the slider."* Quite right. **The iris is out of the faders**, and reads in the
+top right corner beside the other facts — a phone has one aperture; it is a fact
+about the lens, not something anybody can set.
+
+**Four faders, and every one has a track**: ISO, SHUTTER, FOCUS, WB. The white
+balance slider was missing because it only appeared once the row had been tapped
+off AUTO — a fader that has to be armed before it exists is a fader that looks
+broken. **Dragging any of them now takes it**: drag ISO and manual exposure comes
+on, drag WB and it comes off auto. A tap still hands it back.
+
+### Resolution
+
+*"I don't have any control over resolution... It's always 1920."* It was pinned
+in the code with a paragraph about NDI over a hall's Wi-Fi — sound reasoning for
+the wire, and wrong for a phone recording to its own card. It is a decision, so
+it is a setting: **720p / 1080p / 1440p / 4K UHD**, in the gear.
+
+The list is built from what this phone's lenses **actually publish**, not from
+numbers somebody typed, because a resolution a lens does not have is a session it
+refuses and a black screen to diagnose. It decides the recording and the stream
+together and takes effect when the camera next opens. The trace now prints every
+16:9 width a lens offers, so the list can be checked against the phone.
+
+### Both ways up
+
+*"Please make this app work in portrait mode and landscape mode... like any basic
+app should be on a phone."* Back to `fullSensor`, and the portrait branch of the
+layout is back with it: rails down the sides in landscape, bands above and below
+in portrait.
+
+It was locked to landscape for two versions to get the rotation argument down to
+one case while it was being solved. It is solved, so the lock has done its job.
+
+---
+
 ## 22.9.2026, afternoon — v77, colour temperature, tungsten to daylight
 
 He asked for the fader he had before: *"manual control for colour and light

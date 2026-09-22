@@ -74,6 +74,15 @@
             android:textOff="@string/off" />
 
         <!-- Bitrate -->
+        <TextView style="@style/MantraLabel" android:text="@string/resolution" />
+        <TextView style="@style/MantraHint" android:text="@string/resolution_hint" />
+        <RadioGroup
+            android:id="@+id/resolution"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="18dp" />
+
         <TextView style="@style/MantraLabel" android:text="@string/bitrate" />
         <TextView style="@style/MantraHint" android:text="@string/bitrate_hint" />
         <TextView

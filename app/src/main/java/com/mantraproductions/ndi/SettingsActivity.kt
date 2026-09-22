@@ -38,6 +38,43 @@ class SettingsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, on -> settings.wantTenBit = on }
         }
 
+        // The resolutions this phone's lenses really publish, not a list of
+        // numbers somebody typed. A resolution a lens does not have is a
+        // session it refuses and a black screen the operator has to diagnose.
+        val pipeline = CameraPipeline(this)
+        val offered = CameraCatalogue.lenses(this)
+            .flatMap { pipeline.widthsOffered(it.id, it.physicalId) }
+            .distinct()
+            .filter { it in intArrayOf(1280, 1920, 2560, 3840) }
+            .sorted()
+            .ifEmpty { listOf(1920) }
+        val resolutions = findViewById<RadioGroup>(R.id.resolution)
+        offered.forEach { width ->
+            resolutions.addView(
+                RadioButton(this).apply {
+                    id = width
+                    text = when (width) {
+                        3840 -> "4K UHD"
+                        2560 -> "1440p"
+                        1920 -> "1080p"
+                        else -> "720p"
+                    }
+                    textSize = 12f
+                    isChecked = width == settings.captureWidth
+                }
+            )
+        }
+        // A phone that has lost the lens it was set for falls back rather than
+        // showing nothing ticked and meaning something else.
+        if (offered.none { it == settings.captureWidth }) {
+            val nearest = offered.minByOrNull { kotlin.math.abs(it - settings.captureWidth) }
+            if (nearest != null) {
+                settings.captureWidth = nearest
+                resolutions.check(nearest)
+            }
+        }
+        resolutions.setOnCheckedChangeListener { _, id -> settings.captureWidth = id }
+
         slider(
             R.id.bitRate, R.id.bitRateValue,
             value = settings.bitRateMbps - 2,

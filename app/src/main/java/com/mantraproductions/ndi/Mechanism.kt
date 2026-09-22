@@ -826,6 +826,30 @@ object Mechanism {
     }
 
     /**
+     * The buffer's shape **as the view already sees it**.
+     *
+     * A producer transform is applied to *texture coordinates*, not to the
+     * view: a `TextureView` still draws its quad at the view's own size, so a
+     * camera that transposes the frame hands over content whose width and
+     * height have swapped while the quad has not. Everything downstream — the
+     * fit, the squeeze readout, the box the picture is held in — has to be told
+     * the swapped shape or it corrects an aspect that is no longer there.
+     *
+     * **This is the squash.** v76 took the camera's quarter turn off the angle
+     * and the picture came up the right way round, which is why it looked so
+     * nearly right — but the fit was still being computed against 1920x1080
+     * when what had arrived was 1080x1920, so the picture was left in a narrow
+     * strip down the middle instead of filling the frame edge to edge.
+     *
+     * @return width and height, swapped if the camera turned a quarter
+     */
+    fun effectiveBuffer(width: Int, height: Int, producerDegrees: Int): IntArray {
+        val turn = ((producerDegrees % 360) + 360) % 360
+        return if (turn == 90 || turn == 270) intArrayOf(height, width)
+        else intArrayOf(width, height)
+    }
+
+    /**
      * The angle to put on the preview, once the camera's own turn is taken off.
      *
      * On a phone whose camera turns nothing this is the old formula unchanged,

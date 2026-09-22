@@ -66,6 +66,14 @@ class CameraPipeline(private val context: Context) {
     private var fullReader: ImageReader? = null
     private var fullThread: HandlerThread? = null
     private var sourceName: String = "Mantra NDI"
+
+    /**
+     * The longest side to ask the camera for. 1920 unless settings say else.
+     *
+     * Set before the pipeline starts, because the size decides the session and
+     * a session cannot be resized once it is built.
+     */
+    var maxWidth: Int = 1920
     private var size: Size = Size(1920, 1080)
     private var fps: Int = 30
 
@@ -115,6 +123,25 @@ class CameraPipeline(private val context: Context) {
      * pixel count produces a session configured for the wrong thing, and the
      * picture arrives stretched with nothing to say why.
      */
+    /**
+     * The 16:9 widths this lens publishes, largest first.
+     *
+     * The settings screen offers these rather than a hard-coded list, because
+     * a resolution a lens does not have is a session it will refuse and a black
+     * screen the operator has to diagnose.
+     */
+    fun widthsOffered(cameraId: String, physicalId: String? = null): List<Int> = try {
+        val map = characteristicsOf(cameraId, physicalId)
+            .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        val sizes = map?.getOutputSizes(ImageFormat.PRIVATE)?.toList().orEmpty()
+        sizes.filter { kotlin.math.abs(it.width.toDouble() / it.height - 16.0 / 9.0) < 0.02 }
+            .map { it.width }
+            .distinct()
+            .sortedDescending()
+    } catch (t: Throwable) {
+        emptyList()
+    }
+
     fun previewSizeFor(cameraId: String, physicalId: String? = null): Size = try {
         chooseSize(characteristicsOf(cameraId, physicalId))
     } catch (t: Throwable) {
@@ -159,18 +186,25 @@ class CameraPipeline(private val context: Context) {
         fun aspect(s: Size) = s.width.toDouble() / s.height
         val widescreen = sizes.filter { kotlin.math.abs(aspect(it) - 16.0 / 9.0) < 0.02 }
 
+        // The longest side he asked for, or the nearest this lens will give.
+        val wanted = maxWidth
         val chosen =
-            widescreen.firstOrNull { it.width == 1920 && it.height == 1080 }
-                ?: widescreen.filter { it.width <= 1920 }.maxByOrNull { it.width }
+            widescreen.firstOrNull { it.width == wanted }
+                ?: widescreen.filter { it.width <= wanted }.maxByOrNull { it.width }
+                // Nothing at or below what was asked for: the smallest 16:9
+                // above it beats refusing to open the camera.
+                ?: widescreen.minByOrNull { it.width }
                 // No 16:9 at all on this lens: take its own shape rather than
                 // demanding one it does not have.
-                ?: sizes.filter { it.width <= 1920 && it.height <= 1920 }
+                ?: sizes.filter { it.width <= wanted }
                     .maxByOrNull { it.width.toLong() * it.height }
                 ?: sizes.minByOrNull { it.width.toLong() * it.height }
                 ?: Size(1920, 1080)
 
         Trace.state(
-            "lens offers ${sizes.size} sizes, ${widescreen.size} of them 16:9; " +
+            "lens offers ${sizes.size} sizes, ${widescreen.size} of them 16:9 " +
+                "(" + widescreen.map { it.width }.distinct().sortedDescending()
+                    .joinToString(",") + "); asked for $wanted, " +
                 "chose ${chosen.width}x${chosen.height} " +
                 "(${String.format("%.3f", aspect(chosen))})"
         )

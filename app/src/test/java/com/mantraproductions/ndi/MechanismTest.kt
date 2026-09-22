@@ -1,5 +1,6 @@
 package com.mantraproductions.ndi
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -761,6 +762,46 @@ class MechanismTest {
         // A texture with no frame in it yet turns nothing.
         assertEquals(0, Mechanism.producerRotation(FloatArray(16)))
         assertEquals(0, Mechanism.producerRotation(FloatArray(2)))
+    }
+
+    /**
+     * The squash, stated as a test.
+     *
+     * A producer transform moves texture coordinates, not the view, so a camera
+     * that transposes the frame hands over content whose width and height have
+     * swapped while the quad it is drawn on has not. v76 took the turn off the
+     * angle — the picture came up the right way round — but went on fitting it
+     * as 1920x1080 when 1080x1920 had arrived, and left it in a strip down the
+     * middle of the screen instead of filling it.
+     */
+    @Test
+    fun `a camera that turns a quarter hands over a swapped shape`() {
+        assertArrayEquals(intArrayOf(1080, 1920), Mechanism.effectiveBuffer(1920, 1080, 90))
+        assertArrayEquals(intArrayOf(1080, 1920), Mechanism.effectiveBuffer(1920, 1080, 270))
+        assertArrayEquals(intArrayOf(1920, 1080), Mechanism.effectiveBuffer(1920, 1080, 0))
+        assertArrayEquals(intArrayOf(1920, 1080), Mechanism.effectiveBuffer(1920, 1080, 180))
+        assertArrayEquals(intArrayOf(1080, 1920), Mechanism.effectiveBuffer(1920, 1080, -90))
+    }
+
+    /**
+     * His phone, end to end: the picture must come out upright AND fill the
+     * frame. v76 got the first half and left the second, which is a correct
+     * picture in a strip a third of the screen wide.
+     */
+    @Test
+    fun `his phone ends up upright and edge to edge`() {
+        val viewWidth = 1788
+        val viewHeight = 1006
+        val producer = 90
+        val rotation = Mechanism.previewRotation(90, 90, false, producer)
+        assertEquals(270, rotation)
+
+        val buffer = Mechanism.effectiveBuffer(1920, 1080, producer)
+        val shown = Mechanism.displayedAspect(
+            viewWidth, viewHeight, buffer[0], buffer[1], rotation
+        )
+        // 16:9 on the screen, not 9:16 in a strip.
+        assertEquals(16.0 / 9.0, shown, 0.02)
     }
 
     @Test

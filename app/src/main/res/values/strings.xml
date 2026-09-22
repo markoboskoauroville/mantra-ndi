@@ -23,4 +23,6 @@
     <string name="usb_hint">Turn USB tethering on and the phone becomes a network interface on the computer — a private link at USB speed, with none of a hall\'s Wi-Fi in the way. Full NDI at 1080p is about 125 Mbit/s, which a cable carries without noticing and a shared access point does not.</string>
     <string name="usb_open">Open the phone\'s tethering settings</string>
     <string name="usb_webcam">This app cannot be the phone\'s \"Webcam\" USB option, and no third-party app can be: that is a system app, and presenting the phone as a UVC camera needs a privileged permission with no public API behind it. It would also be a step down — UVC is 1080p30 of 8-bit YUV, and this app already makes 10-bit HEVC. The cable is worth having for its bandwidth, not for its protocol.</string>
+    <string name="resolution">Resolution</string>
+    <string name="resolution_hint">The longest side the camera is asked for, offered from what this phone\'s lenses actually publish. It decides the recording and the stream together, and it takes effect when the camera next opens. Higher costs bitrate: NDI HX at 4K needs about four times as much to look the same, and the far end of a hall\'s Wi-Fi is where that gets spent.</string>
 </resources>

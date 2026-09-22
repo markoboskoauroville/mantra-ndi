@@ -30,23 +30,20 @@
         android:theme="@style/Theme.MantraNdi"
         android:supportsRtl="true">
 
-        <!-- Landscape, and only landscape.
+        <!-- Both ways up, like any app on a phone.
 
-             The camera shoots 16:9 and the phone's screen is 20:9, so held
-             across there is height for the whole picture and black at both
-             ends for the keys. Held upright there is neither, and following
-             the phone between the two was six versions of argument about which
-             way the picture should be turned for a case that no longer exists.
-             sensorLandscape rather than landscape, so the phone can be held
-             either way round and the picture follows.
+             This was locked to landscape for two versions, to get the rotation
+             argument down to one case while it was being solved. It is solved
+             — the camera's own quarter turn is read off the producer's texture
+             matrix and taken off the angle — so the lock has done its job.
 
-             The turn is still handled here rather than by being recreated:
+             The turn is handled here rather than by being recreated:
              recreating would tear down the capture session and the NDI source,
              which on a live stream is a dropped input at the far end. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="fullSensor"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -58,6 +55,6 @@
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="@string/settings"
-            android:screenOrientation="sensorLandscape" />
+            android:screenOrientation="fullSensor" />
     </application>
 </manifest>
