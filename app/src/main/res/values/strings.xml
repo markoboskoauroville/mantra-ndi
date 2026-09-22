@@ -25,4 +25,8 @@
     <string name="usb_webcam">This app cannot be the phone\'s \"Webcam\" USB option, and no third-party app can be: that is a system app, and presenting the phone as a UVC camera needs a privileged permission with no public API behind it. It would also be a step down — UVC is 1080p30 of 8-bit YUV, and this app already makes 10-bit HEVC. The cable is worth having for its bandwidth, not for its protocol.</string>
     <string name="resolution">Resolution</string>
     <string name="resolution_hint">The longest side the camera is asked for, offered from what this phone\'s lenses actually publish. It decides the recording and the stream together, and it takes effect when the camera next opens. Higher costs bitrate: NDI HX at 4K needs about four times as much to look the same, and the far end of a hall\'s Wi-Fi is where that gets spent.</string>
+    <string name="minimal">MINIMAL</string>
+    <string name="verbose">VERBOSE</string>
+    <string name="depth">Depth</string>
+    <string name="depth_hint">Ten bit is HEVC Main10 with an HLG description, and it is what this phone\'s encoder and sensor can both do. Eight bit is there for a receiver that will not take ten. Resolution decides the recording and the stream together; the list is what this phone\'s lenses actually publish. Both take effect when the camera next opens.</string>
 </resources>

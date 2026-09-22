@@ -22,19 +22,131 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <TextView
+        <!--
+             The title, and the two words that decide how much this screen says.
+
+             The help text is worth having once and is in the way for ever
+             after. It is not a setting so much as a mode of the screen, so it
+             sits in the header rather than in the list, and it is remembered.
+        -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/settings"
-            android:textColor="@color/sand"
-            android:textSize="20sp"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.08"
-            android:paddingBottom="18dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingBottom="14dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings"
+                android:textColor="@color/sand"
+                android:textSize="20sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.08" />
+
+            <Button
+                android:id="@+id/minimal"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="@string/minimal"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+
+            <Button
+                android:id="@+id/verbose"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="@string/verbose"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!--
+             The wire first.
+
+             This is the one he changes on nearly every shoot, and it was four
+             blocks down the page under two things that get set once and left.
+             What is touched most often goes at the top.
+        -->
+        <TextView style="@style/MantraLabel" android:text="@string/bitrate" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/bitrate_hint" />
+        <TextView
+            android:id="@+id/bitRateValue"
+            style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/bitRate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="48" />
+
+        <!--
+             Depth and size on one line.
+
+             Two radio strips side by side rather than two labelled blocks with
+             a paragraph each: they are both answers to "what shape is the
+             picture", they are both two or three words wide, and stacking them
+             cost half a screen for nothing.
+        -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:paddingTop="18dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="3"
+                android:orientation="vertical">
+                <TextView style="@style/MantraLabel"
+                    android:paddingTop="0dp"
+                    android:text="@string/depth" />
+                <RadioGroup
+                    android:id="@+id/depth"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="5"
+                android:orientation="vertical">
+                <TextView style="@style/MantraLabel"
+                    android:paddingTop="0dp"
+                    android:text="@string/resolution" />
+                <RadioGroup
+                    android:id="@+id/resolution"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView android:tag="hint" style="@style/MantraHint"
+            android:text="@string/depth_hint" />
 
         <!-- The source name -->
         <TextView style="@style/MantraLabel" android:text="@string/source_name" />
-        <TextView style="@style/MantraHint" android:text="@string/source_name_hint" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/source_name_hint" />
         <EditText
             android:id="@+id/sourceName"
             android:layout_width="match_parent"
@@ -49,54 +161,14 @@
             android:background="@color/surface"
             android:padding="10dp" />
 
-        <!-- Ten bit -->
-        <TextView style="@style/MantraLabel" android:text="@string/ten_bit" />
-        <TextView style="@style/MantraHint" android:text="@string/ten_bit_hint" />
-        <!--
-             SwitchCompat, and showText explicitly off.
 
-             A MaterialSwitch under this theme laid out its on/off captions,
-             which are null unless they are given, and took the whole settings
-             screen down with a NullPointerException inside StaticLayout before
-             a single pixel was drawn. The caption beside the switch is the
-             label; the switch does not need two more of its own.
-        -->
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/tenBit"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/ten_bit_switch"
-            android:textColor="@color/sand"
-            android:fontFamily="monospace"
-            android:textSize="13sp"
-            android:showText="false"
-            android:textOn="@string/on"
-            android:textOff="@string/off" />
 
         <!-- Bitrate -->
-        <TextView style="@style/MantraLabel" android:text="@string/resolution" />
-        <TextView style="@style/MantraHint" android:text="@string/resolution_hint" />
-        <RadioGroup
-            android:id="@+id/resolution"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="18dp" />
 
-        <TextView style="@style/MantraLabel" android:text="@string/bitrate" />
-        <TextView style="@style/MantraHint" android:text="@string/bitrate_hint" />
-        <TextView
-            android:id="@+id/bitRateValue"
-            style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/bitRate"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="48" />
 
         <!-- Focus -->
         <TextView style="@style/MantraLabel" android:text="@string/focus" />
-        <TextView style="@style/MantraHint" android:text="@string/focus_hint" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/focus_hint" />
         <TextView android:id="@+id/holdValue" style="@style/MantraValue" />
         <SeekBar
             android:id="@+id/hold"
@@ -112,7 +184,7 @@
 
         <!-- Peaking -->
         <TextView style="@style/MantraLabel" android:text="@string/peaking" />
-        <TextView style="@style/MantraHint" android:text="@string/peaking_hint" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/peaking_hint" />
         <TextView android:id="@+id/peakValue" style="@style/MantraValue" />
         <SeekBar
             android:id="@+id/peak"
@@ -128,7 +200,7 @@
 
         <!-- The cable -->
         <TextView style="@style/MantraLabel" android:text="@string/usb" />
-        <TextView style="@style/MantraHint" android:text="@string/usb_hint" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/usb_hint" />
         <TextView
             android:id="@+id/usbState"
             style="@style/MantraValue"
@@ -139,11 +211,11 @@
             style="@style/MantraKey"
             android:layout_width="match_parent"
             android:text="@string/usb_open" />
-        <TextView style="@style/MantraHint" android:text="@string/usb_webcam" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/usb_webcam" />
 
         <!-- The trace -->
         <TextView style="@style/MantraLabel" android:text="@string/trace" />
-        <TextView style="@style/MantraHint" android:text="@string/trace_hint" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/trace_hint" />
         <Button
             android:id="@+id/exportTrace"
             style="@style/MantraKey"

@@ -91,6 +91,17 @@ class Settings(context: Context) {
         get() = prefs.getInt(WIDTH, 1920)
         set(value) = prefs.edit().putInt(WIDTH, value).apply()
 
+    /**
+     * Whether the settings screen shows its help text.
+     *
+     * The paragraphs are worth having once and are in the way for ever after.
+     * It is not a setting so much as a mode of the screen, and it is remembered
+     * because nobody wants to press MINIMAL every time.
+     */
+    var verboseSettings: Boolean
+        get() = prefs.getBoolean(VERBOSE, true)
+        set(value) = prefs.edit().putBoolean(VERBOSE, value).apply()
+
     /** Ten bit is asked for unless somebody has a reason not to. */
     var wantTenBit: Boolean
         get() = prefs.getBoolean(TEN_BIT, true)
@@ -106,5 +117,6 @@ class Settings(context: Context) {
         const val TEN_BIT = "wantTenBit"
         const val TURNS = "quarterTurns"
         const val WIDTH = "captureWidth"
+        const val VERBOSE = "verboseSettings"
     }
 }

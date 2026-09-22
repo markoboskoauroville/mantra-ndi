@@ -788,6 +788,30 @@ class MechanismTest {
      * frame. v76 got the first half and left the second, which is a correct
      * picture in a strip a third of the screen wide.
      */
+    /**
+     * The portrait strip, stated as a test.
+     *
+     * Held across, the camera's quarter turn and ours cancel and a 16:9 frame
+     * comes out 16:9. Held upright they do not: the total is a quarter, so what
+     * reaches the screen is 9:16 — and the box it sits in was being given 16:9
+     * regardless, which is a narrow strip with black on all four sides.
+     */
+    @Test
+    fun `the box takes the shape the picture ends up, not the buffer's`() {
+        // His phone, held across: camera 90, ours 270, they cancel.
+        assertEquals(16.0 / 9.0, Mechanism.shownAspect(1920, 1080, 90, 270), 0.0001)
+        // His phone, held upright: camera 90, ours 0. A quarter turn survives.
+        assertEquals(9.0 / 16.0, Mechanism.shownAspect(1920, 1080, 90, 0), 0.0001)
+        // A phone whose camera turns nothing, upright: ours is the whole of it.
+        assertEquals(9.0 / 16.0, Mechanism.shownAspect(1920, 1080, 0, 90), 0.0001)
+        assertEquals(16.0 / 9.0, Mechanism.shownAspect(1920, 1080, 0, 0), 0.0001)
+        assertEquals(16.0 / 9.0, Mechanism.shownAspect(1920, 1080, 0, 180), 0.0001)
+        // And a quarter turn by hand on top of both.
+        assertEquals(9.0 / 16.0, Mechanism.shownAspect(1920, 1080, 90, 180), 0.0001)
+        // Nothing to go on yet is still a picture-shaped box, never zero.
+        assertEquals(16.0 / 9.0, Mechanism.shownAspect(0, 0, 90, 270), 0.0001)
+    }
+
     @Test
     fun `his phone ends up upright and edge to edge`() {
         val viewWidth = 1788

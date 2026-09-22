@@ -23,12 +23,35 @@ class WhiteBalanceTest {
         -0.03f, 0.12f, 0.70f
     )
 
+    /**
+     * The fader stays inside what the sensor was measured at.
+     *
+     * His phone publishes Standard A and D65 — 2856K and 6504K — and beyond
+     * those two anchors there is nothing left to interpolate between, so the
+     * ends of a 2000..10000 sweep were the same clamped matrix over and over
+     * while the number went on moving. Tungsten to daylight is the range he
+     * works in and the range the measurement covers.
+     */
+    @Test
+    fun `the fader covers tungsten to daylight and no further`() {
+        assertEquals(3200, WhiteBalance.COOLEST_KELVIN)
+        assertEquals(6500, WhiteBalance.WARMEST_KELVIN)
+        // The two numbers an operator actually works in are both on it.
+        assertTrue(WhiteBalance.travel(3200) < 0.001f)
+        assertTrue(WhiteBalance.travel(5600) in 0.1f..0.99f)
+        // And every point of it is inside his sensor's calibrated span.
+        assertTrue(WhiteBalance.COOLEST_KELVIN >= 2856)
+        assertTrue(WhiteBalance.WARMEST_KELVIN <= 6504 + 1)
+    }
+
     @Test
     fun `mired travel is even, unlike Kelvin`() {
         // A hundred Kelvin at the tungsten end must move the fader further than
         // a hundred Kelvin at the daylight end. That is the whole reason for it.
-        val nearTungsten = WhiteBalance.travel(3200) - WhiteBalance.travel(3100)
-        val nearDaylight = WhiteBalance.travel(6600) - WhiteBalance.travel(6500)
+        // Both pairs are inside the travel, because outside it the fader is
+        // clamped and every difference is zero.
+        val nearTungsten = WhiteBalance.travel(3300) - WhiteBalance.travel(3200)
+        val nearDaylight = WhiteBalance.travel(6500) - WhiteBalance.travel(6400)
         assertTrue(
             "a hundred Kelvin must count for more at the warm end",
             nearTungsten > nearDaylight * 3
@@ -44,7 +67,7 @@ class WhiteBalanceTest {
 
     @Test
     fun `a point on the fader and its temperature are the same place`() {
-        for (kelvin in intArrayOf(2000, 2856, 3200, 4300, 5600, 6504, 10000)) {
+        for (kelvin in intArrayOf(3200, 3600, 4300, 5000, 5600, 6200, 6500)) {
             val back = WhiteBalance.kelvinAt(WhiteBalance.travel(kelvin))
             assertTrue("$kelvin came back as $back", kotlin.math.abs(back - kelvin) <= 25)
         }

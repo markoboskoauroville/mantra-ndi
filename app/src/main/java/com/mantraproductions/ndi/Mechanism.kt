@@ -850,6 +850,35 @@ object Mechanism {
     }
 
     /**
+     * The shape the picture ends up on screen, once every turn is counted.
+     *
+     * **This is the portrait strip.** The black box the picture sits in was
+     * given the buffer's own shape — 16:9, always — and in landscape that is
+     * right, because the camera's quarter turn and ours cancel and a 16:9 frame
+     * comes out 16:9. Held upright they do not cancel: the total is a quarter,
+     * the picture that arrives is 9:16, and a 9:16 picture fitted inside a 16:9
+     * box is a narrow strip with black on all four sides.
+     *
+     * So the box is told the total, not the buffer. A phone held upright gets a
+     * tall box and the picture fills its width, which is what every camera app
+     * on a phone does and what he asked for.
+     *
+     * @param producerDegrees what the camera turned, [producerRotation]
+     * @param appliedDegrees what we turned, including any by hand
+     */
+    fun shownAspect(
+        bufferWidth: Int,
+        bufferHeight: Int,
+        producerDegrees: Int,
+        appliedDegrees: Int
+    ): Double {
+        if (bufferWidth <= 0 || bufferHeight <= 0) return 16.0 / 9.0
+        val total = ((producerDegrees + appliedDegrees) % 360 + 360) % 360
+        return if (total == 90 || total == 270) bufferHeight.toDouble() / bufferWidth
+        else bufferWidth.toDouble() / bufferHeight
+    }
+
+    /**
      * The angle to put on the preview, once the camera's own turn is taken off.
      *
      * On a phone whose camera turns nothing this is the old formula unchanged,

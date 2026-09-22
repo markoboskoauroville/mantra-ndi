@@ -2,6 +2,8 @@ package com.mantraproductions.ndi
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.RadioButton
@@ -10,7 +12,6 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 
 /**
  * What is decided once, off the camera screen.
@@ -33,10 +34,23 @@ class SettingsActivity : AppCompatActivity() {
         val sourceName = findViewById<EditText>(R.id.sourceName)
         sourceName.setText(settings.sourceName)
 
-        findViewById<SwitchCompat>(R.id.tenBit).apply {
-            isChecked = settings.wantTenBit
-            setOnCheckedChangeListener { _, on -> settings.wantTenBit = on }
+        // Depth: two words, not a switch with a paragraph.
+        //
+        // A toggle asks "do you want ten bit?", which is a question with a
+        // right answer, and then leaves the operator to work out what "off"
+        // means. Two labelled choices say what the camera will do.
+        val depth = findViewById<RadioGroup>(R.id.depth)
+        listOf(8 to "8-bit", 10 to "10-bit").forEach { (bits, label) ->
+            depth.addView(
+                RadioButton(this).apply {
+                    id = bits
+                    text = label
+                    textSize = 12f
+                    isChecked = (bits == 10) == settings.wantTenBit
+                }
+            )
         }
+        depth.setOnCheckedChangeListener { _, id -> settings.wantTenBit = id == 10 }
 
         // The resolutions this phone's lenses really publish, not a list of
         // numbers somebody typed. A resolution a lens does not have is a
@@ -149,9 +163,34 @@ class SettingsActivity : AppCompatActivity() {
             ).show()
         }
 
+        // MINIMAL and VERBOSE.
+        //
+        // Every hint carries a tag rather than being listed by id, so a hint
+        // added later is covered without anybody remembering to add it here.
+        val minimal = findViewById<Button>(R.id.minimal)
+        val verbose = findViewById<Button>(R.id.verbose)
+        fun showHints(on: Boolean) {
+            settings.verboseSettings = on
+            hints(findViewById(android.R.id.content)).forEach {
+                it.visibility = if (on) View.VISIBLE else View.GONE
+            }
+            minimal.alpha = if (on) 0.45f else 1f
+            verbose.alpha = if (on) 1f else 0.45f
+        }
+        minimal.setOnClickListener { showHints(false) }
+        verbose.setOnClickListener { showHints(true) }
+        showHints(settings.verboseSettings)
+
         findViewById<TextView>(R.id.version).text =
             "Mantra NDI v${BuildConfig.VERSION_NAME}  ·  " +
                 (if (NdiSender.available) "NDI SDK present" else "built without the NDI SDK")
+    }
+
+    /** Every view in the tree tagged as help text. */
+    private fun hints(root: View): List<View> = when {
+        root.tag == "hint" -> listOf(root)
+        root is ViewGroup -> (0 until root.childCount).flatMap { hints(root.getChildAt(it)) }
+        else -> emptyList()
     }
 
     override fun onResume() {

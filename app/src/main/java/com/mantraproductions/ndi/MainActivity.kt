@@ -668,11 +668,23 @@ class MainActivity : AppCompatActivity() {
         matrix.postScale(scale[0], scale[1], vw / 2f, vh / 2f)
         preview.setTransform(matrix)
 
+        // THE PORTRAIT STRIP.
+        //
+        // The box was given the buffer's own shape, 16:9 always. In landscape
+        // that is right, because the camera's quarter turn and ours cancel. Held
+        // upright they do not: the total is a quarter, what arrives is 9:16, and
+        // a 9:16 picture fitted inside a 16:9 box is a strip with black on all
+        // four sides. The box is told the total now.
+        findViewById<AspectFrame>(R.id.picture).aspect =
+            Mechanism.shownAspect(bufferSize.width, bufferSize.height, producerDegrees, applied)
+
         // Measured on what actually reaches the screen, turned and fitted,
         // against the shape the picture is really meant to be.
         val shown = Mechanism.displayedAspect(vw, vh, effective[0], effective[1], applied)
-        val squeeze = if (shown > 0.0) shown / (bufferSize.width.toDouble() / bufferSize.height)
-        else 1.0
+        val wanted = Mechanism.shownAspect(
+            bufferSize.width, bufferSize.height, producerDegrees, applied
+        )
+        val squeeze = if (shown > 0.0 && wanted > 0.0) shown / wanted else 1.0
 
         val line = "sensor $sensor · disp $displayDegrees · cam $producerDegrees · rot $applied" +
             (if (manualQuarterTurns != 0) " (auto $auto +${manualQuarterTurns * 90})" else "") +
@@ -699,10 +711,9 @@ class MainActivity : AppCompatActivity() {
      */
     private fun holdBufferSize() {
         preview.surfaceTexture?.setDefaultBufferSize(bufferSize.width, bufferSize.height)
-        // And the box takes the picture's shape, rather than the picture being
-        // made to take the box's.
-        findViewById<AspectFrame>(R.id.picture).aspect =
-            bufferSize.width.toDouble() / bufferSize.height
+        // The box's shape is set by applyPreviewTransform, which is the only
+        // place that knows the total turn. Setting it here from the buffer
+        // alone is what left the picture in a strip when the phone was upright.
     }
 
     // --- the keys ------------------------------------------------------------

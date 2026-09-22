@@ -31,9 +31,22 @@ package com.mantraproductions.ndi
  */
 object WhiteBalance {
 
-    /** The fader's travel. Tungsten at the left, open daylight at the right. */
-    const val COOLEST_KELVIN = 2000
-    const val WARMEST_KELVIN = 10000
+    /**
+     * The fader's travel: **tungsten at the left, daylight at the right.**
+     *
+     * It ran 2000K to 10000K, and most of that was travel nobody wants and
+     * nothing can honour. His phone publishes its calibration at **2856K and
+     * 6504K** — Standard A and D65 — and beyond those two anchors there is
+     * nothing left to interpolate between, so the ends of the old sweep were
+     * the same clamped matrix over and over while the number went on moving.
+     *
+     * 3200K is tungsten and 5600K is daylight, the two numbers a camera
+     * operator actually works in; 6500K is the top because that is where the
+     * measurement stops. Every point on the fader is now inside the sensor's
+     * own calibrated span.
+     */
+    const val COOLEST_KELVIN = 3200
+    const val WARMEST_KELVIN = 6500
 
     /**
      * Mired, the unit white balance actually behaves in.

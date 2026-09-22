@@ -6,6 +6,63 @@ working state of *this* app.
 
 ---
 
+## 22.9.2026, evening — v79, the portrait strip, the fader's real range, the settings
+
+*"So landscape mode is working good."* — and his trace confirms the rest of v78:
+white balance ran **continuous** the whole session, interpolating between his
+sensor's own anchors, and the take landed in **DCIM/Mantra NDI**.
+
+### The portrait strip — the last of the rotation bug
+
+Held upright, the picture was a narrow strip again: `disp 0 · cam 90 · rot 0 ·
+view 1080x608 · squeeze 0.316 STRETCHED`.
+
+The black box the picture sits in was given **the buffer's own shape, 16:9,
+always**. Held across that is right, because the camera's quarter turn and ours
+cancel — 90 + 270 = 0 — and a 16:9 frame comes out 16:9. **Held upright they do
+not cancel:** 90 + 0 = 90, so what reaches the screen is 9:16, and a 9:16 picture
+fitted inside a 16:9 box is a strip with black on all four sides.
+
+`Mechanism.shownAspect(bufW, bufH, producer, applied)` counts **every** turn and
+the box takes that shape. Upright, the box is tall and the picture fills the
+width, which is what every camera app on a phone does. `holdBufferSize` no longer
+sets the aspect at all — only the one place that knows the total turn does.
+
+### The fader's real range
+
+*"I need 3300 until 5500, or whatever are default for tungsten."*
+
+It ran **2000K to 10000K**, and most of that was travel nobody wants and nothing
+could honour. His trace says why: `calibration published (2856K and 6504K)` —
+Standard A and D65. **Beyond those two anchors there is nothing left to
+interpolate between**, so the ends of the old sweep were the same clamped matrix
+over and over while the number went on moving.
+
+**3200K to 6500K** now: tungsten at the left, and the top is where the
+measurement stops. Every point on the fader is inside the sensor's own span.
+
+### The settings screen, in his order
+
+*"What I changed the most is stream bitrate. That should be first."*
+
+1. **Stream bitrate** — it was four blocks down, under two things that get set
+   once and left. What is touched most often goes at the top.
+2. **Depth and resolution on one line** — `8-bit | 10-bit` beside
+   `720p | 1080p | 1440p | 4K`. Both are answers to "what shape is the picture",
+   both are two or three words wide, and stacking them cost half a screen.
+3. Then the rest.
+
+The ten-bit **switch is gone**. *"Ask for 10-bit. Who should I ask? Not ask."* He
+is right: a toggle asks a question with a right answer and leaves the operator to
+work out what "off" means. Two labelled choices say what the camera will do.
+
+**MINIMAL and VERBOSE**, two small words in the header, remembered. The help text
+is worth having once and in the way for ever after — it is a mode of the screen,
+not a setting. Every hint carries a tag rather than being listed by id, so a hint
+added later is covered without anybody remembering.
+
+---
+
 ## 22.9.2026, late afternoon — v78, the squash, the zones, resolution, both ways up
 
 ### The squash — the other half of the rotation bug
