@@ -29,6 +29,7 @@ Nothing is reimplemented:
 | The codec | the hardware HEVC Main10 encoder |
 | The LUT and peaking | one GPU shader on the preview |
 | The RAW still | the platform's own `DngCreator` |
+| Full NDI's frames | a YUV_420_888 reader, packed to I420 in the bridge |
 
 The log curve matters more than it sounds. Because it is applied in the tone
 mapper rather than in a shader, it is on the picture **before** the encoder, so
@@ -39,15 +40,15 @@ at 8 bits however good the sensor is.
 
 ## Where it is
 
-**Phase 1 and phase 3, built. v69.** Camera, 10-bit, log, LUTs, NDI HX and full
+**Phase 1 and phase 3, built. v70.** Camera, 10-bit, log, LUTs, NDI HX and full
 NDI, and the snap.
 
 | Phase | What | State |
 |---|---|---|
 | 0 | Logging: trace file, crash reports | built, v68 |
-| 1 | 10-bit camera, log curves, lenses, focus, light | built, v69 |
+| 1 | 10-bit camera, log curves, lenses, focus, light | built, v70 |
 | 2 | Recording | **not planned.** This camera streams; it does not record |
-| 3 | NDI HX and full NDI | built, v69 |
+| 3 | NDI HX and full NDI | built, v70 |
 | 4 | Remote control over NDI metadata | not started |
 | 5 | Monitor mode | not started |
 
@@ -64,7 +65,7 @@ Left rail, in order:
 
 | Key | What |
 |---|---|
-| `L1`–`L4` | the physical lenses, named from each sensor's own 35mm equivalent. A Pixel 7 lights three and darkens `L4`; a 7 Pro lights all four |
+| `L1`–`L4` | the real lenses, named from each sensor's own 35mm equivalent. A Pixel does not put its ultra wide in `cameraIdList` — the back camera is one *logical* camera that fuses several and picks by zoom — so the physical ones are found through `getPhysicalCameraIds()` and selected by naming one on each OutputConfiguration |
 | `LGHT` | the lamp, on the repeating request — `CameraManager.setTorchMode` is refused while this app holds the camera |
 | `AF` / `MF` | the focus director: hold, notice, then rack over a beat, rather than the hunting the camera's own routine does |
 | `PEAK` | edge detector, monitor only |
@@ -73,13 +74,25 @@ Left rail, in order:
 | `ROT` | a quarter turn of the preview, by hand, for a phone mounted sideways |
 | `HX` / `FULL` | which kind of NDI, or neither. Two ends of one switch, because an NDI source is one stream |
 
-Right rail: **eleven LUT slots.** Tap an empty one to load a `.cube` from
-storage; tap a loaded one to put it on the monitor; long press to replace or
-empty it. Eleven because the ARRI LogC4 family is eleven files.
+Right rail: **eleven LUT slots, five at a time.** Tap an empty one to load a
+`.cube` from storage; tap a loaded one to put it on the monitor; long press to
+replace or empty it. Eleven because the ARRI LogC4 family is eleven files; five
+at a time because eleven keys down the side of a phone are each too small to
+hit with a thumb. The sixth key turns the page and carries which page it is on,
+and the seventh is the gear.
 
 The LUT is a **monitor** LUT, deliberately. The stream carries the log picture
 the tone mapper produced, and the LUT is how the operator judges it — which is
 what a broadcast camera does, and the only thing that is possible at 10 bits.
+
+## Settings
+
+Behind the gear at the foot of the right rail: the source name, whether to ask
+for ten bit, the HX bitrate, the focus hold and rack times, the peaking colour
+and sensitivity, the route that gets the trace off the phone, and the NDI
+attribution the licence requires. Everything an operator touches *during* a
+take is a key on a rail where it can be reached without looking; what is in
+here is what is decided once.
 
 ## The picture and the wire
 
@@ -112,6 +125,7 @@ removed by hand:
 | `CaptureEngine.kt` | the session, the profile, the tone curve, focus, the lamp, the still |
 | `HdrVideoEncoder.kt` | hardware HEVC Main10 into a surface the camera writes |
 | `NdiSender.kt`, `cpp/ndi_bridge.cpp` | both NDI paths, compressed and whole-frame |
+| `SettingsActivity.kt`, `Settings.kt` | what is decided once, off the camera screen |
 | `Snap.kt` | RAW_SENSOR → `DngCreator` → Downloads |
 | `LutSlots.kt` | the eleven slots |
 | `PreviewEffects.kt` | the LUT and peaking, one shader, preview only |
@@ -121,6 +135,25 @@ removed by hand:
 | `Mechanism.kt` | all pure maths. No Android imports, so all of it is tested |
 | `LogCurves.kt`, `CubeLut.kt`, `ColourSpaces.kt` | the curves and the 33³ LUT work |
 | `Trace.kt`, `TraceFormat.kt`, `CrashLog.kt`, `Downloads.kt` | phase 0, unchanged |
+
+## Two things this phone taught the app
+
+**A camera cannot write into an RGBA ImageReader.** `PixelFormat.RGBA_8888` is
+not in Camera2's stream configuration map, so a session carrying one is refused
+outright — and it takes the preview and the encoder down with it. On a real
+Pixel 7 that was a black screen and "Camera session could not be configured",
+caused by a reader that existed only for a mode nobody had switched on. RGBA
+was right in the screen share, where the producer is a VirtualDisplay; a camera
+never produces it.
+
+**`onConfigureFailed` does not say what it disliked.** It is one call with no
+argument, so a session carrying four targets that is refused tells you nothing
+about which of the four did it. So the session is now offered as an ordered
+list of combinations, giving up the targets in the order they can most afford
+to be lost — full NDI, then RAW, then ten bit, then the encoder — and each
+refusal is named in the trace. A phone that will not take everything still
+shows a picture, and the keys for whatever did not survive go dark rather than
+lighting for a target the session does not have.
 
 ## The NDI SDK
 

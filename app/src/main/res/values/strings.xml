@@ -2,4 +2,21 @@
     <string name="app_name">Mantra NDI</string>
     <string name="starting">opening the camera…</string>
     <string name="ndi_mark">Powered by NDI®  ·  ndi.video  ·  a registered trademark of Vizrt NDI AB</string>
+    <string name="settings">SETTINGS</string>
+    <string name="source_name">Source name</string>
+    <string name="source_name_hint">What a receiver sees in its list. A room with three of these in it is the normal case, and \"Pixel 7\" three times is no use to anybody.</string>
+    <string name="ten_bit">Ten bit</string>
+    <string name="ten_bit_hint">HLG10 on every streaming target, asked for before the session exists. If this phone will not give a 10-bit session the app falls back and the status line says so.</string>
+    <string name="ten_bit_switch">Ask for 10-bit</string>
+    <string name="bitrate">Stream bitrate</string>
+    <string name="bitrate_hint">What the HX encoder is allowed. Chosen against the wire rather than the picture: a dropped frame is worse than a soft one.</string>
+    <string name="focus">Focus</string>
+    <string name="focus_hint">How long the director holds before it will consider moving, and how long the move itself takes. Zero rack is a snap, for anybody who wants the phone to behave like a phone.</string>
+    <string name="peaking">Peaking</string>
+    <string name="peaking_hint">How faint an edge still counts, and what colour to mark it. Monitor only; none of it reaches the stream.</string>
+    <string name="trace">The trace</string>
+    <string name="trace_hint">Every step, every control change and every refusal, written as it happens. This is the only instrument that reaches a phone with no cable attached.</string>
+    <string name="export_trace">Export the trace to Downloads</string>
+    <string name="on">on</string>
+    <string name="off">off</string>
 </resources>

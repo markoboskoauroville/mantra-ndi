@@ -63,15 +63,25 @@ object NdiSender {
     }
 
     /**
-     * One whole RGBA frame, on its way out as full NDI.
+     * One whole camera frame, on its way out as full NDI.
      *
-     * [buffer] must be direct — it is the ImageReader's own plane buffer — and
-     * it must still be open when this returns, which is why the native call is
-     * synchronous. [stride] is the reader's reported row stride in bytes and is
-     * usually wider than width × 4.
+     * The planes must be the ImageReader's own direct buffers and the Image
+     * must still be open when this returns, which is why the native call is
+     * synchronous. Every stride comes from the reader; none of them is ever
+     * width, and the chroma planes carry a pixel stride too.
      */
-    fun sendRaw(buffer: ByteBuffer, width: Int, height: Int, stride: Int, ptsUs: Long) {
-        if (available) nativeSendRaw(buffer, width, height, stride, ptsUs)
+    fun sendYuv420(
+        y: ByteBuffer, yStride: Int,
+        u: ByteBuffer, uStride: Int,
+        v: ByteBuffer, vStride: Int,
+        uvPixelStride: Int,
+        width: Int, height: Int, ptsUs: Long
+    ) {
+        if (available) {
+            nativeSendYuv420(
+                y, yStride, u, uStride, v, vStride, uvPixelStride, width, height, ptsUs
+            )
+        }
     }
 
     /** How many receivers are attached, or -1 if there is no sender. */
@@ -92,8 +102,12 @@ object NdiSender {
     private external fun nativeSendCompressed(
         data: ByteArray, isKeyframe: Boolean, ptsUs: Long, isHevc: Boolean, isPreviewStream: Boolean
     )
-    private external fun nativeSendRaw(
-        buffer: ByteBuffer, width: Int, height: Int, stride: Int, ptsUs: Long
+    private external fun nativeSendYuv420(
+        y: ByteBuffer, yStride: Int,
+        u: ByteBuffer, uStride: Int,
+        v: ByteBuffer, vStride: Int,
+        uvPixelStride: Int,
+        width: Int, height: Int, ptsUs: Long
     )
     private external fun nativeConnections(timeoutMs: Int): Int
     private external fun nativeTally(timeoutMs: Int): Int

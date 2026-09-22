@@ -252,36 +252,86 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendCompressed(
  * Full NDI: one whole uncompressed frame, which the SDK compresses to SpeedHQ
  * on its way out.
  *
- * [buffer] is the ImageReader's own direct ByteBuffer, so `GetDirectBufferAddress`
- * gives the address Android already mapped and nothing is copied on this side.
- * [stride] is the ImageReader's reported row stride in BYTES and is very often
- * wider than width × 4 — a 1080-wide reader commonly hands back rows padded to
- * 1088 or 1152. NDI takes the stride as a field, so the padding is described
- * rather than removed; computing it as width × 4 skews the picture into a
- * diagonal, which is the classic symptom and reads as a broken codec.
+ * YUV rather than RGBA, and that is a correction rather than a preference.
+ * **A camera cannot write into an RGBA_8888 ImageReader at all** — the format
+ * is not in Camera2's stream configuration map, so a session carrying one is
+ * refused outright, and it takes the preview and the encoder down with it.
+ * That is exactly what a real Pixel 7 did: a black screen and "Camera session
+ * could not be configured", caused by a reader that existed only for a mode
+ * nobody had switched on. RGBA was right in the screen share, because a
+ * VirtualDisplay does produce RGBA; a camera never does.
  *
- * RGBA rather than BGRA: Android's PixelFormat.RGBA_8888 is R, G, B, A in
- * memory order, and the SDK has a FourCC that says exactly that. Swapping the
- * bytes to reach BGRA would cost a pass over every pixel to arrive somewhere
- * no better.
+ * So the reader is YUV_420_888 and its three planes are packed here into I420,
+ * which NDI takes natively. One pass over the image, on a thread that is not
+ * the camera's.
+ *
+ * Every stride is read from the reader and never computed. Camera2 pads rows
+ * freely — a 1080-wide Y plane commonly arrives at 1088 or 1152 — and the
+ * chroma planes carry a *pixel* stride as well, 1 when the phone hands back
+ * planar data and 2 when it hands back semi-planar with the other channel
+ * interleaved between. Assuming either skews the picture into a diagonal,
+ * which every person reads as a broken codec.
  */
 extern "C" JNIEXPORT void JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeSendRaw(
+Java_com_mantraproductions_ndi_NdiSender_nativeSendYuv420(
         JNIEnv* env, jobject,
-        jobject buffer, jint width, jint height, jint stride, jlong ptsUs) {
+        jobject yBuf, jint yStride,
+        jobject uBuf, jint uStride,
+        jobject vBuf, jint vStride,
+        jint uvPixelStride,
+        jint width, jint height, jlong ptsUs) {
 
-    auto* pixels = static_cast<uint8_t*>(env->GetDirectBufferAddress(buffer));
-    if (!pixels) {
-        LOGE("ImageReader buffer is not direct; nothing can be sent from it");
+    auto* y = static_cast<const uint8_t*>(env->GetDirectBufferAddress(yBuf));
+    auto* u = static_cast<const uint8_t*>(env->GetDirectBufferAddress(uBuf));
+    auto* v = static_cast<const uint8_t*>(env->GetDirectBufferAddress(vBuf));
+    if (!y || !u || !v) {
+        LOGE("ImageReader planes are not direct; nothing can be sent from them");
         return;
+    }
+    if (width <= 1 || height <= 1) return;
+
+    const int cw = width / 2;
+    const int ch = height / 2;
+    const size_t needed = (size_t) width * height + (size_t) cw * ch * 2;
+
+    // Kept between frames. Allocating three megabytes thirty times a second is
+    // a stutter with no other cause.
+    static std::vector<uint8_t> packed;
+    if (packed.size() < needed) packed.resize(needed);
+
+    uint8_t* dstY = packed.data();
+    uint8_t* dstU = dstY + (size_t) width * height;
+    uint8_t* dstV = dstU + (size_t) cw * ch;
+
+    for (int row = 0; row < height; ++row) {
+        memcpy(dstY + (size_t) row * width, y + (size_t) row * yStride, (size_t) width);
+    }
+
+    if (uvPixelStride == 1) {
+        for (int row = 0; row < ch; ++row) {
+            memcpy(dstU + (size_t) row * cw, u + (size_t) row * uStride, (size_t) cw);
+            memcpy(dstV + (size_t) row * cw, v + (size_t) row * vStride, (size_t) cw);
+        }
+    } else {
+        // Semi-planar: the other channel sits between every sample.
+        for (int row = 0; row < ch; ++row) {
+            const uint8_t* su = u + (size_t) row * uStride;
+            const uint8_t* sv = v + (size_t) row * vStride;
+            uint8_t* du = dstU + (size_t) row * cw;
+            uint8_t* dv = dstV + (size_t) row * cw;
+            for (int col = 0; col < cw; ++col) {
+                du[col] = su[(size_t) col * uvPixelStride];
+                dv[col] = sv[(size_t) col * uvPixelStride];
+            }
+        }
     }
 
     NDIlib_video_frame_v2_t frame = {};
-    frame.FourCC = NDIlib_FourCC_video_type_RGBA;
+    frame.FourCC = NDIlib_FourCC_video_type_I420;
     frame.xres = width;
     frame.yres = height;
-    frame.line_stride_in_bytes = stride;
-    frame.p_data = pixels;
+    frame.line_stride_in_bytes = width;
+    frame.p_data = packed.data();
     frame.frame_rate_N = g_fps_n;
     frame.frame_rate_D = g_fps_d;
     frame.frame_format_type = NDIlib_frame_format_type_progressive;
@@ -290,9 +340,8 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendRaw(
 
     std::lock_guard<std::mutex> lock(g_send_mutex);
     if (g_send_instance) {
-        // Synchronous, because the Image this buffer belongs to is closed the
-        // moment this returns. The async variant would hand the SDK an address
-        // Android has taken back.
+        // Synchronous, because `packed` is reused by the very next frame. The
+        // async variant would hand the SDK a buffer about to be overwritten.
         NDIlib_send_send_video_v2(g_send_instance, &frame);
     }
 }

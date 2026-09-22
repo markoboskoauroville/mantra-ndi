@@ -2,7 +2,6 @@ package com.mantraproductions.ndi
 
 import android.content.Context
 import android.graphics.ImageFormat
-import android.graphics.PixelFormat
 import android.hardware.camera2.CameraCharacteristics
 import android.media.Image
 import android.media.ImageReader
@@ -121,10 +120,12 @@ class CameraPipeline(private val context: Context) {
      */
     fun start(
         cameraId: String,
+        physicalId: String?,
         previewSurface: Surface,
         sourceName: String,
         curve: LogCurves.Curve,
-        wantTenBit: Boolean = true
+        wantTenBit: Boolean = true,
+        bitRate: Int = BIT_RATE
     ): Boolean {
         if (isRunning) stop()
         this.sourceName = sourceName
@@ -151,7 +152,7 @@ class CameraPipeline(private val context: Context) {
             width = size.width,
             height = size.height,
             fps = fps,
-            bitRate = BIT_RATE,
+            bitRate = bitRate,
             tenBit = tenBit,
             onFormat = { sps, pps, vps ->
                 // Kept, because the encoder announces these exactly once and
@@ -178,12 +179,14 @@ class CameraPipeline(private val context: Context) {
         encoder = codec
         encoderSurface = surface
 
-        // Full NDI's reader. Four buffers: one being drawn into, one on its way
-        // to the wire, and two spare so a slow network cannot stall the camera.
+        // Full NDI's reader. YUV_420_888, because a camera cannot write into
+        // an RGBA reader at all and a session carrying one is refused outright
+        // — which is what took the preview and the encoder down on the real
+        // phone. Three buffers: one being filled, one being sent, one spare.
         val t = HandlerThread("ndi-full").also { it.start() }
         fullThread = t
         val reader = ImageReader.newInstance(
-            size.width, size.height, PixelFormat.RGBA_8888, 4
+            size.width, size.height, ImageFormat.YUV_420_888, 3
         )
         reader.setOnImageAvailableListener({ r -> onFullFrame(r) }, Handler(t.looper))
         fullReader = reader
@@ -203,6 +206,7 @@ class CameraPipeline(private val context: Context) {
 
         engine.open(
             cameraId = cameraId,
+            physicalId = physicalId,
             // The encoder and the full reader are configured but not live: the
             // preview is the only thing drawing until a key is pressed. They
             // are deferred, not standard — they must carry the same ten bit
@@ -217,7 +221,10 @@ class CameraPipeline(private val context: Context) {
         )
 
         isRunning = true
-        Trace.step("pipeline started ${size.width}x${size.height} @$fps on lens $cameraId")
+        Trace.step(
+            "pipeline started ${size.width}x${size.height} @$fps on camera $cameraId" +
+                (physicalId?.let { ", physical lens $it" } ?: "")
+        )
         return true
     }
 
@@ -301,6 +308,14 @@ class CameraPipeline(private val context: Context) {
         rateAt = SystemClock.elapsedRealtime()
         startedAtUs = SystemClock.elapsedRealtimeNanos() / 1000
 
+        val target = if (next == Mode.HX) encoderSurface else fullSurface
+        if (!engine.isConfigured(target)) {
+            listener?.onError("This phone would not give a session with that target")
+            NdiSender.destroy()
+            mode = Mode.OFF
+            return false
+        }
+
         val ok = when (next) {
             Mode.HX -> {
                 parameterSets?.let { (sps, pps, vps) -> NdiSender.setVideoInfo(sps, pps, vps) }
@@ -334,13 +349,21 @@ class CameraPipeline(private val context: Context) {
         } ?: return
         try {
             if (mode == Mode.FULL) {
-                val plane = image.planes[0]
+                val y = image.planes[0]
+                val u = image.planes[1]
+                val v = image.planes[2]
                 val ptsUs = SystemClock.elapsedRealtimeNanos() / 1000 - startedAtUs
-                NdiSender.sendRaw(
-                    plane.buffer, image.width, image.height, plane.rowStride, ptsUs
+                NdiSender.sendYuv420(
+                    y.buffer, y.rowStride,
+                    u.buffer, u.rowStride,
+                    v.buffer, v.rowStride,
+                    u.pixelStride,
+                    image.width, image.height, ptsUs
                 )
                 frames++
-                bits += plane.rowStride.toLong() * image.height * 8
+                // I420 on the wire: one byte of luma and half a byte of chroma
+                // per pixel, whatever padding the reader used on the way in.
+                bits += image.width.toLong() * image.height * 12
             }
         } catch (t: Throwable) {
             Trace.fault("full frame", t)
@@ -370,9 +393,20 @@ class CameraPipeline(private val context: Context) {
 
     fun setLogCurve(curve: LogCurves.Curve): Boolean = engine.setLogCurve(curve)
 
+    /**
+     * Whether each mode's target actually made it into the session.
+     *
+     * The camera may have refused the combination that carried it, and a key
+     * that lights for a target the session does not have is a key that does
+     * nothing. These answer the rail rather than the rail assuming.
+     */
+    val hxAvailable: Boolean get() = isRunning && engine.isConfigured(encoderSurface)
+    val fullAvailable: Boolean get() = isRunning && engine.isConfigured(fullReader?.surface)
+    val snapAvailable: Boolean get() = isRunning && snap.armed && engine.isConfigured(snap.surface)
+
     private companion object {
         /**
-         * 12 Mbit/s for 1080p HEVC.
+         * 12 Mbit/s for 1080p HEVC, when nothing in settings says otherwise.
          *
          * Chosen against the wire rather than the picture: this is what a phone
          * reliably pushes across a hall's Wi-Fi without the receiver starting to

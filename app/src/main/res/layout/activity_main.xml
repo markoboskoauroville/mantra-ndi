@@ -62,19 +62,6 @@
                 android:shadowColor="#000000"
                 android:shadowRadius="3"
                 android:text="@string/starting" />
-            <!-- The NDI licence requires this in the interface, not only in
-                 the README. Quiet and small, at the foot of the picture where
-                 it costs no room a control could have used. -->
-            <TextView
-                android:id="@+id/ndiMark"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|end"
-                android:padding="3dp"
-                android:fontFamily="monospace"
-                android:textSize="7sp"
-                android:textColor="#55606A"
-                android:text="@string/ndi_mark" />
         </com.mantraproductions.ndi.AspectFrame>
 
         <LinearLayout

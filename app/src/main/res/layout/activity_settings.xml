@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     The things decided once, off the camera screen.
+
+     Everything an operator touches during a take is a key on a rail, where it
+     can be reached without looking. What is here is what is set up beforehand,
+     plus the two things that have to live somewhere and do not belong over the
+     picture: the NDI attribution the licence requires, and the route that gets
+     the trace off the phone.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ink"
+    android:fitsSystemWindows="true"
+    android:clipToPadding="false"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings"
+            android:textColor="@color/sand"
+            android:textSize="20sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.08"
+            android:paddingBottom="18dp" />
+
+        <!-- The source name -->
+        <TextView style="@style/MantraLabel" android:text="@string/source_name" />
+        <TextView style="@style/MantraHint" android:text="@string/source_name_hint" />
+        <EditText
+            android:id="@+id/sourceName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="@color/sand"
+            android:textColorHint="@color/quiet"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:autofillHints="name"
+            android:background="@color/surface"
+            android:padding="10dp" />
+
+        <!-- Ten bit -->
+        <TextView style="@style/MantraLabel" android:text="@string/ten_bit" />
+        <TextView style="@style/MantraHint" android:text="@string/ten_bit_hint" />
+        <!--
+             SwitchCompat, and showText explicitly off.
+
+             A MaterialSwitch under this theme laid out its on/off captions,
+             which are null unless they are given, and took the whole settings
+             screen down with a NullPointerException inside StaticLayout before
+             a single pixel was drawn. The caption beside the switch is the
+             label; the switch does not need two more of its own.
+        -->
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/tenBit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/ten_bit_switch"
+            android:textColor="@color/sand"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:showText="false"
+            android:textOn="@string/on"
+            android:textOff="@string/off" />
+
+        <!-- Bitrate -->
+        <TextView style="@style/MantraLabel" android:text="@string/bitrate" />
+        <TextView style="@style/MantraHint" android:text="@string/bitrate_hint" />
+        <TextView
+            android:id="@+id/bitRateValue"
+            style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/bitRate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="48" />
+
+        <!-- Focus -->
+        <TextView style="@style/MantraLabel" android:text="@string/focus" />
+        <TextView style="@style/MantraHint" android:text="@string/focus_hint" />
+        <TextView android:id="@+id/holdValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/hold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+        <TextView android:id="@+id/rackValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/rack"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+
+        <!-- Peaking -->
+        <TextView style="@style/MantraLabel" android:text="@string/peaking" />
+        <TextView style="@style/MantraHint" android:text="@string/peaking_hint" />
+        <TextView android:id="@+id/peakValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/peak"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+        <RadioGroup
+            android:id="@+id/peakColour"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="6dp" />
+
+        <!-- The trace -->
+        <TextView style="@style/MantraLabel" android:text="@string/trace" />
+        <TextView style="@style/MantraHint" android:text="@string/trace_hint" />
+        <Button
+            android:id="@+id/exportTrace"
+            style="@style/MantraKey"
+            android:layout_width="match_parent"
+            android:text="@string/export_trace" />
+
+        <!-- What the licence requires, and where it belongs -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="14dp"
+            android:background="@color/slate" />
+
+        <TextView
+            android:id="@+id/about"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:lineSpacingMultiplier="1.35"
+            android:textColor="@color/quiet"
+            android:text="@string/ndi_mark" />
+
+        <TextView
+            android:id="@+id/version"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:paddingTop="8dp"
+            android:paddingBottom="20dp"
+            android:textColor="@color/quiet" />
+    </LinearLayout>
+</ScrollView>

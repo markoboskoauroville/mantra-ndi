@@ -70,6 +70,17 @@ class CaptureEngine(private val context: Context) {
 
     var cameraId: String = "0"
         private set
+
+    /**
+     * The physical lens inside the opened logical camera, or null for it.
+     *
+     * A Pixel's ultra wide is not a camera you can open; it is a lens the back
+     * camera owns. It is reached by naming it on each OutputConfiguration, so
+     * the whole session looks through that lens rather than through whichever
+     * one the logical camera's zoom logic felt like.
+     */
+    var physicalId: String? = null
+        private set
     private var targetFps: Int = 30
     private var activeCurve: LogCurves.Curve = LogCurves.Curve.REC709
     private var tenBitActive = false
@@ -109,6 +120,7 @@ class CaptureEngine(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun open(
         cameraId: String,
+        physicalId: String?,
         repeating: List<Surface>,
         deferred: List<Surface>,
         standard: List<Surface>,
@@ -118,11 +130,12 @@ class CaptureEngine(private val context: Context) {
     ) {
         close()
         this.cameraId = cameraId
+        this.physicalId = physicalId
         this.targetFps = fps
         this.activeCurve = curve
-        this.liveSurfaces = repeating.toMutableList()
-        this.standardSurfaces = standard
-        this.allSurfaces = repeating + deferred + standard
+        this.wantedRepeating = repeating
+        this.wantedDeferred = deferred
+        this.wantedStandard = standard
 
         val thread = HandlerThread("capture-engine").also { it.start() }
         this.thread = thread
@@ -141,7 +154,9 @@ class CaptureEngine(private val context: Context) {
                 override fun onOpened(camera: CameraDevice) {
                     device = camera
                     Trace.step("camera $cameraId opened")
-                    createSession(camera, wantTenBit)
+                    attempts = planAttempts(wantTenBit)
+                    attemptIndex = 0
+                    tryNextCombination(camera)
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
@@ -163,57 +178,138 @@ class CaptureEngine(private val context: Context) {
         }
     }
 
+    /** One combination to offer the camera, and what to call it in the trace. */
+    private data class Attempt(
+        val label: String,
+        val repeating: List<Surface>,
+        val deferred: List<Surface>,
+        val standard: List<Surface>,
+        val tenBit: Boolean
+    ) {
+        val all: List<Surface> get() = repeating + deferred + standard
+    }
+
+    private var wantedRepeating: List<Surface> = emptyList()
+    private var wantedDeferred: List<Surface> = emptyList()
+    private var wantedStandard: List<Surface> = emptyList()
+    private var attempts: List<Attempt> = emptyList()
+    private var attemptIndex = 0
+
     /**
-     * The ten bit session, with one fallback.
+     * Every combination worth offering, best first.
      *
-     * The RAW reader cannot carry a ten bit profile — Bayer data has no
-     * transfer function to describe — so it is configured at standard range
-     * beside the ten bit targets. Some phones refuse that mixture outright,
-     * and the camera then configures nothing at all rather than saying which
-     * target it disliked, so the retry drops the profile rather than the
-     * surface: eight bit with a snap is worth more than ten bit without one,
-     * and the trace says which was got.
+     * Camera2 does not say what it disliked. `onConfigureFailed` is one call
+     * with no argument, so a session carrying four targets that is refused
+     * tells you nothing about which of the four did it — and on the real Pixel
+     * 7 the answer was a reader for a mode nobody had switched on, which took
+     * the preview and the encoder down with it and left a black screen.
+     *
+     * The guaranteed combinations are also smaller than they look. Two
+     * processed streams plus RAW plus a preview is beyond what any level below
+     * LEVEL_3 promises, and a phone is free to refuse it for reasons of its
+     * own even above that.
+     *
+     * So the targets are given up in the order they can most afford to be
+     * lost: full NDI first, since HX is the mode that matters and the one the
+     * hardware encoder makes for free; then RAW, since a snap is worth less
+     * than a stream; then ten bit; and last of all the encoder, which leaves a
+     * camera that shows a picture and cannot send it. Each refusal is named in
+     * the trace, so the answer to "why is it 8-bit" is a fact rather than a
+     * guess, and what survived decides which keys are lit.
      */
-    private fun createSession(camera: CameraDevice, wantTenBit: Boolean) {
-        val profile = if (wantTenBit) capabilities?.bestTenBitProfile() else null
+    private fun planAttempts(wantTenBit: Boolean): List<Attempt> {
+        val encoder = wantedDeferred.take(1)
+        val full = wantedDeferred.drop(1)
+        val raw = wantedStandard
+
+        val shapes = buildList {
+            add(Triple("everything", wantedDeferred, raw))
+            if (full.isNotEmpty()) add(Triple("without full NDI", encoder, raw))
+            if (raw.isNotEmpty()) add(Triple("without full NDI or RAW", encoder, emptyList()))
+            add(Triple("preview and encoder only", encoder, emptyList()))
+            add(Triple("preview only", emptyList(), emptyList()))
+        }.distinctBy { (_, d, st) -> d.size to st.size }
+
+        return buildList {
+            for ((label, deferred, standard) in shapes) {
+                if (wantTenBit) {
+                    add(Attempt("$label, 10-bit", wantedRepeating, deferred, standard, true))
+                }
+                add(Attempt("$label, 8-bit", wantedRepeating, deferred, standard, false))
+            }
+        }
+    }
+
+    /**
+     * Offers the next combination, or gives up and says so.
+     *
+     * A camera that has refused a session is still open, so the next attempt
+     * costs a session rather than a reopen.
+     */
+    private fun tryNextCombination(camera: CameraDevice) {
+        val attempt = attempts.getOrNull(attemptIndex)
+        if (attempt == null) {
+            listener?.onError("No camera session this phone would accept")
+            Trace.refused("camera session", "every combination was refused")
+            return
+        }
+
+        liveSurfaces = attempt.repeating.toMutableList()
+        standardSurfaces = attempt.standard
+        allSurfaces = attempt.all
+        tenBitActive = attempt.tenBit
+
+        val profile = if (attempt.tenBit) capabilities?.bestTenBitProfile() else null
+        if (attempt.tenBit && profile == null) {
+            // Nothing to try here; the 8-bit twin is the next entry.
+            attemptIndex++
+            tryNextCombination(camera)
+            return
+        }
 
         val callback = object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(configured: CameraCaptureSession) {
                 session = configured
-                Trace.state("session configured, ${if (tenBitActive) "10-bit" else "8-bit"}")
+                Trace.state("session configured: ${attempt.label}")
+                if (attemptIndex > 0) {
+                    listener?.onError("Camera took ${attempt.label}")
+                }
                 startRepeating(camera)
                 listener?.onReady(cameraId, tenBitActive, activeCurve)
             }
 
             override fun onConfigureFailed(configured: CameraCaptureSession) {
-                if (tenBitActive) {
-                    Trace.refused("10-bit session", "configure failed, retrying in 8-bit")
-                    tenBitActive = false
-                    createSession(camera, wantTenBit = false)
-                } else {
-                    listener?.onError("Camera session could not be configured")
-                }
+                Trace.refused("session", "${attempt.label} was refused")
+                attemptIndex++
+                tryNextCombination(camera)
             }
         }
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && profile != null) {
-                tenBitActive = true
-                val mixable = capabilities?.canMixWithStandard(profile) ?: false
-                if (standardSurfaces.isNotEmpty() && !mixable) {
-                    Trace.state("this camera will not mix RAW with a 10-bit profile")
-                }
-                val configs = allSurfaces.map { surface ->
+                val configs = attempt.all.map { surface ->
                     OutputConfiguration(surface).apply {
                         // Every streaming target carries the profile, live or
-                        // not. Only RAW is left at standard range.
-                        if (surface !in standardSurfaces) dynamicRangeProfile = profile
+                        // not. Only RAW is left at standard range: Bayer data
+                        // has no transfer function to describe.
+                        if (surface !in attempt.standard) dynamicRangeProfile = profile
+                        applyPhysicalLens(this)
                     }
                 }
-                Trace.state(
-                    "session: ${allSurfaces.size - standardSurfaces.size} target(s) at 10-bit, " +
-                        "${standardSurfaces.size} at standard range"
+                val executor = Executor { command -> handler?.post(command) ?: command.run() }
+                camera.createCaptureSession(
+                    SessionConfiguration(
+                        SessionConfiguration.SESSION_REGULAR, configs, executor, callback
+                    )
                 )
+            } else if (physicalId != null &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+            ) {
+                // Naming a lens needs OutputConfigurations, so the 8-bit path
+                // takes the same route rather than the deprecated one.
+                val configs = attempt.all.map {
+                    OutputConfiguration(it).apply { applyPhysicalLens(this) }
+                }
                 val executor = Executor { command -> handler?.post(command) ?: command.run() }
                 camera.createCaptureSession(
                     SessionConfiguration(
@@ -221,14 +317,31 @@ class CaptureEngine(private val context: Context) {
                     )
                 )
             } else {
-                tenBitActive = false
                 @Suppress("DEPRECATION")
-                camera.createCaptureSession(allSurfaces, callback, handler)
+                camera.createCaptureSession(attempt.all, callback, handler)
             }
-        } catch (e: Exception) {
-            listener?.onError("Session setup failed: ${e.message}")
+        } catch (e: Throwable) {
+            Trace.fault("session ${attempt.label}", e)
+            attemptIndex++
+            tryNextCombination(camera)
         }
     }
+
+    /**
+     * Points one output at the chosen physical lens, if there is one.
+     *
+     * Silently nothing when the phone is too old or no lens was named, which
+     * is the ordinary case: the logical camera then does what it always did.
+     */
+    private fun applyPhysicalLens(config: OutputConfiguration) {
+        val physical = physicalId ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+        runCatching { config.setPhysicalCameraId(physical) }
+            .onFailure { Trace.refused("physical lens $physical", Trace.describe(it)) }
+    }
+
+    /** True once the session actually carries this target. */
+    fun isConfigured(surface: Surface?): Boolean = surface != null && surface in allSurfaces
 
     /**
      * Exposure is the camera's own, and deliberately so.

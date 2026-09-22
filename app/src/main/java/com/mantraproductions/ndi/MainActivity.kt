@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var pipeline: CameraPipeline
     private lateinit var slots: LutSlots
+    private lateinit var settings: Settings
     private lateinit var focus: FocusDirector
 
     private var lenses: List<CameraCatalogue.Lens> = emptyList()
@@ -71,6 +72,11 @@ class MainActivity : AppCompatActivity() {
 
     private val lensKeys = mutableListOf<RailButton>()
     private val slotKeys = mutableListOf<RailButton>()
+    private lateinit var pageKey: RailButton
+    private lateinit var gearKey: RailButton
+
+    /** Which five of the eleven slots the right rail is showing. */
+    private var slotPage = 0
     private lateinit var lightKey: RailButton
     private lateinit var focusKey: RailButton
     private lateinit var peakKey: RailButton
@@ -81,6 +87,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fullKey: RailButton
 
     private val ui = Handler(Looper.getMainLooper())
+
+    private companion object {
+        /** Five keys of slots, then the page key, then the gear. */
+        const val PAGE_SIZE = 5
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,8 +108,13 @@ class MainActivity : AppCompatActivity() {
 
         pipeline = CameraPipeline(this)
         slots = LutSlots(this)
+        settings = Settings(this)
         lenses = CameraCatalogue.lenses(this)
-        Trace.state("lenses: " + lenses.joinToString { it.label })
+        Trace.state(
+            "lenses: " + lenses.joinToString {
+                it.label + " [" + it.id + (it.physicalId?.let { p -> ":$p" } ?: "") + "]"
+            }
+        )
 
         focus = FocusDirector(
             controls = { if (pipeline.isRunning) pipeline.engine else null },
@@ -180,12 +196,51 @@ class MainActivity : AppCompatActivity() {
         fullKey = newKey("FULL") { toggleMode(CameraPipeline.Mode.FULL) }
             .also { railLeft.addView(it) }
 
-        for (i in 1..LutSlots.COUNT) {
-            val key = newKey(i.toString()) { chooseSlot(i) }
-            key.setOnLongClickListener { offerSlot(i); true }
+        // Five slots at a time, not eleven. Eleven keys down the side of a
+        // phone are each too small to hit with a thumb, and the right rail now
+        // also has to carry the way into settings. So the slots are paged, and
+        // the sixth key turns the page.
+        for (i in 1..PAGE_SIZE) {
+            val position = i
+            val key = newKey("") { chooseSlot(slotFor(position)) }
+            key.setOnLongClickListener { offerSlot(slotFor(position)); true }
             slotKeys.add(key)
             railRight.addView(key)
         }
+        pageKey = newKey("") { turnSlotPage() }.also {
+            it.glyph = RailButton.Glyph.DOWN
+            railRight.addView(it)
+        }
+        gearKey = newKey("") { openSettings() }.also {
+            it.glyph = RailButton.Glyph.GEAR
+            railRight.addView(it)
+        }
+    }
+
+    /** Which slot the key at [position] on the current page stands for, or 0. */
+    private fun slotFor(position: Int): Int {
+        val slot = slotPage * PAGE_SIZE + position
+        return if (slot in 1..LutSlots.COUNT) slot else 0
+    }
+
+    private val pageCount: Int
+        get() = (LutSlots.COUNT + PAGE_SIZE - 1) / PAGE_SIZE
+
+    /**
+     * The next five, wrapping at the end.
+     *
+     * The arrow points the way the next tap will go, which is down until there
+     * is nothing below and then back up to the start — so the key always says
+     * what it is about to do rather than where you happen to be.
+     */
+    private fun turnSlotPage() {
+        slotPage = (slotPage + 1) % pageCount
+        Trace.control("LUT page", slotPage + 1, "of $pageCount")
+        refreshKeys()
+    }
+
+    private fun openSettings() {
+        startActivity(Intent(this, SettingsActivity::class.java))
     }
 
     private fun newKey(label: String, onTap: () -> Unit): RailButton =
@@ -276,12 +331,18 @@ class MainActivity : AppCompatActivity() {
         applyPreviewTransform()
 
         val curve = LogCurves.Curve.entries[curveIndex]
+        focus.holdMs = settings.focusHoldMs
+        focus.rampMs = settings.focusRackMs
         pipeline.start(
             cameraId = lens.id,
+            physicalId = lens.physicalId,
             previewSurface = Surface(texture),
-            sourceName = Mechanism.sanitizeSourceName(Build.MODEL + " Camera"),
-            curve = curve
+            sourceName = Mechanism.sanitizeSourceName(settings.sourceName),
+            curve = curve,
+            wantTenBit = settings.wantTenBit,
+            bitRate = settings.bitRateMbps * 1_000_000
         )
+        applyLook()
         refreshKeys()
     }
 
@@ -394,7 +455,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun takeSnap() {
-        if (!pipeline.snap.armed) { say("This lens will not produce RAW"); return }
+        if (!pipeline.snapAvailable) { say("No RAW target in this session"); return }
         snapKey.state = RailButton.State.ARMED
         val rotation = ((pipeline.engine.sensorOrientation) % 360 + 360) % 360
         pipeline.snap.take(pipeline.engine, rotation) { path ->
@@ -429,6 +490,7 @@ class MainActivity : AppCompatActivity() {
     // --- the LUT slots -------------------------------------------------------
 
     private fun chooseSlot(index: Int) {
+        if (index == 0) return
         if (slots.cube(index) == null) { offerSlot(index); return }
         activeSlot = if (activeSlot == index) 0 else index
         applyLook()
@@ -437,6 +499,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun offerSlot(index: Int) {
+        if (index == 0) return
         val slot = slots.slot(index)
         if (!slot.loaded) { pickFile(index); return }
         AlertDialog.Builder(this)
@@ -495,6 +558,8 @@ class MainActivity : AppCompatActivity() {
             view = preview,
             lut = cube != null,
             peak = peaking,
+            peakColour = settings.peakColour,
+            sensitivity = settings.peakSensitivity,
             uploaded = cube
         )
         if (!ok) {
@@ -528,10 +593,8 @@ class MainActivity : AppCompatActivity() {
             if (focus.mode == FocusDirector.Mode.AUTO) RailButton.State.ON
             else RailButton.State.OFF
         peakKey.state = if (peaking) RailButton.State.ON else RailButton.State.OFF
-        snapKey.state = when {
-            !pipeline.snap.armed -> RailButton.State.DEAD
-            else -> RailButton.State.OFF
-        }
+        snapKey.state =
+            if (pipeline.snapAvailable) RailButton.State.OFF else RailButton.State.DEAD
         logKey.sub = LogCurves.Curve.entries[curveIndex].displayName.take(5)
         logKey.state =
             if (LogCurves.Curve.entries[curveIndex] == LogCurves.Curve.REC709)
@@ -539,22 +602,43 @@ class MainActivity : AppCompatActivity() {
             else RailButton.State.ON
         rotKey.sub = "${manualQuarterTurns * 90}"
         rotKey.state = if (manualQuarterTurns == 0) RailButton.State.OFF else RailButton.State.ON
-        hxKey.state =
-            if (pipeline.mode == CameraPipeline.Mode.HX) RailButton.State.ON
-            else RailButton.State.OFF
-        fullKey.state =
-            if (pipeline.mode == CameraPipeline.Mode.FULL) RailButton.State.ON
-            else RailButton.State.OFF
+        hxKey.state = when {
+            pipeline.mode == CameraPipeline.Mode.HX -> RailButton.State.ON
+            pipeline.isRunning && !pipeline.hxAvailable -> RailButton.State.DEAD
+            else -> RailButton.State.OFF
+        }
+        fullKey.state = when {
+            pipeline.mode == CameraPipeline.Mode.FULL -> RailButton.State.ON
+            pipeline.isRunning && !pipeline.fullAvailable -> RailButton.State.DEAD
+            else -> RailButton.State.OFF
+        }
 
         slotKeys.forEachIndexed { i, key ->
-            val slot = slots.slot(i + 1)
-            key.sub = slot.label?.take(4)
-            key.state = when {
-                !slot.loaded -> RailButton.State.OFF
-                activeSlot == i + 1 -> RailButton.State.ON
-                else -> RailButton.State.OFF
+            val index = slotFor(i + 1)
+            if (index == 0) {
+                // The last page of eleven is one slot and four blanks. Dark
+                // rather than hidden, so the rail keeps its shape.
+                key.label = ""
+                key.sub = null
+                key.state = RailButton.State.DEAD
+                return@forEachIndexed
             }
+            val slot = slots.slot(index)
+            key.label = index.toString()
+            key.sub = slot.label?.take(4)
+            key.state =
+                if (activeSlot == index) RailButton.State.ON else RailButton.State.OFF
         }
+
+        // The page key carries which page it is on, because a rail showing
+        // 6..10 and a rail showing 1..5 look identical at a glance otherwise.
+        val last = slotPage == pageCount - 1
+        pageKey.glyph = if (last) RailButton.Glyph.UP else RailButton.Glyph.DOWN
+        pageKey.sub = "${slotPage + 1}/$pageCount"
+        pageKey.state =
+            if (activeSlot > 0 && (activeSlot - 1) / PAGE_SIZE != slotPage) RailButton.State.ARMED
+            else RailButton.State.OFF
+        gearKey.state = RailButton.State.OFF
     }
 
     // --- the status line ------------------------------------------------------
@@ -574,12 +658,21 @@ class MainActivity : AppCompatActivity() {
             CameraPipeline.Mode.OFF -> "not sending"
         }
         val depth = if (pipeline.isTenBit) "10-bit" else "8-bit"
+        // "raw" on the full path, because that number is what was handed to
+        // the SDK and not what left the phone: full NDI compresses to SpeedHQ
+        // on its way out, so the wire carries a fraction of it. On HX the
+        // encoder's own output is measured and the number is the wire.
+        val rate = if (pipeline.mode == CameraPipeline.Mode.FULL) {
+            String.format("%.0f Mbit/s raw", mbps)
+        } else {
+            String.format("%.1f Mbit/s", mbps)
+        }
         status.text = if (pipeline.mode == CameraPipeline.Mode.OFF) {
             "$mode · $depth · $lastSaid"
         } else {
             String.format(
-                "%s · %s · %.1f fps · %.1f Mbit/s · %d watching",
-                mode, depth, fps, mbps, connections.coerceAtLeast(0)
+                "%s · %s · %.1f fps · %s · %d watching",
+                mode, depth, fps, rate, connections.coerceAtLeast(0)
             )
         }
     }
