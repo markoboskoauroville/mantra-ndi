@@ -638,7 +638,13 @@ object Mechanism {
      *        the other way
      */
     /**
-     * The largest 16:9 box that fits, and what is left over for the keys.
+     * The largest box of the picture's own shape that fits, and what is left
+     * over for the keys.
+     *
+     * The shape is a parameter rather than 16:9, because it is not always 16:9.
+     * An ultra wide is a physical sub-lens with a 4:3 sensor, and forcing its
+     * picture into a 16:9 box is the squeeze this app shipped for six versions.
+     * A lens that makes 4:3 is shown at 4:3; the rails simply get more room.
      *
      * This is the whole geometry of this camera in four numbers. A phone's
      * screen is about 20:9 and a broadcast picture is 16:9, so a margin exists
@@ -650,13 +656,23 @@ object Mechanism {
      *
      * @return width, height, and the margin left over across and down
      */
-    fun pictureBox(availableWidth: Int, availableHeight: Int): IntArray {
-        if (availableWidth <= 0 || availableHeight <= 0) return intArrayOf(0, 0, 0, 0)
+    fun pictureBox(
+        availableWidth: Int,
+        availableHeight: Int,
+        aspect: Double = 16.0 / 9.0
+    ): IntArray {
+        if (availableWidth <= 0 || availableHeight <= 0 || aspect <= 0.0) {
+            return intArrayOf(0, 0, 0, 0)
+        }
+        // Rounded, not truncated. Flooring loses up to a pixel on the derived
+        // side, which at phone sizes is nothing and at small sizes is a real
+        // change of shape: 320 wide at 2.39 floors to 133 and comes back as
+        // 2.406, which is a squeeze nobody asked for arriving from a cast.
         var width = availableWidth
-        var height = width * 9 / 16
+        var height = Math.round(width / aspect).toInt()
         if (height > availableHeight) {
             height = availableHeight
-            width = height * 16 / 9
+            width = Math.round(height * aspect).toInt()
         }
         return intArrayOf(width, height, availableWidth - width, availableHeight - height)
     }

@@ -586,11 +586,13 @@ class MechanismTest {
     fun pictureBoxFillsATallScreenByItsWidth() {
         // The same phone upright. Now the width limits it and the margin is
         // the band above and below where the rails go.
+        // 1080 * 9/16 is 607.5, which rounds to 608. The earlier expectation
+        // of 607 was the floor, and the floor is a shape nobody asked for.
         val box = Mechanism.pictureBox(1080, 2400)
         assertEquals(1080, box[0])
-        assertEquals(607, box[1])
+        assertEquals(608, box[1])
         assertEquals(0, box[2])
-        assertEquals(1793, box[3])
+        assertEquals(1792, box[3])
     }
 
     @Test
@@ -732,6 +734,35 @@ class MechanismTest {
                     assertTrue("not a quarter turn: $r", r % 90 == 0)
                     assertTrue("out of range $r", r < 360)
                 }
+            }
+        }
+    }
+
+    @Test
+    fun pictureBoxHoldsWhateverShapeThePictureIs() {
+        // A 4:3 lens on a landscape phone. The box must be 4:3, not 16:9 with
+        // the picture squeezed into it, which is the fault this app shipped
+        // for six versions.
+        val box = Mechanism.pictureBox(2169, 1006, 4.0 / 3.0)
+        assertEquals(1341, box[0])
+        assertEquals(1006, box[1])
+        assertEquals(1.333, box[0].toDouble() / box[1], 0.002)
+    }
+
+    @Test
+    fun pictureBoxNeverDistortsWhateverTheShape() {
+        // The invariant: the box that comes back has the shape that was asked
+        // for, whatever room it was given.
+        for (aspect in listOf(16.0 / 9.0, 4.0 / 3.0, 1.0, 9.0 / 16.0, 2.39)) {
+            for ((w, h) in listOf(2400 to 1080, 1080 to 2400, 1006 to 1006, 320 to 240)) {
+                val box = Mechanism.pictureBox(w, h, aspect)
+                if (box[0] == 0 || box[1] == 0) continue
+                assertEquals(
+                    "aspect $aspect in ${w}x$h",
+                    aspect, box[0].toDouble() / box[1], 0.01
+                )
+                assertTrue("overflowed across", box[0] <= w)
+                assertTrue("overflowed down", box[1] <= h)
             }
         }
     }

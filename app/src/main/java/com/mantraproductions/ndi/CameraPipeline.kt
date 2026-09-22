@@ -91,25 +91,66 @@ class CameraPipeline(private val context: Context) {
      * pixel count produces a session configured for the wrong thing, and the
      * picture arrives stretched with nothing to say why.
      */
-    fun previewSizeFor(cameraId: String): Size = try {
-        chooseSize(
-            (context.getSystemService(Context.CAMERA_SERVICE)
-                as android.hardware.camera2.CameraManager)
-                .getCameraCharacteristics(cameraId)
-        )
+    fun previewSizeFor(cameraId: String, physicalId: String? = null): Size = try {
+        chooseSize(characteristicsOf(cameraId, physicalId))
     } catch (t: Throwable) {
         Size(1920, 1080)
     }
 
+    /**
+     * The characteristics of the lens actually being looked through.
+     *
+     * **This is the stretch.** An ultra wide is a *physical* sub-lens inside
+     * the logical back camera, and it publishes its own list of output sizes —
+     * often 4:3 only, because that is the shape of its sensor. Asking the
+     * logical camera for its sizes and then handing one of them to a physical
+     * lens gets a frame the lens never offered, and what arrives is its own
+     * picture squeezed into the shape that was demanded. Nothing is refused
+     * and nothing is logged; the picture is simply the wrong shape, on one
+     * lens and not another, which is exactly how this has looked for six
+     * versions.
+     */
+    private fun characteristicsOf(cameraId: String, physicalId: String?): CameraCharacteristics {
+        val manager = context.getSystemService(Context.CAMERA_SERVICE)
+            as android.hardware.camera2.CameraManager
+        val wanted = physicalId ?: cameraId
+        return runCatching { manager.getCameraCharacteristics(wanted) }
+            .getOrElse { manager.getCameraCharacteristics(cameraId) }
+    }
+
+    /**
+     * The best size this lens actually offers, at the shape its sensor is.
+     *
+     * 1080p is preferred and 16:9 is preferred, but neither is imposed. A lens
+     * that only makes 4:3 gets a 4:3 frame, shown at 4:3 and sent at 4:3,
+     * because the alternative is a squeezed picture — and a squeezed picture
+     * is the fault this app has shipped most often.
+     */
     private fun chooseSize(characteristics: CameraCharacteristics): Size {
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             ?: return Size(1920, 1080)
         val sizes = map.getOutputSizes(ImageFormat.PRIVATE)?.toList().orEmpty()
-        return sizes.firstOrNull { it.width == 1920 && it.height == 1080 }
-            ?: sizes.filter { it.width <= 1920 && it.height <= 1080 }
-                .maxByOrNull { it.width.toLong() * it.height }
-            ?: sizes.minByOrNull { it.width.toLong() * it.height }
-            ?: Size(1920, 1080)
+        if (sizes.isEmpty()) return Size(1920, 1080)
+
+        fun aspect(s: Size) = s.width.toDouble() / s.height
+        val widescreen = sizes.filter { kotlin.math.abs(aspect(it) - 16.0 / 9.0) < 0.02 }
+
+        val chosen =
+            widescreen.firstOrNull { it.width == 1920 && it.height == 1080 }
+                ?: widescreen.filter { it.width <= 1920 }.maxByOrNull { it.width }
+                // No 16:9 at all on this lens: take its own shape rather than
+                // demanding one it does not have.
+                ?: sizes.filter { it.width <= 1920 && it.height <= 1920 }
+                    .maxByOrNull { it.width.toLong() * it.height }
+                ?: sizes.minByOrNull { it.width.toLong() * it.height }
+                ?: Size(1920, 1080)
+
+        Trace.state(
+            "lens offers ${sizes.size} sizes, ${widescreen.size} of them 16:9; " +
+                "chose ${chosen.width}x${chosen.height} " +
+                "(${String.format("%.3f", aspect(chosen))})"
+        )
+        return chosen
     }
 
     /**
@@ -131,9 +172,7 @@ class CameraPipeline(private val context: Context) {
         this.sourceName = sourceName
 
         val characteristics = try {
-            (context.getSystemService(Context.CAMERA_SERVICE)
-                as android.hardware.camera2.CameraManager)
-                .getCameraCharacteristics(cameraId)
+            characteristicsOf(cameraId, physicalId)
         } catch (t: Throwable) {
             listener?.onError("Could not read lens $cameraId")
             return false

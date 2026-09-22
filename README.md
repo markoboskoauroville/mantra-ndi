@@ -40,15 +40,15 @@ at 8 bits however good the sensor is.
 
 ## Where it is
 
-**Phase 1 and phase 3, built. v71.** Camera, 10-bit, log, LUTs, NDI HX and full
+**Phase 1 and phase 3, built. v72.** Camera, 10-bit, log, LUTs, NDI HX and full
 NDI, and the snap.
 
 | Phase | What | State |
 |---|---|---|
 | 0 | Logging: trace file, crash reports | built, v68 |
-| 1 | 10-bit camera, log curves, lenses, focus, light | built, v71 |
+| 1 | 10-bit camera, log curves, lenses, focus, light | built, v72 |
 | 2 | Recording | **not planned.** This camera streams; it does not record |
-| 3 | NDI HX and full NDI | built, v71 |
+| 3 | NDI HX and full NDI | built, v72 |
 | 4 | Remote control over NDI metadata | not started |
 | 5 | Monitor mode | not started |
 
@@ -117,6 +117,20 @@ all: **a TextureView sets its SurfaceTexture's default buffer size to the
 view's own pixel size** on every layout. Setting it once when the camera opens
 means the next layout quietly replaces it, and the camera then scales into a
 shape nobody asked for. It is re-asserted on every size change.
+
+And then the readout found the real one, which was never in the view at all.
+**An ultra wide is a *physical* sub-lens and it publishes its own list of
+output sizes** — often 4:3 only, because that is the shape of its sensor. The
+app was reading the sizes of the *logical* camera and handing one of them to a
+physical lens, which gets a frame that lens never offered: nothing refused,
+nothing logged, and the lens's own picture squeezed into the shape that was
+demanded. On one lens and not another, which is exactly how this looked for six
+versions.
+
+So the size comes from the lens actually being looked through, 16:9 is
+preferred but never imposed, and **the picture box takes the picture's shape
+rather than the picture being made to take the box's.** A 4:3 lens is shown at
+4:3 and sent at 4:3; the rails simply get more black to sit in.
 
 
 What leaves this app is the sensor's own landscape frame: the encoder's surface

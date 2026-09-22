@@ -332,7 +332,7 @@ class MainActivity : AppCompatActivity() {
         val lens = lenses.getOrNull(activeLens) ?: lenses.first()
 
         // The buffer size has to be right before the session is built.
-        bufferSize = pipeline.previewSizeFor(lens.id)
+        bufferSize = pipeline.previewSizeFor(lens.id, lens.physicalId)
         holdBufferSize()
         applyPreviewTransform()
 
@@ -427,9 +427,14 @@ class MainActivity : AppCompatActivity() {
         matrix.postScale(scale[0], scale[1], vw / 2f, vh / 2f)
         preview.setTransform(matrix)
 
+        val bufAspect = bufferSize.width.toDouble() / bufferSize.height
+        val viewAspect = vw.toDouble() / vh
+        val squeeze = viewAspect / bufAspect
         val line = "sensor $sensor · disp $displayDegrees · rot $applied" +
             (if (manualQuarterTurns != 0) " (auto $auto +${manualQuarterTurns * 90})" else "") +
-            " · buf ${bufferSize.width}x${bufferSize.height} · view ${vw}x$vh"
+            " · buf ${bufferSize.width}x${bufferSize.height} · view ${vw}x$vh" +
+            " · squeeze " + String.format("%.3f", squeeze) +
+            (if (kotlin.math.abs(squeeze - 1.0) > 0.01) "  STRETCHED" else "")
         geometry.text = line
         Trace.control("preview geometry", line, applied)
     }
@@ -450,6 +455,10 @@ class MainActivity : AppCompatActivity() {
      */
     private fun holdBufferSize() {
         preview.surfaceTexture?.setDefaultBufferSize(bufferSize.width, bufferSize.height)
+        // And the box takes the picture's shape, rather than the picture being
+        // made to take the box's.
+        findViewById<AspectFrame>(R.id.picture).aspect =
+            bufferSize.width.toDouble() / bufferSize.height
     }
 
     // --- the keys ------------------------------------------------------------
