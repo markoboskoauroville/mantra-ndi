@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var preview: TextureView
     private lateinit var focusSquare: FocusSquareView
+    private lateinit var zones: ControlZones
     private lateinit var status: TextView
     private lateinit var geometry: TextView
     private lateinit var stage: LinearLayout
@@ -71,6 +72,13 @@ class MainActivity : AppCompatActivity() {
     private var bufferSize = Size(1920, 1080)
     private var pendingSlot = 0
 
+    /** Manual exposure, and whether the invisible columns are listening. */
+    private var manual = false
+    private var zonesOn = false
+    private var iso = 400
+    private var shutterNs = 1_000_000_000L / 60
+    private var focusFraction = 0f
+
     private val lensKeys = mutableListOf<RailButton>()
     private val slotKeys = mutableListOf<RailButton>()
     private lateinit var pageKey: RailButton
@@ -84,6 +92,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var snapKey: RailButton
     private lateinit var logKey: RailButton
     private lateinit var rotKey: RailButton
+    private lateinit var manualKey: RailButton
+    private lateinit var ctrlKey: RailButton
     private lateinit var hxKey: RailButton
     private lateinit var fullKey: RailButton
 
@@ -102,6 +112,7 @@ class MainActivity : AppCompatActivity() {
 
         preview = findViewById(R.id.preview)
         focusSquare = findViewById(R.id.focusSquare)
+        zones = findViewById(R.id.zones)
         status = findViewById(R.id.status)
         geometry = findViewById(R.id.geometry)
         stage = findViewById(R.id.stage)
@@ -141,6 +152,9 @@ class MainActivity : AppCompatActivity() {
         }
         focusSquare.onTapped = { focus.focusHereAndHold() }
 
+        zones.onDrag = { index, delta -> nudge(index, delta) }
+        zones.onGrab = { refreshZones() }
+
         // The trace is the only instrument that reaches a phone with no cable,
         // so it is always one long press away rather than behind a menu.
         status.setOnLongClickListener { exportTrace(); true }
@@ -151,15 +165,42 @@ class MainActivity : AppCompatActivity() {
                     bufferSize = size
                     holdBufferSize()
                     applyPreviewTransform()
-                    refreshKeys()
                     say("${size.width}x${size.height} ${if (tenBit) "10-bit" else "8-bit"} $codec")
+                    if (restoreMode != CameraPipeline.Mode.OFF) {
+                        val want = restoreMode
+                        restoreMode = CameraPipeline.Mode.OFF
+                        pipeline.setMode(want)
+                    }
+                    refreshKeys()
                 }
             }
             override fun onError(message: String) {
                 ui.post { say(message); Trace.refused("pipeline", message) }
             }
             override fun onRate(fps: Double, megabitsPerSecond: Double, connections: Int) {
-                ui.post { showRate(fps, megabitsPerSecond, connections) }
+                ui.post { showRate(fps, megabitsPerSecond, connections); refreshZones() }
+            }
+        }
+
+        // THE STRETCH.
+        //
+        // `setTransform` is in the view's own coordinates and it does not
+        // follow the view when the view changes size. The transform was being
+        // computed on surface-size changes only — and a TextureView inside a
+        // weighted LinearLayout is measured more than once before it settles,
+        // so the matrix could be worked out against one width and left applied
+        // to another. Scaled about the centre, that is exactly a squeeze, and
+        // it explains the thing that made no sense: the NDI output was normal
+        // while the preview was not, from the same buffer, with the readout
+        // reporting squeeze 1.000 — because by the time it printed, the numbers
+        // were right and the matrix was old.
+        //
+        // The transform is now recomputed whenever the view is laid out, which
+        // is the only moment that can ever invalidate it.
+        preview.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
+            if (r - l != or_ - ol || b - t != ob - ot) {
+                holdBufferSize()
+                applyPreviewTransform()
             }
         }
 
@@ -198,6 +239,8 @@ class MainActivity : AppCompatActivity() {
         snapKey = newKey("SNAP") { takeSnap() }.also { railLeft.addView(it) }
         logKey = newKey("LOG") { nextCurve() }.also { railLeft.addView(it) }
         rotKey = newKey("ROT") { turnPreview() }.also { railLeft.addView(it) }
+        manualKey = newKey("M") { toggleManual() }.also { railLeft.addView(it) }
+        ctrlKey = newKey("CTRL") { toggleZones() }.also { railLeft.addView(it) }
         hxKey = newKey("HX") { toggleMode(CameraPipeline.Mode.HX) }.also { railLeft.addView(it) }
         fullKey = newKey("FULL") { toggleMode(CameraPipeline.Mode.FULL) }
             .also { railLeft.addView(it) }
@@ -463,14 +506,28 @@ class MainActivity : AppCompatActivity() {
 
     // --- the keys ------------------------------------------------------------
 
+    /**
+     * A new lens, without losing the stream.
+     *
+     * Changing lens means a new capture session, and a new session used to mean
+     * the NDI source closed and the mode went back to off — so every lens
+     * change was a dropped source at the far end and a key he had to press
+     * again. The mode is remembered across the rebuild and put back the moment
+     * the camera is ready, and the NDI source itself is kept open, so a
+     * receiver sees a short freeze rather than a source that vanished.
+     */
     private fun chooseLens(index: Int) {
         if (index >= lenses.size) return
         if (index == activeLens && pipeline.isRunning) return
         activeLens = index
-        Trace.control("lens", index + 1, lenses[index].label)
-        pipeline.stop()
+        restoreMode = pipeline.mode
+        Trace.control("lens", index + 1, lenses[index].label + ", keeping " + restoreMode)
+        pipeline.stop(keepSource = restoreMode != CameraPipeline.Mode.OFF)
         openCamera()
     }
+
+    /** The mode to put back once the new lens is live. */
+    private var restoreMode: CameraPipeline.Mode = CameraPipeline.Mode.OFF
 
     private fun toggleLight() {
         val on = !pipeline.engine.torchOn
@@ -510,6 +567,108 @@ class MainActivity : AppCompatActivity() {
         val ok = pipeline.setLogCurve(curve)
         say(if (ok) "${curve.vendor} ${curve.displayName}" else "${curve.displayName} refused")
         refreshKeys()
+    }
+
+    /**
+     * Manual exposure, or the phone's own.
+     *
+     * Leaving auto starts from the values auto had already settled on rather
+     * than from a number written here, so the picture does not jump the moment
+     * the key is pressed — which is the whole reason an operator distrusts a
+     * manual switch.
+     */
+    private fun toggleManual() {
+        manual = !manual
+        if (manual) {
+            iso = pipeline.engine.lastIso ?: iso
+            shutterNs = pipeline.engine.lastExposureNs ?: shutterNs
+            pipeline.engine.setManualExposure(iso, shutterNs)
+        } else {
+            pipeline.engine.setAutoExposure()
+        }
+        refreshZones()
+        refreshKeys()
+    }
+
+    /**
+     * The columns on, and the focus box off.
+     *
+     * Exclusive on purpose: a tap on the picture that could mean "focus here"
+     * and could mean "start changing ISO" is a tap that means neither.
+     */
+    private fun toggleZones() {
+        zonesOn = !zonesOn
+        zones.visibility = if (zonesOn) View.VISIBLE else View.GONE
+        focusSquare.visibility = if (zonesOn) View.GONE else View.VISIBLE
+        Trace.control("controls", if (zonesOn) "on" else "off",
+            if (zonesOn) "focus box put away" else "focus box back")
+        refreshZones()
+        refreshKeys()
+    }
+
+    /**
+     * One column moved. Up is more of everything.
+     *
+     * ISO and shutter move in stops rather than in units, because a stop is
+     * what an operator thinks in and a linear sweep across 50..12800 spends
+     * nine tenths of its travel in a range nobody uses.
+     */
+    private fun nudge(index: Int, delta: Float) {
+        val engine = pipeline.engine
+        when (index) {
+            0 -> {
+                if (!manual) return
+                val range = engine.isoRange() ?: return
+                iso = (iso * Math.pow(2.0, (delta * 3f).toDouble())).toInt()
+                    .coerceIn(range.lower, range.upper)
+                engine.setManualExposure(iso, shutterNs)
+            }
+            1 -> {
+                if (!manual) return
+                val range = engine.exposureRange() ?: return
+                shutterNs = (shutterNs * Math.pow(2.0, (delta * 3f).toDouble())).toLong()
+                    .coerceIn(range.lower, range.upper)
+                engine.setManualExposure(iso, shutterNs)
+            }
+            2 -> Unit    // the iris is fixed on a phone; the column says so
+            3 -> {
+                focusFraction = (focusFraction + delta * 0.8f).coerceIn(0f, 1f)
+                if (focus.mode == FocusDirector.Mode.AUTO) {
+                    focus.setMode(FocusDirector.Mode.MANUAL)
+                    refreshKeys()
+                }
+                engine.setManualFocus(focusFraction)
+            }
+        }
+        refreshZones()
+    }
+
+    /** What the four columns currently say. */
+    private fun refreshZones() {
+        val engine = pipeline.engine
+        val apertures = engine.apertures()
+        val liveIso = engine.lastIso ?: iso
+        val liveShutter = engine.lastExposureNs ?: shutterNs
+        val closest = engine.minimumFocusDistance()
+        val metres = if (closest > 0f && focusFraction > 0f) {
+            val dioptres = closest * focusFraction
+            if (dioptres > 0f) String.format("%.2fm", 1f / dioptres) else "∞"
+        } else "∞"
+
+        zones.zones = listOf(
+            ControlZones.Zone("ISO", liveIso.toString(), manual),
+            ControlZones.Zone("SHUTTER", Mechanism.formatShutter(liveShutter), manual),
+            ControlZones.Zone(
+                "IRIS",
+                apertures.firstOrNull()?.let { String.format("f/%.2f", it) } ?: "—",
+                apertures.size > 1
+            ),
+            ControlZones.Zone(
+                "FOCUS",
+                if (focus.mode == FocusDirector.Mode.AUTO) "AUTO" else metres,
+                true
+            )
+        )
     }
 
     private fun turnPreview() {
@@ -592,6 +751,9 @@ class MainActivity : AppCompatActivity() {
      */
     private fun applyLook() {
         val cube = if (activeSlot > 0) slots.cube(activeSlot) else null
+        // The monitor gets the cube exactly; the wire gets as much of it as a
+        // tone curve can carry, which is its tone and its colour balance.
+        if (pipeline.isRunning) pipeline.engine.setWireLut(cube)
         val ok = PreviewEffects.apply(
             view = preview,
             lut = cube != null,
@@ -638,6 +800,9 @@ class MainActivity : AppCompatActivity() {
             if (LogCurves.Curve.entries[curveIndex] == LogCurves.Curve.REC709)
                 RailButton.State.OFF
             else RailButton.State.ON
+        manualKey.state = if (manual) RailButton.State.ON else RailButton.State.OFF
+        manualKey.sub = if (manual) "MAN" else "AUTO"
+        ctrlKey.state = if (zonesOn) RailButton.State.ON else RailButton.State.OFF
         rotKey.sub = "${manualQuarterTurns * 90}"
         rotKey.state = if (manualQuarterTurns == 0) RailButton.State.OFF else RailButton.State.ON
         hxKey.state = when {

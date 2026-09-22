@@ -45,6 +45,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
+            <!-- Over the picture, under nothing. Invisible until touched. -->
+            <com.mantraproductions.ndi.ControlZones
+                android:id="@+id/zones"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
             <com.mantraproductions.ndi.FocusSquareView
                 android:id="@+id/focusSquare"
                 android:layout_width="match_parent"

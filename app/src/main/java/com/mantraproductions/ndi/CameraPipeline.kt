@@ -267,8 +267,24 @@ class CameraPipeline(private val context: Context) {
         return true
     }
 
-    fun stop() {
-        setMode(Mode.OFF)
+    /**
+     * @param keepSource true while only the camera is being rebuilt — a lens
+     *   change. The NDI source stays open and advertised, so a receiver sees a
+     *   freeze rather than a source that disappeared and came back, which every
+     *   mixer treats as a lost input.
+     */
+    fun stop(keepSource: Boolean = false) {
+        if (keepSource) {
+            // Leave the targets, keep the sender. The encoder is stopped below
+            // and its parameter sets are re-sent when the mode is restored.
+            val surface = encoderSurface
+            if (surface != null) engine.setTargetLive(surface, false)
+            fullReader?.surface?.let { engine.setTargetLive(it, false) }
+            mode = Mode.OFF
+            Trace.state("lens change: NDI source kept open")
+        } else {
+            setMode(Mode.OFF)
+        }
         engine.close()
         encoder?.stop()
         encoder = null

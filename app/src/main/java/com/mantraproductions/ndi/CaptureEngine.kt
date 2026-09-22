@@ -533,18 +533,44 @@ class CaptureEngine(private val context: Context) {
         return ok
     }
 
+    /**
+     * The LUT that goes down the wire, or none.
+     *
+     * Composed into the tone curve rather than drawn, because the tone mapper
+     * is the only thing before the encoder that an app can reach. Setting null
+     * puts the plain log curve back.
+     */
+    fun setWireLut(cube: CubeLut?): Boolean {
+        wireLut = cube
+        val request = builder ?: return false
+        applyToneCurve(request)
+        val ok = apply()
+        Trace.control("LUT on the wire", cube?.title ?: "none", if (ok) "applied" else "refused")
+        return ok
+    }
+
+    private var wireLut: CubeLut? = null
+
     val logCurve: LogCurves.Curve get() = activeCurve
 
     private fun applyToneCurve(request: CaptureRequest.Builder) {
         val caps = capabilities ?: return
-        if (activeCurve == LogCurves.Curve.REC709 || !caps.supportsToneCurve) {
+        val cube = wireLut
+        if (!caps.supportsToneCurve ||
+            (activeCurve == LogCurves.Curve.REC709 && cube == null)
+        ) {
             request.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_FAST)
             return
         }
         val points = caps.maxCurvePoints.coerceIn(2, 128)
-        val samples = Mechanism.toneCurvePoints(activeCurve, points)
         request.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE)
-        request.set(CaptureRequest.TONEMAP_CURVE, TonemapCurve(samples, samples, samples))
+        if (cube == null) {
+            val samples = Mechanism.toneCurvePoints(activeCurve, points)
+            request.set(CaptureRequest.TONEMAP_CURVE, TonemapCurve(samples, samples, samples))
+        } else {
+            val (red, green, blue) = Mechanism.toneCurveThroughCube(activeCurve, cube, points)
+            request.set(CaptureRequest.TONEMAP_CURVE, TonemapCurve(red, green, blue))
+        }
     }
 
     /**
@@ -704,6 +730,87 @@ class CaptureEngine(private val context: Context) {
             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
         )
         return apply()
+    }
+
+    // --- manual exposure ------------------------------------------------------
+
+    var manualExposure: Boolean = false
+        private set
+
+    /**
+     * ISO and shutter together, clamped to what this sensor accepts.
+     *
+     * Clamped rather than trusted: a repeating request carrying a value outside
+     * the reported range is not refused politely — the camera stops delivering
+     * frames and the preview sits frozen while the app carries on as though
+     * nothing happened. Asking the characteristics costs nothing and makes that
+     * impossible.
+     *
+     * The shutter is also held at or under the frame duration, because a
+     * shutter longer than a frame cannot be honoured at the frame rate and the
+     * camera resolves the contradiction by dropping the rate — which on a live
+     * stream is worse than a dark picture.
+     */
+    fun setManualExposure(iso: Int, shutterNs: Long): Boolean {
+        val request = builder ?: return false
+        manualExposure = true
+
+        val frameDuration = Mechanism.frameDurationForFps(targetFps)
+        val sensitivity = isoRange()?.let { iso.coerceIn(it.lower, it.upper) } ?: iso
+        val exposure = exposureRange()?.let { shutterNs.coerceIn(it.lower, it.upper) } ?: shutterNs
+        val safe = minOf(exposure, frameDuration).coerceAtLeast(1_000L)
+
+        request.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+        request.set(CaptureRequest.SENSOR_SENSITIVITY, sensitivity)
+        request.set(CaptureRequest.SENSOR_EXPOSURE_TIME, safe)
+        request.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDuration)
+        val ok = apply()
+        Trace.control("exposure", "iso $iso, ${Mechanism.formatShutter(shutterNs)}",
+            if (ok) "iso $sensitivity, ${Mechanism.formatShutter(safe)}" else "refused")
+        return ok
+    }
+
+    fun setAutoExposure(): Boolean {
+        val request = builder ?: return false
+        manualExposure = false
+        request.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+        request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(targetFps, targetFps))
+        val ok = apply()
+        Trace.control("exposure", "auto", if (ok) "auto" else "refused")
+        return ok
+    }
+
+    fun isoRange(): Range<Int>? =
+        lensCharacteristics?.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+
+    fun exposureRange(): Range<Long>? =
+        lensCharacteristics?.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+
+    /**
+     * Every aperture this lens has.
+     *
+     * Usually exactly one. A phone lens has a fixed iris — the blades cost room
+     * a phone does not have — so this is reported rather than driven, and the
+     * key that would drive it says what it is instead of pretending to move.
+     */
+    fun apertures(): FloatArray =
+        lensCharacteristics?.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
+            ?: FloatArray(0)
+
+    fun setAperture(f: Float): Boolean {
+        val available = apertures()
+        if (available.size < 2) return false
+        val request = builder ?: return false
+        val nearest = available.minByOrNull { kotlin.math.abs(it - f) } ?: return false
+        request.set(CaptureRequest.LENS_APERTURE, nearest)
+        return apply()
+    }
+
+    /** Focus as a fraction of this lens's travel, 0 at infinity, 1 at closest. */
+    fun setManualFocus(fraction: Float): Boolean {
+        val closest = minimumFocusDistance()
+        if (closest <= 0f) return false
+        return setFocusDistance(closest * fraction.coerceIn(0f, 1f))
     }
 
     // --- the snap -------------------------------------------------------------

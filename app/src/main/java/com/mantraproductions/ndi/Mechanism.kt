@@ -1149,6 +1149,52 @@ object Mechanism {
     }
 
     /**
+     * The log curve with a LUT composed onto it, as three channel curves.
+     *
+     * **This is how a LUT reaches the wire at all.** The stream is whatever the
+     * phone's tone mapper produced, and the tone mapper is the only thing in
+     * the pipeline before the encoder that an app can change — a shader cannot
+     * be put there, because a ten bit dynamic range profile is only legal
+     * against a PRIVATE or P010 surface and a GL texture is neither.
+     *
+     * `TonemapCurve` takes a separate curve per channel, so the cube is walked
+     * along its neutral axis and each channel's answer becomes that channel's
+     * curve. What that carries is the LUT's **tone and its colour balance** —
+     * which is most of what a display LUT does, and all of what makes a log
+     * picture look wrong until it is applied.
+     *
+     * What it cannot carry is the rest of the cube: how the LUT treats a
+     * saturated red differently from a grey of the same brightness. That is
+     * three-dimensional by nature and a per-channel curve has one dimension.
+     * So the monitor shows the cube exactly and the wire carries as much of it
+     * as a tone curve can hold, and the app says so rather than pretending.
+     *
+     * @return red, green and blue, each as TonemapCurve's (in, out) pairs
+     */
+    fun toneCurveThroughCube(
+        curve: LogCurves.Curve,
+        cube: CubeLut?,
+        points: Int
+    ): Array<FloatArray> {
+        val n = points.coerceIn(2, 128)
+        val red = FloatArray(n * 2)
+        val green = FloatArray(n * 2)
+        val blue = FloatArray(n * 2)
+        for (i in 0 until n) {
+            val input = i.toFloat() / (n - 1)
+            val linear = LogCurves.decode(LogCurves.Curve.REC709, input.toDouble())
+                .coerceAtLeast(0.0)
+            val logged = LogCurves.encode(curve, linear).coerceIn(0.0, 1.0).toFloat()
+            val out = cube?.sample(logged, logged, logged)
+                ?: floatArrayOf(logged, logged, logged)
+            red[i * 2] = input; red[i * 2 + 1] = out[0].coerceIn(0f, 1f)
+            green[i * 2] = input; green[i * 2 + 1] = out[1].coerceIn(0f, 1f)
+            blue[i * 2] = input; blue[i * 2 + 1] = out[2].coerceIn(0f, 1f)
+        }
+        return arrayOf(red, green, blue)
+    }
+
+    /**
      * Focus as a fraction of the lens travel, stepped by a fixed amount.
      * The plus and minus at the ends of the fader exist because focus is the
      * one control where a finger is never precise enough.
