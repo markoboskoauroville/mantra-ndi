@@ -1,133 +1,87 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Phase zero: the state panel. No camera on this screen at all.
+<!--
+     One layout for both ways up.
 
-     The shape is already the phase 1 shape. `picture` is the full-bleed layer
-     the preview will live in, running edge to edge behind the system bars
-     because an image may go there. `content` is the layer that takes the
-     insets, because nothing a finger presses and nothing a person reads may
-     sit under the status bar or the navigation buttons (system-bars.md).
-     Setting that up now means phase 1 inherits it rather than rediscovering
-     it, which is how the faders ended up under the bars in the last build. -->
+     The stage is a LinearLayout whose orientation the activity sets from the
+     phone's rotation: across in landscape, so the rails are the left and right
+     margins of the picture; down in portrait, so they are the bands above and
+     below it. The keys, their order and their meaning never move, which is the
+     point — a hand that has learned this rail keeps it when the phone turns.
+
+     There is no layout-land twin on purpose. Two files is two places for the
+     ids to drift apart, and the last build lost a day to exactly that.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ink">
-
-    <FrameLayout
-        android:id="@+id/picture"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+    android:background="@android:color/black"
+    android:keepScreenOn="true">
 
     <LinearLayout
-        android:id="@+id/content"
+        android:id="@+id/stage"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:paddingHorizontal="12dp">
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:baselineAligned="false">
 
-        <!-- The row has two ends and a middle: the name at one edge, the
-             version at the other. design-language.md §10. -->
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingVertical="8dp">
+            android:id="@+id/railLeft"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="3dp" />
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="MANTRA NDI"
-                android:textColor="@color/amber"
-                android:textSize="15sp"
-                android:letterSpacing="0.22" />
-
-            <TextView
-                android:id="@+id/version"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="monospace"
-                android:textColor="@color/quiet"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@color/surface"
-            android:fontFamily="monospace"
-            android:padding="8dp"
-            android:textColor="@color/sand"
-            android:textSize="11sp"
-            android:lineSpacingMultiplier="1.15" />
-
-        <ScrollView
-            android:id="@+id/scroll"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
+        <com.mantraproductions.ndi.AspectFrame
+            android:id="@+id/picture"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:layout_marginTop="8dp"
-            android:background="@color/surface"
-            android:scrollbars="vertical">
+            android:layout_gravity="center">
+
+            <TextureView
+                android:id="@+id/preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <com.mantraproductions.ndi.FocusSquareView
+                android:id="@+id/focusSquare"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
 
             <TextView
-                android:id="@+id/trace"
+                android:id="@+id/status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_gravity="top"
+                android:padding="4dp"
                 android:fontFamily="monospace"
-                android:padding="8dp"
-                android:textColor="@color/sand"
-                android:textSize="10sp"
-                android:textIsSelectable="true" />
-        </ScrollView>
-
-        <!-- Two rows of two rather than one row of four. A word given a
-             quarter of a 390px phone clips, and a clipped label is a control
-             nobody can read. design-language.md, STACK IT. -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="6dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/throwException"
-                style="@style/MantraKey"
-                android:text="Throw exception" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/throwError"
-                style="@style/MantraKey"
-                android:text="Throw error" />
-        </LinearLayout>
+                android:textSize="9sp"
+                android:textColor="#9AA0A6"
+                android:shadowColor="#000000"
+                android:shadowRadius="3"
+                android:text="@string/starting" />
+            <!-- The NDI licence requires this in the interface, not only in
+                 the README. Quiet and small, at the foot of the picture where
+                 it costs no room a control could have used. -->
+            <TextView
+                android:id="@+id/ndiMark"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:padding="3dp"
+                android:fontFamily="monospace"
+                android:textSize="7sp"
+                android:textColor="#55606A"
+                android:text="@string/ndi_mark" />
+        </com.mantraproductions.ndi.AspectFrame>
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/export"
-                style="@style/MantraKey"
-                android:text="Export trace" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/copyPath"
-                style="@style/MantraKey"
-                android:text="Copy path" />
-        </LinearLayout>
-
-        <!-- The attribution the NDI licence requires, and scripts/verify.py
-             fails the build if it stops being here. -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="6dp"
-            android:textColor="@color/quiet"
-            android:textSize="9sp"
-            android:text="Powered by NDI. NDI is a registered trademark of Vizrt NDI AB.  ndi.video" />
+            android:id="@+id/railRight"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="3dp" />
     </LinearLayout>
 </FrameLayout>

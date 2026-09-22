@@ -1,15 +1,25 @@
 // JNI bridge between NdiSender.kt and the NDI Advanced SDK for Android.
 //
-// Written against the SDK's own NDIlib_Send_H264 example, so the frame
-// construction here follows the documented pattern rather than guesswork:
-//   - the compressed payload is prefixed by an NDIlib_compressed_packet_t
-//     header, delivered through a scatter-gather list so nothing is copied
-//   - the video frame's FourCC selects the stream variant: *_highest_bandwidth
+// Lifted from mantra-ndi's own bridge, which is the one part of that app that
+// was never in doubt, and extended with the second way out: this app can send
+// either compressed packets (NDI HX) or whole frames the SDK compresses itself
+// (full NDI, what the documentation calls High Bandwidth).
+//
+// The compressed path follows the SDK's NDIlib_Send_H264 example rather than
+// guesswork:
+//   - the payload is prefixed by an NDIlib_compressed_packet_t header and
+//     delivered through a scatter-gather list, so nothing is copied
+//   - the video frame's FourCC picks the stream variant: *_highest_bandwidth
 //     for the full stream, *_lowest_bandwidth for NDI's required preview stream
 //   - packet.version is sizeof(NDIlib_compressed_packet_t)
 //
+// The full path hands NDIlib_send_send_video_v2 an RGBA frame straight out of
+// the ImageReader's direct buffer. No copy happens here either: the address is
+// the one Android mapped, and the call is synchronous, so the buffer is still
+// alive when the SDK has finished reading it.
+//
 // The SDK itself is licensed and confidential, so it is never committed here.
-// See README for how it is injected at build time.
+// See README.md for how it is injected at build time.
 
 #include <jni.h>
 #include <cstring>
@@ -30,50 +40,20 @@ namespace {
 
 NDIlib_send_instance_t g_send_instance = nullptr;
 
-// Guards g_send_instance. The Advanced SDK stops a sender after 30 minutes
-// without a registered vendor ID, so NdiSendService recreates it periodically
-// on the same source name. This mutex keeps that safe against RootEncoder's
-// encoder threads sending frames at the same moment.
+// Guards g_send_instance against the capture thread sending a frame at the
+// moment the service is tearing the sender down — which is exactly what a turn
+// of the phone does, since a rotation rebuilds the pipeline underneath.
 std::mutex g_send_mutex;
 
-// SPS/PPS (and VPS for H.265), attached to keyframes as the packet's extra data.
+// SPS/PPS (and VPS for H.265), attached to keyframes as the packet's extra
+// data. A receiver that joins mid-stream has no other way to learn the format.
 std::vector<uint8_t> g_video_extra;
 std::mutex g_extra_mutex;
-
-/**
- * The timecode this sender stamps onto every frame.
- *
- * NDI carries a timecode on each frame in 100ns units, and a receiver reads it
- * straight off the frame it just decoded. That is why it beats sending the
- * clock alongside the picture: the number and the image arrive as one object,
- * so there is nothing left to line up afterwards.
- *
- * Two values live here. The anchor is a real timecode in 100ns units, and
- * anchor_pts is the encoder timestamp that was current when it was set. Every
- * later frame is stamped at the anchor plus however far its own pts has moved,
- * so the stamp advances with the video rather than with whenever the clock
- * happened to be sampled.
- *
- * Zero means nothing has been set, and the encoder timestamp is reported as
- * before, which is the honest answer for a source following no clock.
- */
-std::mutex g_timecode_mutex;
-int64_t g_timecode_anchor = 0;
-int64_t g_timecode_anchor_pts = 0;
-
-static int64_t stamp_for(int64_t pts_100ns) {
-    std::lock_guard<std::mutex> lock(g_timecode_mutex);
-    if (g_timecode_anchor == 0) return pts_100ns;
-    return g_timecode_anchor + (pts_100ns - g_timecode_anchor_pts);
-}
 
 int g_width = 1920;
 int g_height = 1080;
 int g_fps_n = 30;
 int g_fps_d = 1;
-
-int g_sample_rate = 48000;
-int g_channels = 1;
 
 std::vector<uint8_t> toVector(JNIEnv* env, jbyteArray array) {
     if (array == nullptr) return {};
@@ -88,13 +68,18 @@ std::vector<uint8_t> toVector(JNIEnv* env, jbyteArray array) {
 } // namespace
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeCreate(JNIEnv* env, jobject, jstring sourceName) {
+Java_com_mantraproductions_ndi_NdiSender_nativeCreate(
+        JNIEnv* env, jobject, jstring sourceName) {
     const char* name = env->GetStringUTFChars(sourceName, nullptr);
 
     NDIlib_send_create_t create_desc;
     create_desc.p_ndi_name = name;
     create_desc.p_groups = nullptr;
-    create_desc.clock_video = false; // pacing comes from the encoder timestamps
+    // Pacing comes from the frames themselves. A screen does not tick: it can
+    // sit still for a minute and then change twice in one frame period, and
+    // letting the SDK clock the output would hold frames back waiting for a
+    // schedule the screen is not keeping.
+    create_desc.clock_video = false;
     create_desc.clock_audio = false;
 
     bool first_init;
@@ -165,15 +150,22 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSetVideoInfo(
     LOGI("Cached %zu bytes of parameter sets", g_video_extra.size());
 }
 
+/**
+ * Clears the cached parameter sets.
+ *
+ * Called when the pipeline is rebuilt at a new size. SPS and PPS carry the
+ * picture dimensions, so the old pair describes a frame that no longer exists;
+ * a receiver that joined on the strength of them would decode the new stream
+ * into the old geometry and show a torn picture rather than an error.
+ */
 extern "C" JNIEXPORT void JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeSetAudioInfo(
-        JNIEnv*, jobject, jint sampleRate, jboolean isStereo) {
-    g_sample_rate = sampleRate;
-    g_channels = isStereo ? 2 : 1;
+Java_com_mantraproductions_ndi_NdiSender_nativeClearVideoInfo(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(g_extra_mutex);
+    g_video_extra.clear();
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeSendVideo(
+Java_com_mantraproductions_ndi_NdiSender_nativeSendCompressed(
         JNIEnv* env, jobject,
         jbyteArray data, jboolean isKeyframe, jlong ptsUs,
         jboolean isHevc, jboolean isPreviewStream) {
@@ -190,18 +182,15 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendVideo(
 
     // NDI timecodes are in 100ns units; MediaCodec gives microseconds.
     const int64_t pts = static_cast<int64_t>(ptsUs) * 10;
-    const int64_t timecode = stamp_for(pts);
 
     NDIlib_compressed_packet_t packet = {};
     packet.version = sizeof(NDIlib_compressed_packet_t);
     packet.fourCC = isHevc ? NDIlib_compressed_FourCC_type_HEVC
-                            : NDIlib_compressed_FourCC_type_H264;
-    // The packet keeps encoder time; only the frame carries the timecode,
-    // because a decoder needs monotonic pts and a person needs the clock.
+                           : NDIlib_compressed_FourCC_type_H264;
     packet.pts = pts;
     packet.dts = pts;
     packet.flags = isKeyframe ? NDIlib_compressed_packet_t::flags_keyframe
-                               : NDIlib_compressed_packet_t::flags_none;
+                              : NDIlib_compressed_packet_t::flags_none;
     packet.data_size = static_cast<uint32_t>(data_len);
     packet.extra_data_size = static_cast<uint32_t>(extra.size());
 
@@ -230,10 +219,10 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendVideo(
     NDIlib_FourCC_video_type_ex_e stream_type;
     if (isHevc) {
         stream_type = isPreviewStream ? NDIlib_FourCC_video_type_ex_HEVC_lowest_bandwidth
-                                       : NDIlib_FourCC_video_type_ex_HEVC_highest_bandwidth;
+                                      : NDIlib_FourCC_video_type_ex_HEVC_highest_bandwidth;
     } else {
         stream_type = isPreviewStream ? NDIlib_FourCC_video_type_ex_H264_lowest_bandwidth
-                                       : NDIlib_FourCC_video_type_ex_H264_highest_bandwidth;
+                                      : NDIlib_FourCC_video_type_ex_H264_highest_bandwidth;
     }
     frame.FourCC = (NDIlib_FourCC_video_type_e) stream_type;
     frame.xres = g_width;
@@ -244,153 +233,97 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendVideo(
     frame.frame_rate_D = g_fps_d;
     frame.frame_format_type = NDIlib_frame_format_type_progressive;
     frame.picture_aspect_ratio = g_height > 0 ? (float) g_width / (float) g_height : 0.0f;
-    frame.timecode = timecode;
+    frame.timecode = pts;
 
     {
         std::lock_guard<std::mutex> lock(g_send_mutex);
         if (g_send_instance) {
             // Synchronous rather than async: the async variant requires the
-            // buffers to stay valid past the call, which these don't.
+            // buffers to stay valid past the call, which these do not.
             NDIlib_send_send_video_scatter(g_send_instance, &frame, &scatter);
         }
-        // else: mid-reconnect, dropping one frame is fine.
-    }
-
-    env->ReleaseByteArrayElements(data, data_ptr, JNI_ABORT);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeSendAudio(
-        JNIEnv* env, jobject, jbyteArray data, jbyteArray extraData, jint sampleCount, jlong ptsUs) {
-
-    jsize data_len = env->GetArrayLength(data);
-    jbyte* data_ptr = env->GetByteArrayElements(data, nullptr);
-    if (!data_ptr) return;
-
-    std::vector<uint8_t> extra = toVector(env, extraData);
-    const int64_t pts = static_cast<int64_t>(ptsUs) * 10;
-    const int64_t timecode = stamp_for(pts);
-
-    NDIlib_compressed_packet_t packet = {};
-    packet.version = sizeof(NDIlib_compressed_packet_t);
-    packet.fourCC = NDIlib_compressed_FourCC_type_AAC;
-    packet.flags = NDIlib_compressed_packet_t::flags_keyframe; // every AAC frame is one
-    packet.pts = pts;
-    packet.dts = pts;
-    packet.data_size = static_cast<uint32_t>(data_len);
-    packet.extra_data_size = static_cast<uint32_t>(extra.size());
-
-    const uint8_t* blocks[4];
-    int sizes[4];
-    int n = 0;
-    blocks[n] = reinterpret_cast<const uint8_t*>(&packet);
-    sizes[n++] = static_cast<int>(sizeof(NDIlib_compressed_packet_t));
-    blocks[n] = reinterpret_cast<const uint8_t*>(data_ptr);
-    sizes[n++] = static_cast<int>(data_len);
-    if (!extra.empty()) {
-        blocks[n] = extra.data();
-        sizes[n++] = static_cast<int>(extra.size());
-    }
-    blocks[n] = nullptr;
-    sizes[n] = 0;
-
-    NDIlib_frame_scatter_t scatter = {};
-    scatter.p_data_blocks = blocks;
-    scatter.p_data_blocks_size = sizes;
-
-    NDIlib_audio_frame_v3_t frame = {};
-    frame.sample_rate = g_sample_rate;
-    frame.no_channels = g_channels;
-    frame.no_samples = sampleCount;
-    frame.FourCC = (NDIlib_FourCC_audio_type_e) NDIlib_FourCC_audio_type_ex_AAC;
-    frame.timecode = timecode;
-    frame.p_data = nullptr;
-
-    {
-        std::lock_guard<std::mutex> lock(g_send_mutex);
-        if (g_send_instance) {
-            NDIlib_send_send_audio_scatter(g_send_instance, &frame, &scatter);
-        }
+        // else: mid-rebuild, dropping one frame is fine.
     }
 
     env->ReleaseByteArrayElements(data, data_ptr, JNI_ABORT);
 }
 
 /**
- * Polls for metadata sent by a connected receiver (the Monitor app).
- * Returns the XML string, or null if nothing arrived within the timeout.
- * This is how remote camera control reaches the camera phone: NDI carries it
- * on the connection that already exists, so there is no second socket and no
- * extra discovery.
- */
-/**
- * Sets the timecode this source announces, as 100ns units since midnight.
+ * Full NDI: one whole uncompressed frame, which the SDK compresses to SpeedHQ
+ * on its way out.
  *
- * Called by the master when its clock is jammed. Passing zero returns the
- * source to reporting encoder time, which is the honest answer for a camera
- * that is not following any clock.
+ * [buffer] is the ImageReader's own direct ByteBuffer, so `GetDirectBufferAddress`
+ * gives the address Android already mapped and nothing is copied on this side.
+ * [stride] is the ImageReader's reported row stride in BYTES and is very often
+ * wider than width × 4 — a 1080-wide reader commonly hands back rows padded to
+ * 1088 or 1152. NDI takes the stride as a field, so the padding is described
+ * rather than removed; computing it as width × 4 skews the picture into a
+ * diagonal, which is the classic symptom and reads as a broken codec.
+ *
+ * RGBA rather than BGRA: Android's PixelFormat.RGBA_8888 is R, G, B, A in
+ * memory order, and the SDK has a FourCC that says exactly that. Swapping the
+ * bytes to reach BGRA would cost a pass over every pixel to arrive somewhere
+ * no better.
  */
 extern "C" JNIEXPORT void JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeSetTimecode(
-        JNIEnv*, jobject, jlong timecode100ns, jlong atPtsUs) {
-    std::lock_guard<std::mutex> lock(g_timecode_mutex);
-    g_timecode_anchor = static_cast<int64_t>(timecode100ns);
-    g_timecode_anchor_pts = static_cast<int64_t>(atPtsUs) * 10;
-}
+Java_com_mantraproductions_ndi_NdiSender_nativeSendRaw(
+        JNIEnv* env, jobject,
+        jobject buffer, jint width, jint height, jint stride, jlong ptsUs) {
 
-extern "C" JNIEXPORT jstring JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeCaptureMetadata(
-        JNIEnv* env, jobject, jint timeoutMs) {
-
-    NDIlib_send_instance_t send;
-    {
-        std::lock_guard<std::mutex> lock(g_send_mutex);
-        send = g_send_instance;
-        if (!send) return nullptr;
+    auto* pixels = static_cast<uint8_t*>(env->GetDirectBufferAddress(buffer));
+    if (!pixels) {
+        LOGE("ImageReader buffer is not direct; nothing can be sent from it");
+        return;
     }
 
-    NDIlib_metadata_frame_t metadata = {};
-    NDIlib_frame_type_e type = NDIlib_send_capture(send, &metadata, (uint32_t) timeoutMs);
-    if (type != NDIlib_frame_type_metadata || !metadata.p_data) return nullptr;
+    NDIlib_video_frame_v2_t frame = {};
+    frame.FourCC = NDIlib_FourCC_video_type_RGBA;
+    frame.xres = width;
+    frame.yres = height;
+    frame.line_stride_in_bytes = stride;
+    frame.p_data = pixels;
+    frame.frame_rate_N = g_fps_n;
+    frame.frame_rate_D = g_fps_d;
+    frame.frame_format_type = NDIlib_frame_format_type_progressive;
+    frame.picture_aspect_ratio = height > 0 ? (float) width / (float) height : 0.0f;
+    frame.timecode = static_cast<int64_t>(ptsUs) * 10;
 
-    jstring result = env->NewStringUTF(metadata.p_data);
-    NDIlib_send_free_metadata(send, &metadata);
-    return result;
+    std::lock_guard<std::mutex> lock(g_send_mutex);
+    if (g_send_instance) {
+        // Synchronous, because the Image this buffer belongs to is closed the
+        // moment this returns. The async variant would hand the SDK an address
+        // Android has taken back.
+        NDIlib_send_send_video_v2(g_send_instance, &frame);
+    }
 }
 
 /**
- * Attaches metadata to the sender's connection, which reaches every attached
- * receiver. Used to report camera capabilities and state back to the Monitor.
- */
-extern "C" JNIEXPORT void JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeAddConnectionMetadata(
-        JNIEnv* env, jobject, jstring xml) {
-
-    NDIlib_send_instance_t send;
-    {
-        std::lock_guard<std::mutex> lock(g_send_mutex);
-        send = g_send_instance;
-        if (!send) return;
-    }
-
-    const char* data = env->GetStringUTFChars(xml, nullptr);
-    NDIlib_metadata_frame_t metadata = {};
-    metadata.length = (int) strlen(data) + 1;
-    metadata.timecode = NDIlib_send_timecode_synthesize;
-    metadata.p_data = const_cast<char*>(data);
-
-    NDIlib_send_add_connection_metadata(send, &metadata);
-    env->ReleaseStringUTFChars(xml, data);
-}
-
-/**
- * Tally from whatever mixer is receiving this source. vMix, OBS and the rest
- * set this themselves over NDI, so the phone shows a real tally light rather
- * than something this app invented.
- * Returns: bit 0 = on program, bit 1 = on preview, -1 = no sender.
+ * How many receivers are attached right now.
+ *
+ * This is the one honest answer to "is anybody seeing this?". A source
+ * advertises whether or not anyone is watching, so a green light that only
+ * means "sending" tells nobody anything; this number means a machine has
+ * opened the stream.
  */
 extern "C" JNIEXPORT jint JNICALL
-Java_com_mantraproductions_ndi_NdiSender_nativeGetTally(JNIEnv*, jobject, jint timeoutMs) {
+Java_com_mantraproductions_ndi_NdiSender_nativeConnections(
+        JNIEnv*, jobject, jint timeoutMs) {
+    NDIlib_send_instance_t send;
+    {
+        std::lock_guard<std::mutex> lock(g_send_mutex);
+        send = g_send_instance;
+        if (!send) return -1;
+    }
+    return NDIlib_send_get_no_connections(send, (uint32_t) timeoutMs);
+}
+
+/**
+ * Tally from whatever mixer is receiving this screen: bit 0 program, bit 1
+ * preview, -1 no sender. vMix and OBS set it themselves over NDI, so the phone
+ * shows a real tally rather than something this app invented.
+ */
+extern "C" JNIEXPORT jint JNICALL
+Java_com_mantraproductions_ndi_NdiSender_nativeTally(JNIEnv*, jobject, jint timeoutMs) {
     NDIlib_send_instance_t send;
     {
         std::lock_guard<std::mutex> lock(g_send_mutex);

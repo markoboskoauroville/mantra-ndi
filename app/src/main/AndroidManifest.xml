@@ -1,17 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Phase zero has no camera code. The permission is declared because
-         phase 1 is the camera and the declaration is not what opens it; the
-         app asks nothing of the person on this build, and the trace says so.
-         Nothing else is declared. A permission that no code uses is a claim
-         the app cannot back, and the last build carried several. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
-    <!-- Only needed below Android 10. From Q a crash report reaches Downloads
-         through MediaStore instead, which is the route that actually works
-         and the reason the old reporter never wrote a file. -->
+    <!-- NDI: the source is advertised and the frames go out over the local
+         network. INTERNET covers the sockets; the multicast permissions are
+         what let a receiver on the same Wi-Fi discover the phone at all. A
+         phone that streams perfectly and appears in nobody's source list is
+         the failure these two prevent. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- Only needed below Android 10. From Q a DNG and a trace reach Downloads
+         through MediaStore instead, which is the route that actually works and
+         the reason the old reporter never wrote a file. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
@@ -24,13 +28,16 @@
         android:supportsRtl="true">
 
         <!-- The activity handles a turn of the phone itself rather than being
-             recreated, and writes down what the phone reported when it did.
-             Phase 1 hangs the preview's orientation off that; the automatic
-             answer was wrong six times in the last build, so the numbers are
-             recorded before anything depends on them. -->
+             recreated. Recreating it would tear down the capture session and
+             the NDI source on every rotation, which on a live stream is a
+             dropped source at the far end. The rails are re-laid out and the
+             preview transform recomputed instead, and both numbers go into the
+             trace, because the automatic answer to orientation was wrong six
+             times in the last build. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:screenOrientation="fullSensor"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

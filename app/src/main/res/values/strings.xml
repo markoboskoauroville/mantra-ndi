@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Mantra NDI</string>
+    <string name="starting">opening the camera…</string>
+    <string name="ndi_mark">Powered by NDI®  ·  ndi.video  ·  a registered trademark of Vizrt NDI AB</string>
 </resources>

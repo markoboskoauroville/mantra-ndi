@@ -7,6 +7,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 
 /**
  * Puts a text file where a person can actually find it: Downloads, in a folder
@@ -70,6 +71,53 @@ object Downloads {
                     it.write(text.toByteArray(Charsets.UTF_8))
                     it.flush()
                 }
+                f.absolutePath
+            }
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * The same route, for a file that is not text.
+     *
+     * A DNG is written straight into the stream MediaStore hands back rather
+     * than built in memory first: a full frame of Bayer data off this sensor
+     * is tens of megabytes, and a snap that costs an allocation that size is a
+     * snap that occasionally does not happen.
+     *
+     * @return where it went, or null if it could not be written
+     */
+    fun writeStream(
+        context: Context,
+        name: String,
+        mimeType: String,
+        body: (OutputStream) -> Unit
+    ): String? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    put(
+                        MediaStore.MediaColumns.RELATIVE_PATH,
+                        Environment.DIRECTORY_DOWNLOADS + "/" + FOLDER
+                    )
+                }
+                val uri = context.contentResolver
+                    .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+                context.contentResolver.openOutputStream(uri)?.use { body(it); it.flush() }
+                    ?: return null
+                Environment.DIRECTORY_DOWNLOADS + "/" + FOLDER + "/" + name
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    FOLDER
+                )
+                dir.mkdirs()
+                val f = File(dir, name)
+                FileOutputStream(f).use { body(it); it.flush() }
                 f.absolutePath
             }
         } catch (t: Throwable) {

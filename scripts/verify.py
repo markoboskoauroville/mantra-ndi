@@ -5,6 +5,7 @@ android-app.md: the checks that fail the build for reasons Kotlin cannot see.
 Each one prints its own line and can fail on its own.
 """
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -30,6 +31,17 @@ def check(name, ok, detail=""):
         FAILS.append(name)
 
 
+def _git_tracked():
+    """Every path git has under version control, or nothing if this is no repo."""
+    try:
+        out = subprocess.run(
+            ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout
+        return [line for line in out.splitlines() if line]
+    except Exception:
+        return []
+
+
 def main():
     # G1 — the version is written in exactly one place
     props = (ROOT / "gradle.properties").read_text()
@@ -53,16 +65,23 @@ def main():
               f"{len(android_imports)} android imports")
 
     # G3 — the signing key is never committed
-    tracked_keys = list(ROOT.glob("**/*.p12")) + list(ROOT.glob("**/*.jks")) + \
-        list(ROOT.glob("**/*.keystore"))
-    tracked_keys = [p for p in tracked_keys if ".git" not in p.parts]
+    #
+    # Asked of git rather than of the filesystem. A local build legitimately
+    # has the key and the SDK on disk — that is how an APK gets made here —
+    # and the thing being prevented is committing them to a public repo, which
+    # is a question only git can answer. Globbing the tree made this gate fail
+    # on every machine that could actually build the app, which is the kind of
+    # gate people learn to ignore.
+    tracked = set(_git_tracked())
+    tracked_keys = [p for p in tracked if p.endswith((".p12", ".jks", ".keystore"))]
     check("G3 no keystore in the tree", not tracked_keys, str(tracked_keys))
     gitignore = (ROOT / ".gitignore").read_text()
     check("G3 signing dir ignored", "signing/" in gitignore)
 
     # G4 — the licensed SDK is never committed
-    sdk = list(ROOT.glob("app/src/main/jniLibs/**/*.so")) + \
-        list(ROOT.glob("app/src/main/cpp/ndi/**/*.h"))
+    sdk = [p for p in tracked
+           if (p.startswith("app/src/main/jniLibs/") and p.endswith(".so"))
+           or (p.startswith("app/src/main/cpp/ndi/") and p.endswith(".h"))]
     check("G4 no NDI SDK in the tree", not sdk, f"{len(sdk)} files")
 
     # G5 — Test 1 exists and is not a token gesture
@@ -92,7 +111,14 @@ def main():
 
     # G7 — the NDI attribution the licence requires is still in the UI
     layouts = "\n".join(p.read_text() for p in (ROOT / "app/src/main/res/layout").glob("*.xml"))
-    check("G7 NDI attribution present", "ndi.video" in layouts and "Vizrt" in layouts)
+    # The strings too, not only the layouts. A TextView carrying
+    # @string/ndi_mark puts the attribution on the screen just as surely as a
+    # hard-coded one, and a gate that cannot see it teaches people to inline
+    # text that belongs in resources.
+    ui_text = layouts + "\n" + "\n".join(
+        p.read_text() for p in (ROOT / "app/src/main/res/values").glob("*.xml")
+    )
+    check("G7 NDI attribution present", "ndi.video" in ui_text and "Vizrt" in ui_text)
 
     # G8 — every Activity in the source is declared in the manifest
     manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text()

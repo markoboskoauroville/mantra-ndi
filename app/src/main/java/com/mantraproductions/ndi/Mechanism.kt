@@ -637,6 +637,30 @@ object Mechanism {
      * @param frontFacing a front camera is mirrored, so its correction turns
      *        the other way
      */
+    /**
+     * The largest 16:9 box that fits, and what is left over for the keys.
+     *
+     * This is the whole geometry of this camera in four numbers. A phone's
+     * screen is about 20:9 and a broadcast picture is 16:9, so a margin exists
+     * whether or not anything is put in it; the rails go there, which is how
+     * thirty controls fit on screen without one of them sitting on the shot.
+     *
+     * Here rather than in the View because it is arithmetic, and arithmetic in
+     * an onMeasure can only be checked by looking at a phone.
+     *
+     * @return width, height, and the margin left over across and down
+     */
+    fun pictureBox(availableWidth: Int, availableHeight: Int): IntArray {
+        if (availableWidth <= 0 || availableHeight <= 0) return intArrayOf(0, 0, 0, 0)
+        var width = availableWidth
+        var height = width * 9 / 16
+        if (height > availableHeight) {
+            height = availableHeight
+            width = height * 16 / 9
+        }
+        return intArrayOf(width, height, availableWidth - width, availableHeight - height)
+    }
+
     fun previewRotation(
         sensorOrientation: Int,
         displayRotation: Int,

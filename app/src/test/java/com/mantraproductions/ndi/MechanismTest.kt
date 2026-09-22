@@ -568,4 +568,48 @@ class MechanismTest {
         assertEquals(null, got.whiteBalanceKelvin)
         assertFalse(got.recording)
     }
+
+    // --- the 16:9 box the whole interface is built around --------------------
+
+    @Test
+    fun pictureBoxFillsAWideScreenByItsHeight() {
+        // A landscape phone: 2400 across, 1080 down. 16:9 of 1080 is 1920, so
+        // the picture is limited by the height and 480 is left for the rails.
+        val box = Mechanism.pictureBox(2400, 1080)
+        assertEquals(1920, box[0])
+        assertEquals(1080, box[1])
+        assertEquals(480, box[2])
+        assertEquals(0, box[3])
+    }
+
+    @Test
+    fun pictureBoxFillsATallScreenByItsWidth() {
+        // The same phone upright. Now the width limits it and the margin is
+        // the band above and below where the rails go.
+        val box = Mechanism.pictureBox(1080, 2400)
+        assertEquals(1080, box[0])
+        assertEquals(607, box[1])
+        assertEquals(0, box[2])
+        assertEquals(1793, box[3])
+    }
+
+    @Test
+    fun pictureBoxIsNeverWiderThanWhatItWasGiven() {
+        // The one thing that must never happen: a picture that runs under the
+        // rails, which reads as a control that does not work.
+        for (w in listOf(320, 720, 1080, 1440, 2400, 3840)) {
+            for (h in listOf(240, 600, 1080, 2400)) {
+                val box = Mechanism.pictureBox(w, h)
+                assertTrue("$w x $h overflowed across", box[0] <= w)
+                assertTrue("$w x $h overflowed down", box[1] <= h)
+            }
+        }
+    }
+
+    @Test
+    fun pictureBoxRefusesNothing() {
+        // Called once before the view has been laid out, every time.
+        assertEquals(0, Mechanism.pictureBox(0, 0)[0])
+        assertEquals(0, Mechanism.pictureBox(-10, 500)[1])
+    }
 }
