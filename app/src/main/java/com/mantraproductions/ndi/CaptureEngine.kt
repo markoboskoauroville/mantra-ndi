@@ -65,6 +65,15 @@ class CaptureEngine(private val context: Context) {
     private var handler: Handler? = null
 
     private var characteristics: CameraCharacteristics? = null
+
+    /**
+     * The characteristics of the lens actually being looked through.
+     *
+     * The same object as [characteristics] unless a physical sub-lens was
+     * chosen, in which case it is that lens's own — which is where its
+     * mounting angle, its focus range and its flash live.
+     */
+    private var lensCharacteristics: CameraCharacteristics? = null
     var capabilities: HdrCapabilities? = null
         private set
 
@@ -131,6 +140,7 @@ class CaptureEngine(private val context: Context) {
         close()
         this.cameraId = cameraId
         this.physicalId = physicalId
+        this.lensCharacteristics = null
         this.targetFps = fps
         this.activeCurve = curve
         this.wantedRepeating = repeating
@@ -144,6 +154,14 @@ class CaptureEngine(private val context: Context) {
         try {
             characteristics = cameraManager.getCameraCharacteristics(cameraId)
             capabilities = HdrCapabilities(characteristics!!)
+            // A physical lens is mounted in its own right and may be turned
+            // differently from the logical camera that owns it. Reading the
+            // parent's angle and applying it to a sub-lens is a picture that
+            // is upright on one lens and a quarter turn out on the next, with
+            // nothing on screen to say why.
+            lensCharacteristics = physicalId?.let {
+                runCatching { cameraManager.getCameraCharacteristics(it) }.getOrNull()
+            } ?: characteristics
         } catch (e: Exception) {
             listener?.onError("Could not read camera $cameraId: ${e.message}")
             return
@@ -153,7 +171,12 @@ class CaptureEngine(private val context: Context) {
             cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
                     device = camera
-                    Trace.step("camera $cameraId opened")
+                    Trace.step(
+                        "camera $cameraId opened" +
+                            (physicalId?.let { ", lens $it" } ?: "") +
+                            ", mounted at ${sensorOrientation}°" +
+                            ", rotate-and-crop modes " + rotateAndCropModes().joinToString(",")
+                    )
                     attempts = planAttempts(wantTenBit)
                     attemptIndex = 0
                     tryNextCombination(camera)
@@ -542,7 +565,7 @@ class CaptureEngine(private val context: Context) {
     }
 
     fun hasFlash(): Boolean =
-        characteristics?.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+        lensCharacteristics?.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
 
     // --- focus ----------------------------------------------------------------
 
@@ -678,14 +701,31 @@ class CaptureEngine(private val context: Context) {
     // --- what this camera can do ---------------------------------------------
 
     val sensorOrientation: Int
-        get() = characteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+        get() = lensCharacteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
 
     val isFrontFacing: Boolean
-        get() = characteristics?.get(CameraCharacteristics.LENS_FACING) ==
+        get() = lensCharacteristics?.get(CameraCharacteristics.LENS_FACING) ==
             CameraCharacteristics.LENS_FACING_FRONT
 
+    /**
+     * Whether this camera can turn the picture inside its own pipeline.
+     *
+     * `SCALER_ROTATE_AND_CROP` is the one route to an upright *stream* that
+     * costs nothing: it happens in the camera before the encoder, so it needs
+     * no GPU stage — and a GPU stage is exactly what a ten bit session cannot
+     * have, since a dynamic range profile is only legal against a PRIVATE or
+     * P010 surface. Most phones offer only NONE and AUTO, so this is reported
+     * rather than relied on.
+     */
+    fun rotateAndCropModes(): IntArray =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            characteristics?.get(
+                CameraCharacteristics.SCALER_AVAILABLE_ROTATE_AND_CROP_MODES
+            ) ?: IntArray(0)
+        } else IntArray(0)
+
     fun minimumFocusDistance(): Float =
-        characteristics?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+        lensCharacteristics?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
 
     fun supportsManualFocus(): Boolean = minimumFocusDistance() > 0f
 

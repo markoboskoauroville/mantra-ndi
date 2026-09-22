@@ -117,6 +117,21 @@
             android:orientation="horizontal"
             android:paddingTop="6dp" />
 
+        <!-- The cable -->
+        <TextView style="@style/MantraLabel" android:text="@string/usb" />
+        <TextView style="@style/MantraHint" android:text="@string/usb_hint" />
+        <TextView
+            android:id="@+id/usbState"
+            style="@style/MantraValue"
+            android:lineSpacingMultiplier="1.35"
+            android:paddingBottom="8dp" />
+        <Button
+            android:id="@+id/usbSettings"
+            style="@style/MantraKey"
+            android:layout_width="match_parent"
+            android:text="@string/usb_open" />
+        <TextView style="@style/MantraHint" android:text="@string/usb_webcam" />
+
         <!-- The trace -->
         <TextView style="@style/MantraLabel" android:text="@string/trace" />
         <TextView style="@style/MantraHint" android:text="@string/trace_hint" />

@@ -661,6 +661,97 @@ object Mechanism {
         return intArrayOf(width, height, availableWidth - width, availableHeight - height)
     }
 
+    /**
+     * The scale to apply AFTER rotating the preview, so the picture is never
+     * stretched and never cropped.
+     *
+     * This is the arithmetic that has been wrong in this app for six attempts,
+     * and the reason is that it was never written down anywhere it could be
+     * checked. It lived inside an `onMeasure` or a `setTransform` call, where
+     * the only way to test it is to hold a phone up to something rectangular
+     * and squint.
+     *
+     * The mechanism a TextureView actually has:
+     *
+     *   1. it draws the camera buffer stretched to its own bounds, asking
+     *      nobody — so before any transform the content occupies the view and
+     *      is already distorted unless the two aspects happen to agree
+     *   2. the transform matrix is then applied about the view's centre
+     *
+     * So the job is: rotate, then scale the result to the largest rectangle
+     * with the buffer's true aspect that fits inside the view. Rotating by a
+     * quarter turn swaps which of the view's sides the content now spans,
+     * which is why the two scale factors are not the same number and why
+     * getting one of them wrong looks exactly like a stretched picture.
+     *
+     * @param rotation degrees clockwise, 0/90/180/270
+     * @param fill true to cover the view and crop, false to fit and leave bars
+     * @return scaleX and scaleY, to postScale about the view's centre
+     */
+    fun previewFit(
+        viewWidth: Int,
+        viewHeight: Int,
+        bufferWidth: Int,
+        bufferHeight: Int,
+        rotation: Int,
+        fill: Boolean = false
+    ): FloatArray {
+        if (viewWidth <= 0 || viewHeight <= 0 || bufferWidth <= 0 || bufferHeight <= 0) {
+            return floatArrayOf(1f, 1f)
+        }
+        val turn = ((rotation % 360) + 360) % 360
+        val swap = turn == 90 || turn == 270
+
+        // What the picture's shape becomes once it has been turned.
+        val finalAspect =
+            if (swap) bufferHeight.toDouble() / bufferWidth
+            else bufferWidth.toDouble() / bufferHeight
+
+        var width = viewWidth.toDouble()
+        var height = width / finalAspect
+        val tooTall = height > viewHeight
+        if (tooTall != fill) {
+            height = viewHeight.toDouble()
+            width = height * finalAspect
+        }
+
+        // The box the rotated content occupies before it is scaled: the view's
+        // own rectangle, turned.
+        val rotatedWidth = if (swap) viewHeight.toDouble() else viewWidth.toDouble()
+        val rotatedHeight = if (swap) viewWidth.toDouble() else viewHeight.toDouble()
+
+        return floatArrayOf(
+            (width / rotatedWidth).toFloat(),
+            (height / rotatedHeight).toFloat()
+        )
+    }
+
+    /**
+     * The shape the operator ends up looking at, for the one test that matters.
+     *
+     * If this does not equal the buffer's own aspect ratio (turned, if it was
+     * turned) then the picture on the screen is stretched, whatever else is
+     * right. Every previous attempt at this would have failed this check, and
+     * none of them was ever asked it.
+     */
+    fun displayedAspect(
+        viewWidth: Int,
+        viewHeight: Int,
+        bufferWidth: Int,
+        bufferHeight: Int,
+        rotation: Int,
+        fill: Boolean = false
+    ): Double {
+        val scale = previewFit(viewWidth, viewHeight, bufferWidth, bufferHeight, rotation, fill)
+        val turn = ((rotation % 360) + 360) % 360
+        val swap = turn == 90 || turn == 270
+        val rotatedWidth = if (swap) viewHeight.toDouble() else viewWidth.toDouble()
+        val rotatedHeight = if (swap) viewWidth.toDouble() else viewHeight.toDouble()
+        val shownWidth = scale[0] * rotatedWidth
+        val shownHeight = scale[1] * rotatedHeight
+        return if (shownHeight == 0.0) 0.0 else shownWidth / shownHeight
+    }
+
     fun previewRotation(
         sensorOrientation: Int,
         displayRotation: Int,

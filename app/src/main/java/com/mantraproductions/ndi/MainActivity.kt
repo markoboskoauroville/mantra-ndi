@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var preview: TextureView
     private lateinit var focusSquare: FocusSquareView
     private lateinit var status: TextView
+    private lateinit var geometry: TextView
     private lateinit var stage: LinearLayout
     private lateinit var railLeft: LinearLayout
     private lateinit var railRight: LinearLayout
@@ -102,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         preview = findViewById(R.id.preview)
         focusSquare = findViewById(R.id.focusSquare)
         status = findViewById(R.id.status)
+        geometry = findViewById(R.id.geometry)
         stage = findViewById(R.id.stage)
         railLeft = findViewById(R.id.railLeft)
         railRight = findViewById(R.id.railRight)
@@ -147,6 +149,7 @@ class MainActivity : AppCompatActivity() {
             override fun onReady(tenBit: Boolean, codec: String, size: Size) {
                 ui.post {
                     bufferSize = size
+                    holdBufferSize()
                     applyPreviewTransform()
                     refreshKeys()
                     say("${size.width}x${size.height} ${if (tenBit) "10-bit" else "8-bit"} $codec")
@@ -162,8 +165,11 @@ class MainActivity : AppCompatActivity() {
 
         preview.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) = openCamera()
-            override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) =
+            override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) {
+                // The view has just taken the buffer size for itself.
+                holdBufferSize()
                 applyPreviewTransform()
+            }
             override fun onSurfaceTextureUpdated(t: SurfaceTexture) = Unit
 
             /**
@@ -327,7 +333,7 @@ class MainActivity : AppCompatActivity() {
 
         // The buffer size has to be right before the session is built.
         bufferSize = pipeline.previewSizeFor(lens.id)
-        texture.setDefaultBufferSize(bufferSize.width, bufferSize.height)
+        holdBufferSize()
         applyPreviewTransform()
 
         val curve = LogCurves.Curve.entries[curveIndex]
@@ -377,50 +383,73 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * The picture, fitted inside the 16:9 box without cropping or turning.
+     * The picture: turned the right way up, and never stretched.
      *
-     * No automatic rotation, and that is the correction rather than an
-     * omission. What leaves this app is the sensor's own landscape frame: the
-     * encoder's surface is a camera target and nothing sits between them, so
-     * the stream is that frame whichever way the phone is being held. A
-     * preview that helpfully turned the picture upright in portrait would be
-     * showing the operator something no receiver is being sent — and it did,
-     * the first time this ran: a tall sliver in the middle of a wide box,
-     * pillarboxed, while the far end got a full landscape frame.
+     * Both halves of this have been wrong before, and they fail differently.
+     * The wrong angle is obvious and everybody reports it. The wrong scale is
+     * not — a stretched picture looks fine on a test pattern and only shows on
+     * a face — and it has shipped repeatedly because the arithmetic lived here,
+     * inside a call that can only be checked by holding a phone up to something
+     * rectangular.
      *
-     * So the preview shows what is sent. ROT adds quarter turns by hand, which
-     * is for a phone mounted sideways in a rig, and the trace carries the
-     * numbers because the automatic answer to orientation was wrong six times
-     * in the last build and is not being guessed at again.
+     * So the arithmetic is not here any more. `Mechanism.previewRotation` and
+     * `Mechanism.previewFit` are pure, and the test suite asserts the one thing
+     * that matters: whatever the view, whatever the buffer and whichever way it
+     * is turned, what reaches the screen has the buffer's own shape.
+     *
+     * The angle is the sensor's mounting against the phone's rotation, which is
+     * right on nearly every device — and `ROT` adds quarter turns by hand for
+     * the ones it is not, because a sideways picture is not something to debug
+     * around on a shoot.
      */
     private fun applyPreviewTransform() {
-        val vw = preview.width.toFloat()
-        val vh = preview.height.toFloat()
-        if (vw <= 0f || vh <= 0f) return
+        val vw = preview.width
+        val vh = preview.height
+        if (vw <= 0 || vh <= 0) return
 
-        val applied = ((manualQuarterTurns * 90) % 360 + 360) % 360
-        val swap = applied == 90 || applied == 270
-        val sourceAspect = bufferSize.width.toFloat() / bufferSize.height
-        val finalAspect = if (swap) 1f / sourceAspect else sourceAspect
+        val displayDegrees = when (
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display?.rotation
+            else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
+        ) {
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+        val sensor = if (pipeline.isRunning) pipeline.engine.sensorOrientation else 90
+        val front = pipeline.isRunning && pipeline.engine.isFrontFacing
+        val auto = Mechanism.previewRotation(sensor, displayDegrees, front)
+        val applied = ((auto + manualQuarterTurns * 90) % 360 + 360) % 360
 
-        var dw = vw
-        var dh = vw / finalAspect
-        if (dh > vh) { dh = vh; dw = vh * finalAspect }
-
-        // What the rotated content occupies before it is scaled: the view's own
-        // box, turned. The TextureView has already stretched the buffer to the
-        // view, and the view is 16:9 like the buffer, so no distortion is being
-        // undone here — only a fit.
-        val rotatedWidth = if (swap) vh else vw
-        val rotatedHeight = if (swap) vw else vh
-
+        val scale = Mechanism.previewFit(vw, vh, bufferSize.width, bufferSize.height, applied)
         val matrix = Matrix()
         matrix.postRotate(applied.toFloat(), vw / 2f, vh / 2f)
-        matrix.postScale(dw / rotatedWidth, dh / rotatedHeight, vw / 2f, vh / 2f)
+        matrix.postScale(scale[0], scale[1], vw / 2f, vh / 2f)
         preview.setTransform(matrix)
 
-        val sensor = if (pipeline.isRunning) pipeline.engine.sensorOrientation else -1
-        Trace.control("preview rotation", "sensor=$sensor manual=$manualQuarterTurns", applied)
+        val line = "sensor $sensor · disp $displayDegrees · rot $applied" +
+            (if (manualQuarterTurns != 0) " (auto $auto +${manualQuarterTurns * 90})" else "") +
+            " · buf ${bufferSize.width}x${bufferSize.height} · view ${vw}x$vh"
+        geometry.text = line
+        Trace.control("preview geometry", line, applied)
+    }
+
+    /**
+     * Puts the buffer size back, because the TextureView keeps taking it away.
+     *
+     * This is the stretch, and it is an interaction rather than a formula —
+     * which is why six attempts at the arithmetic never fixed it. A TextureView
+     * sets its SurfaceTexture's default buffer size to *the view's own pixel
+     * size* whenever the view is laid out or resized. Set it once when the
+     * camera opens and the next layout silently replaces 1920x1080 with
+     * whatever shape the view happens to be, and the camera then scales its
+     * output into that, which is a stretched picture arriving from below with
+     * nothing in any log to say so.
+     *
+     * So it is re-asserted on every size change, and the numbers go on screen.
+     */
+    private fun holdBufferSize() {
+        preview.surfaceTexture?.setDefaultBufferSize(bufferSize.width, bufferSize.height)
     }
 
     // --- the keys ------------------------------------------------------------

@@ -40,15 +40,15 @@ at 8 bits however good the sensor is.
 
 ## Where it is
 
-**Phase 1 and phase 3, built. v70.** Camera, 10-bit, log, LUTs, NDI HX and full
+**Phase 1 and phase 3, built. v71.** Camera, 10-bit, log, LUTs, NDI HX and full
 NDI, and the snap.
 
 | Phase | What | State |
 |---|---|---|
 | 0 | Logging: trace file, crash reports | built, v68 |
-| 1 | 10-bit camera, log curves, lenses, focus, light | built, v70 |
+| 1 | 10-bit camera, log curves, lenses, focus, light | built, v71 |
 | 2 | Recording | **not planned.** This camera streams; it does not record |
-| 3 | NDI HX and full NDI | built, v70 |
+| 3 | NDI HX and full NDI | built, v71 |
 | 4 | Remote control over NDI metadata | not started |
 | 5 | Monitor mode | not started |
 
@@ -96,6 +96,29 @@ here is what is decided once.
 
 ## The picture and the wire
 
+The geometry is on screen, under the picture:
+
+    sensor 90 · disp 270 · rot 180 · buf 1920x1080 · view 1676x943
+
+Those five numbers decide whether the preview is upright and whether it is
+stretched, and this app has shipped one or the other wrong six times. Each of
+those was diagnosed by holding a phone up to something rectangular and
+arguing; now a single screenshot settles it.
+
+The arithmetic behind them is not in the view any more. `Mechanism.previewFit`
+and `Mechanism.previewRotation` are pure functions, and the suite asserts the
+thing none of the six attempts was ever asked: **whatever the view, whatever
+the buffer and whichever way it is turned, what reaches the screen has the
+buffer's own shape.** A stretched picture is now a failing test rather than a
+report from a shoot.
+
+There was also a mechanism nobody had noticed, and it was not arithmetic at
+all: **a TextureView sets its SurfaceTexture's default buffer size to the
+view's own pixel size** on every layout. Setting it once when the camera opens
+means the next layout quietly replaces it, and the camera then scales into a
+shape nobody asked for. It is re-asserted on every size change.
+
+
 What leaves this app is the sensor's own landscape frame: the encoder's surface
 is a camera target with nothing between them. So the stream is that frame
 whichever way the phone is held, and **the preview shows exactly that** rather
@@ -126,6 +149,7 @@ removed by hand:
 | `HdrVideoEncoder.kt` | hardware HEVC Main10 into a surface the camera writes |
 | `NdiSender.kt`, `cpp/ndi_bridge.cpp` | both NDI paths, compressed and whole-frame |
 | `SettingsActivity.kt`, `Settings.kt` | what is decided once, off the camera screen |
+| `UsbLink.kt` | the addresses a receiver can be pointed at, cable first |
 | `Snap.kt` | RAW_SENSOR → `DngCreator` → Downloads |
 | `LutSlots.kt` | the eleven slots |
 | `PreviewEffects.kt` | the LUT and peaking, one shader, preview only |
@@ -135,6 +159,24 @@ removed by hand:
 | `Mechanism.kt` | all pure maths. No Android imports, so all of it is tested |
 | `LogCurves.kt`, `CubeLut.kt`, `ColourSpaces.kt` | the curves and the 33³ LUT work |
 | `Trace.kt`, `TraceFormat.kt`, `CrashLog.kt`, `Downloads.kt` | phase 0, unchanged |
+
+## Down the cable
+
+Behind the gear: **USB tethering, and NDI over it.** Turn tethering on and the
+phone becomes a network interface on the computer — a private link at USB
+speed, with none of a hall's Wi-Fi in the way. Settings shows every address a
+receiver could be pointed at, the cable first, because NDI discovers by mDNS
+and a link made thirty seconds ago is exactly where a receiver is most likely
+not to hear it.
+
+**This app cannot be the phone's "Webcam" USB option, and no third-party app
+can be.** That is `com.android.DeviceAsWebcam`, which lives in
+`/system/priv-app` with the SYSTEM flag; presenting the phone as a UVC camera
+means writing the USB gadget's configuration in configfs, which needs
+`MANAGE_USB` — signature|privileged, with no public API behind it. It would
+also be a step down: UVC is 1080p30 of 8-bit YUV, and this app already makes
+10-bit HEVC. **The cable is worth having for its bandwidth, not for its
+protocol.**
 
 ## Two things this phone taught the app
 

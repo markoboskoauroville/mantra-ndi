@@ -612,4 +612,127 @@ class MechanismTest {
         assertEquals(0, Mechanism.pictureBox(0, 0)[0])
         assertEquals(0, Mechanism.pictureBox(-10, 500)[1])
     }
+
+    // --- the preview geometry, which has been wrong for six attempts ---------
+
+    /**
+     * The check none of the previous attempts was ever asked.
+     *
+     * Whatever the view is, whatever the buffer is, and whichever way the
+     * picture has been turned, what ends up on the screen must have the
+     * buffer's own shape. If it does not, the picture is stretched — and a
+     * stretched picture is the single fault this app has shipped most often,
+     * because it is invisible on a test pattern and obvious on a face.
+     */
+    @Test
+    fun previewIsNeverStretched() {
+        val views = listOf(
+            1920 to 1080,   // landscape, 16:9
+            1080 to 607,    // portrait, the band between the rails
+            2400 to 1080,   // the whole screen, 20:9
+            1080 to 2400,
+            1000 to 1000    // square, which nothing is, but nothing should break
+        )
+        val buffers = listOf(
+            1920 to 1080,
+            1280 to 720,
+            1440 to 1080,   // 4:3, which some lenses report
+            3840 to 2160
+        )
+        for ((vw, vh) in views) {
+            for ((bw, bh) in buffers) {
+                for (rotation in listOf(0, 90, 180, 270)) {
+                    for (fill in listOf(false, true)) {
+                        val expected =
+                            if (rotation == 90 || rotation == 270) bh.toDouble() / bw
+                            else bw.toDouble() / bh
+                        val actual = Mechanism.displayedAspect(vw, vh, bw, bh, rotation, fill)
+                        assertEquals(
+                            "view ${vw}x$vh buffer ${bw}x$bh rot $rotation fill $fill",
+                            expected, actual, 0.0005
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun previewFitsInsideTheViewAndFillCoversIt() {
+        for (rotation in listOf(0, 90, 180, 270)) {
+            val swap = rotation == 90 || rotation == 270
+            val rotatedW = if (swap) 1080.0 else 1920.0
+            val rotatedH = if (swap) 1920.0 else 1080.0
+
+            val fit = Mechanism.previewFit(1920, 1080, 1440, 1080, rotation, fill = false)
+            assertTrue("fit overflowed across", fit[0] * rotatedW <= 1920.0 + 0.5)
+            assertTrue("fit overflowed down", fit[1] * rotatedH <= 1080.0 + 0.5)
+
+            val fill = Mechanism.previewFit(1920, 1080, 1440, 1080, rotation, fill = true)
+            assertTrue("fill left a gap across", fill[0] * rotatedW >= 1920.0 - 0.5)
+            assertTrue("fill left a gap down", fill[1] * rotatedH >= 1080.0 - 0.5)
+        }
+    }
+
+    @Test
+    fun matchingAspectsNeedNoCorrectionAtAll() {
+        // The ordinary case: a 16:9 buffer in the 16:9 box. Anything other than
+        // 1,1 here is a transform inventing work for itself.
+        val scale = Mechanism.previewFit(1920, 1080, 1920, 1080, 0)
+        assertEquals(1.0, scale[0].toDouble(), 0.001)
+        assertEquals(1.0, scale[1].toDouble(), 0.001)
+    }
+
+    @Test
+    fun aQuarterTurnScalesBothWaysByTheSameAmount() {
+        // A 16:9 picture turned into a 16:9 box is one uniform shrink. Two
+        // different numbers here is the stretch, arriving as arithmetic.
+        val scale = Mechanism.previewFit(1920, 1080, 1920, 1080, 90)
+        assertEquals(scale[0].toDouble(), scale[1].toDouble(), 0.001)
+    }
+
+    @Test
+    fun previewFitRefusesNothing() {
+        // Called once before the view has been laid out, every single time.
+        assertEquals(1f, Mechanism.previewFit(0, 0, 1920, 1080, 0)[0])
+        assertEquals(1f, Mechanism.previewFit(1920, 1080, 0, 0, 90)[1])
+    }
+
+    /**
+     * The angle the picture has to be turned through, which is the other half
+     * of the bug and the half people argue about.
+     */
+    @Test
+    fun backCameraIsUprightInLandscapeAndTurnedInPortrait() {
+        // A Pixel's back sensor is mounted at 90 degrees.
+        assertEquals(90, Mechanism.previewRotation(90, 0))     // phone upright
+        assertEquals(0, Mechanism.previewRotation(90, 90))     // turned left
+        assertEquals(270, Mechanism.previewRotation(90, 180))
+        assertEquals(180, Mechanism.previewRotation(90, 270))  // turned right
+    }
+
+    @Test
+    fun frontCameraTurnsTheOtherWay() {
+        // The front sensor is mounted at 270 and the display rotation counts
+        // against it rather than with it, which is the sign error that has
+        // shipped a sideways selfie in every version so far.
+        assertEquals(270, Mechanism.previewRotation(270, 0, frontFacing = true))
+        assertEquals(0, Mechanism.previewRotation(270, 90, frontFacing = true))
+        assertEquals(90, Mechanism.previewRotation(270, 180, frontFacing = true))
+        assertEquals(180, Mechanism.previewRotation(270, 270, frontFacing = true))
+    }
+
+    @Test
+    fun rotationIsAlwaysAQuarterTurnAndNeverNegative() {
+        for (sensor in listOf(0, 90, 180, 270)) {
+            for (display in listOf(0, 90, 180, 270)) {
+                for (front in listOf(false, true)) {
+                    val r = Mechanism.previewRotation(sensor, display, front)
+                    assertTrue("negative rotation $r", r >= 0)
+                    assertTrue("not a quarter turn: $r", r % 90 == 0)
+                    assertTrue("out of range $r", r < 360)
+                }
+            }
+        }
+    }
 }

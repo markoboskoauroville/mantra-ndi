@@ -1,5 +1,6 @@
 package com.mantraproductions.ndi
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
@@ -80,6 +81,26 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        // The addresses, cable first. Re-read on resume, because the whole
+        // point is that he plugs the cable in while this screen is open.
+        showAddresses()
+        findViewById<Button>(R.id.usbSettings).setOnClickListener {
+            // The tethering panel, and a fall back to the settings root when a
+            // phone does not expose it — never a dead key.
+            val tried = listOf(
+                Intent().setClassName(
+                    "com.android.settings",
+                    "com.android.settings.TetherSettings"
+                ),
+                Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS),
+                Intent(android.provider.Settings.ACTION_SETTINGS)
+            )
+            for (intent in tried) {
+                if (runCatching { startActivity(intent); true }.getOrDefault(false)) return@setOnClickListener
+            }
+            Toast.makeText(this, "Could not open the phone's settings", Toast.LENGTH_LONG).show()
+        }
+
         findViewById<Button>(R.id.exportTrace).setOnClickListener {
             val file = Trace.file()
             val text = file?.readText() ?: Trace.lines().joinToString("\n")
@@ -94,6 +115,33 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.version).text =
             "Mantra NDI v${BuildConfig.VERSION_NAME}  ·  " +
                 (if (NdiSender.available) "NDI SDK present" else "built without the NDI SDK")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        showAddresses()
+    }
+
+    /**
+     * Where a receiver should be pointed.
+     *
+     * NDI finds its sources by mDNS, and a link that was made thirty seconds
+     * ago by plugging in a cable is exactly where a receiver is most likely
+     * not to hear it. Every receiver has a box to type an address into; none
+     * of them can guess one.
+     */
+    private fun showAddresses() {
+        val addresses = UsbLink.addresses()
+        val readout = findViewById<TextView>(R.id.usbState)
+        readout.text = if (addresses.isEmpty()) {
+            "No network — nothing can reach this phone."
+        } else {
+            (if (UsbLink.usbUp()) "The cable is up.\n" else "No cable. Turn USB tethering on.\n") +
+                addresses.joinToString("\n") { "  " + it.label }
+        }
+        readout.setTextColor(
+            if (UsbLink.usbUp()) RailButton.GREEN else resources.getColor(R.color.sand, theme)
+        )
     }
 
     /**
