@@ -182,17 +182,22 @@ class CaptureEngine(private val context: Context) {
                     // Focus, stated rather than assumed. Six versions of this
                     // app let a drag do nothing without a line anywhere to say
                     // the lens had no travel to give.
+                    // Which of the two answers was taken, and whether either
+                    // was published at all: "none" and "zero" are different
+                    // facts and collapsing them is what gave the ultra wide a
+                    // focus fader that moved nothing.
                     Trace.state(
-                        "focus: lens travel " +
+                        "focus: this lens publishes " +
                             (lensCharacteristics?.get(
                                 CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE
-                            ) ?: 0f) +
-                            ", logical travel " +
+                            )?.toString() ?: "nothing") +
+                            ", the logical camera publishes " +
                             (characteristics?.get(
                                 CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE
-                            ) ?: 0f) +
+                            )?.toString() ?: "nothing") +
+                            ", using " + minimumFocusDistance() +
                             ", AF modes " + afModes().joinToString(",") +
-                            ", manual " + if (supportsManualFocus()) "yes" else "NO"
+                            ", manual " + if (supportsManualFocus()) "yes" else "NO, it is fixed"
                     )
                     // Colour, stated rather than assumed. White balance has
                     // gone green twice, and both times the trace said nothing
@@ -504,6 +509,37 @@ class CaptureEngine(private val context: Context) {
             lastExposureNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
             lastFocusDistance = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
             lastResult = result
+
+            // The camera's own white balance, kept while it is still the one
+            // deciding. This is the anchor the fader hangs off: gains and
+            // matrix measured by the people who tuned this ISP, for this
+            // scene, at the moment the operator took it over.
+            if (!manualWhiteBalance) {
+                result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { g ->
+                    autoGains = floatArrayOf(g.red, g.greenEven, g.greenOdd, g.blue)
+                }
+                matrix(result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM))?.let {
+                    autoTransform = it
+                }
+            }
+            // What the camera says it did with the last change, once, so a
+            // picture that goes green names which half did it.
+            if (reportWhiteBalance) {
+                reportWhiteBalance = false
+                val g = result.get(CaptureResult.COLOR_CORRECTION_GAINS)
+                Trace.state(
+                    "white balance readback: awb mode " +
+                        result.get(CaptureResult.CONTROL_AWB_MODE) +
+                        ", correction mode " + result.get(CaptureResult.COLOR_CORRECTION_MODE) +
+                        (g?.let {
+                            String.format(
+                                ", gains %.3f/%.3f/%.3f", it.red, it.greenEven, it.blue
+                            )
+                        } ?: ", NO gains reported") +
+                        (if (result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM) == null)
+                            ", NO transform reported" else ", transform reported")
+                )
+            }
             listener?.onCaptureValues(lastIso, lastExposureNs, lastFocusDistance)
 
             pendingFocus?.let { waiting ->
@@ -761,6 +797,7 @@ class CaptureEngine(private val context: Context) {
         request.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL)
         request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
         request.set(CaptureRequest.LENS_FOCUS_DISTANCE, wanted)
+        focusCommanded = wanted
         val ok = apply()
         request.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
         Trace.control(
@@ -773,6 +810,7 @@ class CaptureEngine(private val context: Context) {
 
     fun setContinuousFocus(): Boolean {
         val request = builder ?: return false
+        focusCommanded = null
         request.set(
             CaptureRequest.CONTROL_AF_MODE,
             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
@@ -1007,6 +1045,30 @@ class CaptureEngine(private val context: Context) {
             canPostProcess() &&
             colourCharacteristics() != null
 
+    /**
+     * What the camera's own white balance amounts to, in Kelvin.
+     *
+     * So that taking white balance over starts from where the camera had got
+     * to, exactly as `M` does with exposure. A fader that begins at a number
+     * out of the code jumps the colour of the picture the moment it is touched,
+     * and an operator who has seen that once stops trusting the control.
+     */
+    fun measuredKelvin(): Int? {
+        val measured = autoGains ?: return null
+        val colour = colourCharacteristics() ?: return null
+        val cm1 = matrix(colour.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1)) ?: return null
+        val cm2 = matrix(colour.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2)) ?: cm1
+        val k1 = WhiteBalance.kelvinForIlluminant(
+            colour.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1) ?: 17
+        )
+        val k2 = WhiteBalance.kelvinForIlluminant(
+            colour.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT2)?.toInt() ?: 21
+        )
+        return WhiteBalance.anchorKelvin(measured) { k ->
+            WhiteBalance.mix(cm1, cm2, WhiteBalance.blend(k, k1, k2))
+        }
+    }
+
     /** The presets this camera offers, as indices into [WhiteBalance.PRESETS]. */
     fun awbPresetsAvailable(): IntArray {
         val modes = awbModes()
@@ -1026,6 +1088,23 @@ class CaptureEngine(private val context: Context) {
     /** Which route the last temperature took, for the fader to say so. */
     @Volatile var whiteBalanceIsContinuous = false
         private set
+
+    /**
+     * The camera's own answer, kept while the camera is still the one giving
+     * it: gains and matrix from the capture result, and the temperature they
+     * amount to. This is the anchor the fader hangs off.
+     */
+    @Volatile private var autoGains: FloatArray? = null
+    @Volatile private var autoTransform: FloatArray? = null
+    @Volatile private var manualWhiteBalance = false
+    @Volatile private var reportWhiteBalance = false
+
+    /** What the anchor came out at, for the fader to start from. */
+    @Volatile var lastAnchorKelvin: Int? = null
+        private set
+
+    /** True while the camera's own white balance has been measured at least once. */
+    val whiteBalanceAnchored: Boolean get() = autoGains != null
 
     /**
      * A colour temperature, tungsten to daylight.
@@ -1060,11 +1139,48 @@ class CaptureEngine(private val context: Context) {
             val fm2 = matrix(colour.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX2)) ?: fm1
 
             if (cm1 != null && cm2 != null) {
-                val t = WhiteBalance.blend(wanted, k1, k2)
-                val colourMatrix = WhiteBalance.mix(cm1, cm2, t)
-                val gains = WhiteBalance.gains(wanted, colourMatrix)
-                val forward =
-                    if (fm1 != null && fm2 != null) WhiteBalance.mix(fm1, fm2, t) else null
+                // The sensor's own calibration, as two functions of temperature.
+                val colourAt = { k: Int -> WhiteBalance.mix(cm1, cm2, WhiteBalance.blend(k, k1, k2)) }
+                val forwardAt = { k: Int ->
+                    if (fm1 != null && fm2 != null)
+                        WhiteBalance.mix(fm1, fm2, WhiteBalance.blend(k, k1, k2))
+                    else null
+                }
+
+                // THE GREEN.
+                //
+                // The calibration says how the picture must CHANGE from one
+                // temperature to the next, and it is trustworthy for that. What
+                // it evidently is not, on this phone, is a correct answer on its
+                // own — an absolute error in white balance on a Bayer sensor has
+                // exactly one colour, and that colour is green.
+                //
+                // So the camera's own automatic answer is the anchor: the gains
+                // and the matrix its makers chose for this scene, caught at the
+                // moment the operator took it over. The fader carries that pair
+                // along the calibration's shape. At the anchor the picture is
+                // exactly what auto was showing; away from it both halves move
+                // out of one interpolation, so they still cannot disagree.
+                val measured = autoGains
+                val measuredTransform = autoTransform
+                val anchor = measured?.let { WhiteBalance.anchorKelvin(it, colourAt) }
+
+                val modelGains = WhiteBalance.gains(wanted, colourAt(wanted))
+                val gains = if (measured != null && anchor != null) {
+                    WhiteBalance.shiftGains(
+                        measured, WhiteBalance.gains(anchor, colourAt(anchor)), modelGains
+                    )
+                } else modelGains
+
+                val modelTransform = forwardAt(wanted)?.let { WhiteBalance.transform(it) }
+                val transform = when {
+                    modelTransform == null -> null
+                    measuredTransform != null && anchor != null ->
+                        forwardAt(anchor)?.let { WhiteBalance.transform(it) }?.let { at ->
+                            WhiteBalance.shiftTransform(measuredTransform, at, modelTransform)
+                        } ?: modelTransform
+                    else -> modelTransform
+                }
 
                 request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
                 request.set(
@@ -1076,24 +1192,29 @@ class CaptureEngine(private val context: Context) {
                     RggbChannelVector(gains[0], gains[1], gains[2], gains[3])
                 )
                 // The other half, out of the same blend. Without it this is v65.
-                if (forward != null) {
+                if (transform != null) {
                     request.set(
-                        CaptureRequest.COLOR_CORRECTION_TRANSFORM,
-                        transformOf(WhiteBalance.transform(forward))
+                        CaptureRequest.COLOR_CORRECTION_TRANSFORM, transformOf(transform)
                     )
                 }
+                manualWhiteBalance = true
                 val ok = apply()
                 whiteBalanceIsContinuous = ok
+                reportWhiteBalance = ok
+                lastAnchorKelvin = anchor
                 Trace.control(
                     "white balance",
                     "${wanted}K between ${k1}K and ${k2}K" +
+                        (anchor?.let { ", anchored to the camera's own at ${it}K" }
+                            ?: ", NO anchor, absolute from the calibration") +
                         String.format(", gains %.2f/%.2f/%.2f", gains[0], gains[1], gains[3]) +
-                        (if (forward == null) ", NO forward matrix" else ""),
+                        (if (transform == null) ", NO forward matrix" else ""),
                     if (ok) "applied, continuous" else "refused"
                 )
                 // A refusal falls through to the presets rather than leaving the
                 // operator with a fader that does nothing.
                 if (ok) return true
+                manualWhiteBalance = false
             }
         }
 
@@ -1104,8 +1225,10 @@ class CaptureEngine(private val context: Context) {
             return false
         }
         request.set(CaptureRequest.CONTROL_AWB_MODE, presetMode(index))
+        manualWhiteBalance = true
         val ok = apply()
         whiteBalanceIsContinuous = false
+        reportWhiteBalance = ok
         Trace.control(
             "white balance", "${wanted}K",
             if (ok) "applied, nearest preset ${WhiteBalance.PRESETS[index]}K" else "refused"
@@ -1125,6 +1248,7 @@ class CaptureEngine(private val context: Context) {
     /** Back to the camera's own judgement. */
     fun setAutoWhiteBalance(): Boolean {
         val request = builder ?: return false
+        manualWhiteBalance = false
         request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
         request.set(
             CaptureRequest.COLOR_CORRECTION_MODE,
@@ -1136,12 +1260,47 @@ class CaptureEngine(private val context: Context) {
         return ok
     }
 
+    /**
+     * How close *this* lens can be driven, in dioptres, or 0 for a fixed one.
+     *
+     * **The difference between a lens that says nothing and a lens that says
+     * zero is the whole of "lens one does not react to the focus slider".**
+     * v76 took the larger of the sub-lens's travel and the parent's, to stop a
+     * sub-lens that publishes nothing from refusing a pull that works — and
+     * because `null` and `0f` had already been collapsed into the same number
+     * one line earlier, it also handed the ultra wide the *main* lens's travel.
+     * An ultra wide has no focus motor: the fader moved, the number moved, the
+     * request was accepted by the logical camera, and the glass never did
+     * anything, which is the worst kind of control there is.
+     *
+     * Read as three answers rather than two. The lens being looked through has
+     * the last word whenever it publishes one at all, including when its answer
+     * is "none"; only a lens that publishes nothing falls back to its parent.
+     */
     fun minimumFocusDistance(): Float {
-        val lens = lensCharacteristics
-            ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
-        val logical = characteristics
-            ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
-        return maxOf(lens, logical)
+        val lens = lensCharacteristics?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE)
+        if (lens != null) return lens
+        return characteristics?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+    }
+
+    /**
+     * Whether the lens actually moved when it was last told to.
+     *
+     * A lens that refuses in silence and a lens that is doing its job look
+     * identical from the app's side, and this camera has shipped both. The
+     * request is compared with what the capture result reports the lens
+     * reached: if the two stay a long way apart, the operator is told on screen
+     * rather than left pulling a fader that does nothing.
+     */
+    @Volatile var focusCommanded: Float? = null
+        private set
+
+    fun focusIsResponding(): Boolean {
+        val wanted = focusCommanded ?: return true
+        val reached = lastFocusDistance ?: return true
+        val travel = minimumFocusDistance()
+        if (travel <= 0f) return false
+        return kotlin.math.abs(reached - wanted) <= travel * 0.2f
     }
 
     /** The AF modes this camera will actually accept. */

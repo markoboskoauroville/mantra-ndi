@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RectF
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
@@ -73,27 +72,30 @@ class RailButton @JvmOverloads constructor(
         contentDescription = "$what, ${state.name.lowercase()}"
     }
 
-    private val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = density(1f)
-    }
     private val word = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        // Tiny, as asked. A broadcast camera's keys are labels, not headings:
-        // they are read once while learning the rail and recognised by
-        // position and colour afterwards.
-        textSize = density(9f)
-        letterSpacing = 0.08f
+        // THE WORD IS THE KEY.
+        //
+        // *"We are losing the space with actually creating button rectangles.
+        // There should be only text, so that the buttons are invisible and they
+        // can be much closer."* He is right and he asked for it at the start: a
+        // box around a word costs an outline, a corner radius, an inset and a
+        // margin, and every one of those is taken off the word. Without them
+        // the same rail carries the same keys with the letters half as big
+        // again, which is the difference between a key that is read and a key
+        // that is recognised by position and hoped for.
+        //
+        // Grey is off and green is on. That is the whole language and it does
+        // not need a border to say it.
+        textSize = density(13f)
+        letterSpacing = 0.04f
     }
     private val whisper = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         typeface = Typeface.MONOSPACE
-        textSize = density(7f)
+        textSize = density(9f)
     }
-
-    private val rect = RectF()
 
     init {
         isClickable = true
@@ -103,25 +105,12 @@ class RailButton @JvmOverloads constructor(
     private fun density(dp: Float) = dp * resources.displayMetrics.density
 
     override fun onDraw(canvas: Canvas) {
-        val inset = density(1.5f)
-        rect.set(inset, inset, width - inset, height - inset)
-        val radius = density(3f)
-
         val tint = when (state) {
             State.ON -> GREEN
             State.OFF -> GREY
             State.ARMED -> AMBER
             State.DEAD -> DEAD
         }
-
-        // A filled key reads as on from further away than a coloured outline
-        // does, so on is filled and everything else is an outline.
-        if (state == State.ON) {
-            body.color = Color.argb(46, Color.red(tint), Color.green(tint), Color.blue(tint))
-            canvas.drawRoundRect(rect, radius, radius, body)
-        }
-        edge.color = tint
-        canvas.drawRoundRect(rect, radius, radius, edge)
 
         word.color = tint
         whisper.color = Color.argb(150, Color.red(tint), Color.green(tint), Color.blue(tint))
@@ -135,8 +124,8 @@ class RailButton @JvmOverloads constructor(
         val metrics = word.fontMetrics
         val centre = height / 2f
         if (hasSub) {
-            canvas.drawText(label, width / 2f, centre - density(1f), word)
-            canvas.drawText(sub!!, width / 2f, centre + density(8f), whisper)
+            canvas.drawText(label, width / 2f, centre - density(1.5f), word)
+            canvas.drawText(sub!!, width / 2f, centre + density(10f), whisper)
         } else {
             canvas.drawText(
                 label, width / 2f, centre - (metrics.ascent + metrics.descent) / 2f, word

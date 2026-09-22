@@ -90,6 +90,33 @@ object Mechanism {
     }
 
     /**
+     * The fastest shutter worth putting on a fader: 1/8000.
+     *
+     * His sensor will expose for about eleven microseconds, which reads out as
+     * **1/92030**, and the fader dutifully offered every stop of it. Nobody
+     * shoots at a ninety-thousandth of a second; what that end of the range
+     * costs is precision everywhere else, because the useful two-thirds of the
+     * travel is squeezed into the right-hand third of the glass.
+     */
+    const val FASTEST_USEFUL_SHUTTER_NS = 125_000L
+
+    /**
+     * The range a shutter fader should actually cover.
+     *
+     * The ceiling is one frame interval, because a shutter longer than a frame
+     * cannot be honoured at the frame rate and the camera resolves the
+     * contradiction by dropping the rate. The floor is 1/8000 or whatever the
+     * sensor's own fastest is, whichever is the *slower* — so the whole track
+     * is speeds somebody might choose, and the knob can be put on 1/50 with a
+     * thumb rather than with a fingernail.
+     */
+    fun shutterFaderRange(fps: Int, sensorMinNs: Long, sensorMaxNs: Long): Pair<Long, Long> {
+        val (low, high) = shutterRangeForFps(fps, sensorMinNs, sensorMaxNs)
+        val floor = maxOf(low, FASTEST_USEFUL_SHUTTER_NS).coerceAtMost(high)
+        return floor to high
+    }
+
+    /**
      * Fader position to shutter time, in stops.
      *
      * Geometric rather than linear, because that is how shutter speeds work:
@@ -135,6 +162,62 @@ object Mechanism {
 
     /** The film-standard 180 degree shutter for a frame rate. */
     fun shutter180Ns(fps: Int): Long = if (fps <= 0) 0 else 1_000_000_000L / (fps * 2L)
+
+    /**
+     * A fader's position, 0..1, to the value it stands for, in stops.
+     *
+     * **This is "the slider stops two thirds of the way along".** A fader whose
+     * knob is drawn from what the camera reports, while the drag moves a fixed
+     * number of stops per swipe, is two different instruments wearing one hat:
+     * the sensor will take an exposure of ten microseconds and the frame rate
+     * will not, so the camera clamps at a thirtieth of a second, and the knob
+     * parks at whatever fraction of the *sensor's* range that happens to be —
+     * two thirds, on his phone — with a third of the track that can never be
+     * reached and no way to tell from looking.
+     *
+     * So the position is the instrument. The whole track is the whole of the
+     * range the camera will honour, the knob goes where the finger puts it,
+     * and the value is read off the position rather than the other way round.
+     * Geometric, because these are stops: each equal step of the thumb is an
+     * equal change of light, which is the only spacing a camera operator's
+     * hand has ever been trained on.
+     */
+    fun valueAtPosition(position: Float, low: Double, high: Double): Double {
+        if (low <= 0.0 || high <= low) return low.coerceAtLeast(0.0)
+        val at = position.coerceIn(0f, 1f).toDouble()
+        return low * (high / low).pow(at)
+    }
+
+    /** Where a value sits on that fader, 0..1. The inverse of [valueAtPosition]. */
+    fun positionOfValue(value: Double, low: Double, high: Double): Float {
+        if (value <= 0.0 || low <= 0.0 || high <= low) return 0f
+        val span = ln(high / low)
+        if (span <= 0.0) return 0f
+        return (ln(value.coerceIn(low, high) / low) / span).toFloat().coerceIn(0f, 1f)
+    }
+
+    /**
+     * The frame rates worth offering, out of what the camera will accept.
+     *
+     * A camera publishes ranges rather than rates, and most of them are
+     * ranges nobody wants — `[15,30]` is the one that lets a dim room halve
+     * the frame rate to keep the picture bright, which on a stream is worse
+     * than a dark picture. A rate is offered here only when the camera will
+     * hold it steady, top and bottom, and only if it is a rate anybody shoots
+     * at: 24 for film, 25 and 50 where the mains is 50Hz, 30 and 60 where it
+     * is 60.
+     */
+    val FRAME_RATES = intArrayOf(24, 25, 30, 50, 60)
+
+    fun frameRatesFrom(ranges: List<Pair<Int, Int>>, minFrameDurationNs: Long): List<Int> {
+        val steady = ranges.filter { it.first == it.second }.map { it.second }.toSet()
+        val ceiling =
+            if (minFrameDurationNs > 0L) (1_000_000_000.0 / minFrameDurationNs) else Double.MAX_VALUE
+        return FRAME_RATES.filter { fps ->
+            fps <= ceiling + 0.5 &&
+                (steady.contains(fps) || ranges.any { it.first <= fps && fps <= it.second })
+        }
+    }
 
     // --- white balance ------------------------------------------------------
 
@@ -809,8 +892,8 @@ object Mechanism {
     fun producerRotation(matrix: FloatArray): Int {
         if (matrix.size < 6) return 0
         // Divide out the standard vertical flip: R = M · flipY.
-        val r00 = matrix[0]
-        val r10 = matrix[1]
+        var r00 = matrix[0]
+        var r10 = matrix[1]
         val r01 = -matrix[4]
         val r11 = -matrix[5]
         // A matrix with nothing in it at all is a texture that has not had a
@@ -818,12 +901,51 @@ object Mechanism {
         if (kotlin.math.abs(r00) < 1e-4f && kotlin.math.abs(r10) < 1e-4f &&
             kotlin.math.abs(r01) < 1e-4f && kotlin.math.abs(r11) < 1e-4f
         ) return 0
+        // THE SELFIE CAMERA, UPSIDE DOWN.
+        //
+        // A reflection is not a rotation, and this read one as the other. A
+        // front camera whose producer mirrors the frame hands over a matrix
+        // with a negative determinant, and the classification below saw its
+        // negative first entry and answered 180 — so a quarter of a turn that
+        // was never there was subtracted from the angle, and the selfie lens
+        // came up upside down while the three rear lenses were right. The
+        // mirror is taken off first and reported separately: R = Rot · flipX,
+        // so R · flipX is the rotation on its own.
+        if (mirrorOf(r00, r10, r01, r11)) {
+            r00 = -r00
+            r10 = -r10
+        }
         return if (kotlin.math.abs(r00) >= kotlin.math.abs(r10)) {
             if (r00 >= 0f) 0 else 180
         } else {
             if (r10 < 0f) 90 else 270
         }
     }
+
+    /**
+     * Whether the camera handed over a *mirrored* frame.
+     *
+     * A determinant below zero is a reflection, and no amount of rotating
+     * undoes one. This exists for two reasons: so [producerRotation] cannot
+     * mistake a mirror for a half turn, and so the preview can put the mirror
+     * back the other way — because this is a broadcast camera and the monitor
+     * has to show what the wire is carrying. The encoder is fed the camera
+     * buffer directly and never sees this matrix at all.
+     */
+    fun producerMirrored(matrix: FloatArray): Boolean {
+        if (matrix.size < 6) return false
+        val r00 = matrix[0]
+        val r10 = matrix[1]
+        val r01 = -matrix[4]
+        val r11 = -matrix[5]
+        if (kotlin.math.abs(r00) < 1e-4f && kotlin.math.abs(r10) < 1e-4f &&
+            kotlin.math.abs(r01) < 1e-4f && kotlin.math.abs(r11) < 1e-4f
+        ) return false
+        return mirrorOf(r00, r10, r01, r11)
+    }
+
+    private fun mirrorOf(r00: Float, r10: Float, r01: Float, r11: Float): Boolean =
+        (r00 * r11 - r01 * r10) < 0f
 
     /**
      * The buffer's shape **as the view already sees it**.

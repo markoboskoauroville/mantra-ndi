@@ -89,6 +89,31 @@ class SettingsActivity : AppCompatActivity() {
         }
         resolutions.setOnCheckedChangeListener { _, id -> settings.captureWidth = id }
 
+        // Frames a second, from what the lenses will actually hold. Same rule
+        // as the resolutions: a rate a sensor cannot sustain is a session that
+        // runs at something else and says nothing.
+        val rates = CameraCatalogue.lenses(this)
+            .flatMap { pipeline.frameRatesOffered(it.id, it.physicalId, settings.captureWidth) }
+            .distinct()
+            .sorted()
+            .ifEmpty { listOf(30) }
+        val frameRate = findViewById<RadioGroup>(R.id.frameRate)
+        rates.forEach { fps ->
+            frameRate.addView(
+                RadioButton(this).apply {
+                    id = fps
+                    text = "$fps"
+                    textSize = 12f
+                    isChecked = fps == settings.fps
+                }
+            )
+        }
+        if (rates.none { it == settings.fps }) {
+            val nearest = rates.minByOrNull { kotlin.math.abs(it - settings.fps) }
+            if (nearest != null) { settings.fps = nearest; frameRate.check(nearest) }
+        }
+        frameRate.setOnCheckedChangeListener { _, id -> settings.fps = id }
+
         slider(
             R.id.bitRate, R.id.bitRateValue,
             value = settings.bitRateMbps - 2,
@@ -163,27 +188,32 @@ class SettingsActivity : AppCompatActivity() {
             ).show()
         }
 
-        // MINIMAL and VERBOSE.
+        // MIN, one key.
+        //
+        // It was two, MINIMAL and VERBOSE, and two keys for one two-state thing
+        // is a question asked twice. One key that is green while the screen is
+        // quiet says the same thing in a quarter of the room — *"just the three
+        // letters MIN. When I press this, all help text disappears."*
         //
         // Every hint carries a tag rather than being listed by id, so a hint
         // added later is covered without anybody remembering to add it here.
         val minimal = findViewById<Button>(R.id.minimal)
-        val verbose = findViewById<Button>(R.id.verbose)
         fun showHints(on: Boolean) {
             settings.verboseSettings = on
             hints(findViewById(android.R.id.content)).forEach {
                 it.visibility = if (on) View.VISIBLE else View.GONE
             }
-            minimal.alpha = if (on) 0.45f else 1f
-            verbose.alpha = if (on) 1f else 0.45f
+            // Grey is off and green is on, here as on the rails. Green means
+            // the screen is minimal, which is what the key does.
+            minimal.setTextColor(if (on) resources.getColor(R.color.quiet, theme) else RailButton.GREEN)
         }
-        minimal.setOnClickListener { showHints(false) }
-        verbose.setOnClickListener { showHints(true) }
+        minimal.setOnClickListener { showHints(!settings.verboseSettings) }
         showHints(settings.verboseSettings)
 
+        // The version, at the top, where he looks for it after an install.
+        findViewById<TextView>(R.id.headerVersion).text = "v${BuildConfig.VERSION_NAME}"
         findViewById<TextView>(R.id.version).text =
-            "Mantra NDI v${BuildConfig.VERSION_NAME}  ·  " +
-                (if (NdiSender.available) "NDI SDK present" else "built without the NDI SDK")
+            if (NdiSender.available) "NDI SDK present" else "built without the NDI SDK"
     }
 
     /** Every view in the tree tagged as help text. */

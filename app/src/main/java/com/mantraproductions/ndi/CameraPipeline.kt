@@ -75,7 +75,18 @@ class CameraPipeline(private val context: Context) {
      */
     var maxWidth: Int = 1920
     private var size: Size = Size(1920, 1080)
-    private var fps: Int = 30
+
+    /**
+     * How many frames a second are written and sent.
+     *
+     * It was 30, in the code, with nothing to say so. A frame rate is not a
+     * detail of the implementation — it is the first thing anybody sets on a
+     * camera, because it decides what the footage cuts with: 24 for film, 25
+     * beside a 50Hz mains, 30 and 60 beside a 60Hz one, 50 and 60 for slow
+     * motion. Set before the pipeline starts; a session cannot be re-timed
+     * once it is built, any more than it can be resized.
+     */
+    var fps: Int = 30
 
     private var parameterSets: Triple<ByteArray, ByteArray?, ByteArray?>? = null
 
@@ -140,6 +151,35 @@ class CameraPipeline(private val context: Context) {
             .sortedDescending()
     } catch (t: Throwable) {
         emptyList()
+    }
+
+    /**
+     * The frame rates this lens will actually hold, for the settings screen.
+     *
+     * Asked of the camera rather than typed into a list, for the same reason
+     * the resolutions are: a rate the sensor cannot sustain at this size is a
+     * session that configures and then quietly runs at something else, or
+     * refuses outright and leaves a black screen to diagnose. Both the
+     * camera's own list of steady ranges and the shortest frame duration it
+     * publishes for this size have to agree before a rate is offered.
+     */
+    fun frameRatesOffered(cameraId: String, physicalId: String? = null, width: Int = 1920):
+        List<Int> = try {
+        val characteristics = characteristicsOf(cameraId, physicalId)
+        val ranges = characteristics
+            .get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+            ?.map { it.lower to it.upper }.orEmpty()
+        val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        val chosen = map?.getOutputSizes(ImageFormat.PRIVATE)
+            ?.firstOrNull { it.width == width }
+            ?: map?.getOutputSizes(ImageFormat.PRIVATE)?.firstOrNull()
+        val shortest = if (map != null && chosen != null) {
+            runCatching { map.getOutputMinFrameDuration(ImageFormat.PRIVATE, chosen) }
+                .getOrDefault(0L)
+        } else 0L
+        Mechanism.frameRatesFrom(ranges, shortest).ifEmpty { listOf(30) }
+    } catch (t: Throwable) {
+        listOf(30)
     }
 
     fun previewSizeFor(cameraId: String, physicalId: String? = null): Size = try {

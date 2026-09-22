@@ -6,6 +6,143 @@ working state of *this* app.
 
 ---
 
+## 22.9.2026, night — v80, the manual camera he actually asked for
+
+Eight faults in one pass, and seven of them turned out to be one sentence each
+once the mechanism was found. His words are the headings.
+
+### "The whole range is not used. The slider stops two thirds of the way along"
+
+His shutter zone stopped in the middle of its own track, and the reason is
+exact. The knob was drawn from **what the camera reported**, while the drag
+moved **a fixed six stops per swipe** — two different instruments wearing one
+hat. A camera will not expose for longer than one frame, so at 30fps it clamps
+at 1/30 whatever the sensor claims, and 1/30 is **two thirds of the way along**
+a range whose other end is his sensor's eleven microseconds: **1/92030**, the
+number he read out.
+
+So the position is the instrument now. `Mechanism.valueAtPosition` and
+`positionOfValue` are a pair, the knob goes exactly where the thumb puts it, and
+the value is read off the knob. And the track is the range the camera will
+actually honour: **1/8000 to one frame interval**, because nobody has ever
+chosen a ninety-thousandth of a second and the whole cost of offering it is
+precision everywhere else. Change the frame rate and the slow end of the track
+moves with it.
+
+### "I want to decide how many frames a second I am writing my file"
+
+There was no such control: 30 was written in the code with nothing on any screen
+to say so, which on a camera is not a default but a missing control. **24 / 25 /
+30 / 50 / 60**, in the gear, filtered against what the lenses publish *and* will
+hold steady — a range like `[15,30]` is the one that lets a dim room halve the
+rate to keep the picture bright, and on a live stream that is worse than a dark
+picture. It sets the recording, the stream and the shutter ceiling together.
+
+### "Focus is unfunctional" — and it was three different lenses
+
+*"Lens one doesn't react. Lens two is reacting. Lens four is fixed."* All three
+are the same line of code. `minimumFocusDistance()` took the **larger** of the
+sub-lens's travel and the parent's, and one line earlier had already collapsed
+**null** and **0f** into the same number. An ultra wide has no focus motor and
+says so by publishing zero — and was handed the *main* lens's travel instead.
+The fader moved, the number moved, the logical camera accepted the request, and
+the glass never did anything.
+
+Three answers now, not two: the lens being looked through has the last word
+whenever it publishes one **including when its answer is "none"**, and only a
+lens that publishes nothing falls back to its parent. A fixed lens says **FIXED**
+on its zone and says so on the status line when it is dragged. And there is a
+new instrument for the case nobody can predict: the request and what the capture
+result says the lens *reached* are compared a beat after every pull, and a lens
+that is not following says so on screen.
+
+### "White balance is just some nonsense making my picture green" — the third time
+
+v65 moved the gains and left the matrix. v77 computed both from the sensor's
+published calibration, which is right in principle and still wrong by whatever
+the absolute model is out by — and **an absolute error in white balance on a
+Bayer sensor has exactly one colour**, because green is the channel with twice
+the samples.
+
+So the fader stops being absolute. **The camera's own automatic answer is the
+anchor**: the gains and the colour matrix its makers chose, for this scene,
+caught in the capture result at the moment the operator took it over. The
+calibration is then used for the one thing it is unarguably good for — *the
+shape of the change* from one temperature to the next — and the fader carries
+the camera's own answer along that shape. At the anchor the picture is exactly
+what auto was showing, to the last digit; away from it both halves move out of
+one interpolation, so they still cannot disagree. It is the same discipline as
+`M`: leave auto from where auto had got to.
+
+The trace now reads the change **back**: `white balance readback: awb mode …,
+correction mode …, gains …, transform reported`. If it is ever green again, that
+line says which half the camera dropped.
+
+### "I want zones back, horizontal, and maximise the slider length"
+
+The zones were already horizontal; what was wrong was the room. The name and the
+value were two fixed columns **180 density pixels wide** and the track began
+after them — a third of the travel spent on two words. The words are small and
+sit **above** the track now, and the track runs the full width of the picture,
+edge to edge.
+
+**A double tap hands the zone back to the camera.** It was a single tap, and a
+single tap is what a thumb does by accident while it is finding the band it
+wants; losing manual exposure mid-shot because a finger brushed the glass is not
+a control. A double tap always means *auto*, never "the other one" — a gesture
+that toggles is a gesture whose result has to be checked afterwards. Dragging
+still takes the parameter over, and still starts from where the camera was.
+
+### "Only text, so the buttons are invisible and can be much closer"
+
+He asked for this at the very beginning. A box round a word costs an outline, a
+corner radius, an inset and a margin, and every one of those is taken off the
+word inside it. The keys are **text and nothing else** now, **13sp instead of
+9sp** — half as big again — and grey/green says the rest without a border.
+**LGHT and SNAP moved to the right rail, under REC**, which is two keys' worth
+of height shared among the ten left on the other side and puts the lamp and the
+stills where a right thumb already is.
+
+### "Turn the phone upside down in landscape and it doesn't follow"
+
+It could not. Turning a phone end for end takes the display from 90° to 270° and
+changes **nothing else**: same orientation, same window size, so no
+configuration change and no layout change arrive — and the preview transform was
+only ever recomputed when one of those did. A **`DisplayManager.DisplayListener`**
+hears exactly that case and nothing else.
+
+### "The selfie camera is 180 degrees rotated"
+
+A front camera hands over a **mirrored** frame, and `producerRotation` read the
+reflection as a half turn: it saw the negative entry and answered 180, so half a
+turn that was never there was taken off the angle. Lens four came up upside down
+while the three rear lenses were right, from one missing determinant.
+
+A reflection is not a rotation. The mirror is taken off first — `R · flipX` is
+the rotation on its own — and reported separately, so the preview can put it back
+the other way and show what the wire is carrying. The geometry line says
+`mirrored` and `front` now, so one screenshot settles it. And **`ROT` is
+remembered per lens**: a sensor mounted unusually is corrected once, on the lens
+it belongs to, and correcting one never turns another.
+
+### The settings, at the top
+
+**MIN**, three letters, top right, green while the screen is quiet — one key
+rather than two, because two keys for one two-state thing is a question asked
+twice. Beside it, **the version**, where he looks for it after an install
+instead of at the bottom of a long scroll.
+
+*Needed from him:* **1.** The shutter zone end to end — the whole track should
+be usable now, 1/8000 at the left to 1/30 (or 1/24, or 1/60) at the right.
+**2.** Frame rate in the gear, then a take, and whether the file is at the rate
+he chose. **3.** White balance: sweep it against something white and say whether
+it is green anywhere. **4.** Lens 4, the selfie: upright now, or still upside
+down — and either way **one screenshot of the geometry line**, which now says
+`mirrored` and `front`. **5.** The phone end for end in landscape. **6.** The
+left rail: is the text big enough.
+
+---
+
 ## 22.9.2026, evening — v79, the portrait strip, the fader's real range, the settings
 
 *"So landscape mode is working good."* — and his trace confirms the rest of v78:

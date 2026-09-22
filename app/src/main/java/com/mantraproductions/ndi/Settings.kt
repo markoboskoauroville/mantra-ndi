@@ -79,6 +79,37 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putInt(TURNS, ((value % 4) + 4) % 4).apply()
 
     /**
+     * The same correction, per lens.
+     *
+     * A phone's lenses are not all mounted the same way round — a front camera
+     * is a separate sensor in a separate hole, and its own quarter turns are
+     * its own. One global correction meant fixing the selfie lens broke the
+     * three rear ones and the other way about. The old single number is the
+     * default for every lens, so a phone that was already corrected stays
+     * corrected.
+     */
+    fun quarterTurnsFor(lens: String): Int =
+        prefs.getInt(TURNS + ":" + lens, quarterTurns)
+
+    fun setQuarterTurnsFor(lens: String, value: Int) {
+        prefs.edit().putInt(TURNS + ":" + lens, ((value % 4) + 4) % 4).apply()
+    }
+
+    /**
+     * Frames a second, for the file and the wire alike.
+     *
+     * *"I want to decide how many frames a second I am writing my file."* It
+     * was 30 in the code with nothing on any screen to say so, which on a
+     * camera is not a default but a missing control: 24 is film, 25 belongs
+     * beside a 50Hz mains and 30 beside a 60Hz one, and 50 and 60 are what
+     * anybody shoots who intends to slow it down. The list offered is filtered
+     * against what the lens publishes, like the resolutions.
+     */
+    var fps: Int
+        get() = prefs.getInt(FPS, 30)
+        set(value) = prefs.edit().putInt(FPS, value.coerceIn(1, 240)).apply()
+
+    /**
      * The longest side the camera is asked for: 3840, 1920 or 1280.
      *
      * It was pinned to 1920 in the code with a paragraph about the wire, and
@@ -118,5 +149,6 @@ class Settings(context: Context) {
         const val TURNS = "quarterTurns"
         const val WIDTH = "captureWidth"
         const val VERBOSE = "verboseSettings"
+        const val FPS = "framesPerSecond"
     }
 }

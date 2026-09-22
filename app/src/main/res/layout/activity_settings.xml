@@ -23,11 +23,13 @@
         android:padding="20dp">
 
         <!--
-             The title, and the two words that decide how much this screen says.
+             The title, the one key that decides how much this screen says, and
+             the version.
 
              The help text is worth having once and is in the way for ever
-             after. It is not a setting so much as a mode of the screen, so it
-             sits in the header rather than in the list, and it is remembered.
+             after, so MIN is a mode of the screen rather than a setting. The
+             version is here because it is the first thing he checks after an
+             install and it used to be at the bottom of a long scroll.
         -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -58,23 +60,18 @@
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
                 android:text="@string/minimal"
+                android:textAllCaps="false"
                 android:textSize="11sp"
                 android:fontFamily="monospace" />
 
-            <Button
-                android:id="@+id/verbose"
-                style="?android:attr/borderlessButtonStyle"
+            <TextView
+                android:id="@+id/headerVersion"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:text="@string/verbose"
-                android:textSize="11sp"
-                android:fontFamily="monospace" />
+                android:paddingStart="6dp"
+                android:fontFamily="monospace"
+                android:textSize="13sp"
+                android:textColor="@color/amber" />
         </LinearLayout>
 
         <!--
@@ -143,6 +140,24 @@
 
         <TextView android:tag="hint" style="@style/MantraHint"
             android:text="@string/depth_hint" />
+
+        <!--
+             Frames a second: the first thing anybody sets on a camera.
+
+             It was 30, in the code, with nothing on any screen to say so —
+             which on a camera is not a default but a missing control. The list
+             is what this phone's lenses publish and will hold steady, for the
+             same reason the resolutions are: a rate the sensor cannot sustain
+             is a session that quietly runs at something else.
+        -->
+        <TextView style="@style/MantraLabel" android:text="@string/frame_rate" />
+        <TextView android:tag="hint" style="@style/MantraHint"
+            android:text="@string/frame_rate_hint" />
+        <RadioGroup
+            android:id="@+id/frameRate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
 
         <!-- The source name -->
         <TextView style="@style/MantraLabel" android:text="@string/source_name" />

@@ -233,4 +233,94 @@ class WhiteBalanceTest {
         // tilts the whole fader.
         assertEquals(6504, WhiteBalance.kelvinForIlluminant(999))
     }
+
+    // --- the anchor ---------------------------------------------------------
+
+    private fun colourAt(kelvin: Int): FloatArray =
+        WhiteBalance.mix(
+            colourMatrixA, colourMatrixD65, WhiteBalance.blend(kelvin, 2856, 6504)
+        )
+
+    /**
+     * **The green, stated as a test.**
+     *
+     * The whole of the anchor is this: at the temperature the camera's own
+     * answer amounts to, the fader must hand the camera back *exactly* what it
+     * was already doing. Anything else is an absolute error, and an absolute
+     * error in white balance on a Bayer sensor has one colour.
+     */
+    @Test
+    fun `at the anchor the camera gets its own answer back untouched`() {
+        val measured = floatArrayOf(1.94f, 1f, 1f, 1.62f)
+        val anchor = WhiteBalance.anchorKelvin(measured) { colourAt(it) }
+        val model = WhiteBalance.gains(anchor, colourAt(anchor))
+        val out = WhiteBalance.shiftGains(measured, model, model)
+        for (i in 0..3) {
+            assertEquals("channel $i", measured[i].toDouble(), out[i].toDouble(), 0.001)
+        }
+    }
+
+    @Test
+    fun `the anchor is the temperature the camera's own gains amount to`() {
+        for (kelvin in intArrayOf(3200, 4000, 5000, 6500)) {
+            val gains = WhiteBalance.gains(kelvin, colourAt(kelvin))
+            val found = WhiteBalance.anchorKelvin(gains) { colourAt(it) }
+            // Within a hundred Kelvin, which is finer than the fader prints.
+            assertTrue("$kelvin came back as $found", kotlin.math.abs(found - kelvin) <= 100)
+        }
+    }
+
+    @Test
+    fun `moving off the anchor moves both halves the way the calibration says`() {
+        val measured = floatArrayOf(1.94f, 1f, 1f, 1.62f)
+        val anchor = WhiteBalance.anchorKelvin(measured) { colourAt(it) }
+        val atAnchor = WhiteBalance.gains(anchor, colourAt(anchor))
+        val warm = WhiteBalance.shiftGains(
+            measured, atAnchor, WhiteBalance.gains(3200, colourAt(3200))
+        )
+        val cool = WhiteBalance.shiftGains(
+            measured, atAnchor, WhiteBalance.gains(6500, colourAt(6500))
+        )
+        // Telling the camera the light is tungsten must cool the picture: more
+        // blue against red, not less. The direction is the whole of the fader.
+        assertTrue(
+            "warm ${warm[3] / warm[0]} vs cool ${cool[3] / cool[0]}",
+            warm[3] / warm[0] > cool[3] / cool[0]
+        )
+        // And nothing below unity, which is not a gain a sensor can be asked for.
+        for (g in warm + cool) assertTrue("gain $g", g >= 0.999f)
+    }
+
+    @Test
+    fun `a matrix and its inverse come back to where they started`() {
+        val m = floatArrayOf(
+            1.2f, -0.2f, 0.05f,
+            -0.1f, 1.1f, -0.02f,
+            0.03f, -0.15f, 1.05f
+        )
+        val back = WhiteBalance.invert(m)!!
+        val identity = WhiteBalance.multiply(m, back)
+        for (i in 0..8) {
+            assertEquals(
+                "element $i",
+                WhiteBalance.IDENTITY[i].toDouble(), identity[i].toDouble(), 0.0005
+            )
+        }
+        // A matrix with no inverse is said so rather than answered with noise.
+        assertTrue(WhiteBalance.invert(FloatArray(9)) == null)
+    }
+
+    @Test
+    fun `the transform is anchored the same way the gains are`() {
+        val measured = floatArrayOf(
+            1.1f, -0.1f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, -0.05f, 1.2f
+        )
+        val model = WhiteBalance.transform(colourAt(4000))
+        val same = WhiteBalance.shiftTransform(measured, model, model)!!
+        for (i in 0..8) {
+            assertEquals("element $i", measured[i].toDouble(), same[i].toDouble(), 0.0005)
+        }
+    }
 }

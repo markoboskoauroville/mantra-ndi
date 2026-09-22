@@ -896,4 +896,141 @@ class MechanismTest {
             }
         }
     }
+
+    // --- what the camera did before we were handed the frame ----------------
+
+    /**
+     * **The selfie camera, upside down.**
+     *
+     * A front camera hands over a mirrored frame, and the decoder read the
+     * reflection as a half turn — so half a turn that was never there was
+     * taken off the angle and lens four came up upside down while the three
+     * rear lenses were right. A reflection is not a rotation, and the two are
+     * told apart by the determinant.
+     */
+    @Test
+    fun aMirrorIsNotAHalfTurn() {
+        // Mirrored, not turned: what a front camera hands over.
+        val mirrored = floatArrayOf(
+            -1f, 0f, 0f, 0f,
+            0f, -1f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 1f, 0f, 1f
+        )
+        assertEquals(0, Mechanism.producerRotation(mirrored))
+        assertTrue(Mechanism.producerMirrored(mirrored))
+
+        // Genuinely a half turn, and not mirrored.
+        val halfTurn = floatArrayOf(
+            -1f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 0f, 0f, 1f
+        )
+        assertEquals(180, Mechanism.producerRotation(halfTurn))
+        assertFalse(Mechanism.producerMirrored(halfTurn))
+
+        // His phone's quarter turn with a mirror on top of it: the same
+        // matrix as the rear lenses above, reflected. The turn survives the
+        // reflection being taken off, which is the whole of the decomposition.
+        val mirroredQuarter = floatArrayOf(
+            0f, 1f, 0f, 0f,
+            -1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 0f, 0f, 1f
+        )
+        assertEquals(90, Mechanism.producerRotation(mirroredQuarter))
+        assertTrue(Mechanism.producerMirrored(mirroredQuarter))
+
+        // The rear lenses are untouched by any of this.
+        assertFalse(Mechanism.producerMirrored(floatArrayOf(
+            0f, -1f, 0f, 0f,
+            -1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 1f, 0f, 1f
+        )))
+        assertFalse(Mechanism.producerMirrored(FloatArray(16)))
+    }
+
+    // --- the zones ----------------------------------------------------------
+
+    /**
+     * **The shutter zone that stopped two thirds of the way along.**
+     *
+     * The knob was drawn from what the camera reported while the drag moved a
+     * fixed number of stops, and the camera will not expose for longer than a
+     * frame — so at 30fps it clamped at 1/30, which is two thirds of the way
+     * along a range that reaches 1/92030 at the other end. A third of the
+     * track could not be reached and nothing said why.
+     */
+    @Test
+    fun theWholeTrackIsTheWholeUsableRange() {
+        val sensorMin = 10_868L          // his phone: 1/92030
+        val sensorMax = 1_000_000_000L
+        val (low, high) = Mechanism.shutterFaderRange(30, sensorMin, sensorMax)
+        // The fastest end is 1/8000, not a ninety-thousandth.
+        assertEquals(Mechanism.FASTEST_USEFUL_SHUTTER_NS, low)
+        // The slowest end is one frame, because nothing beyond it is honoured.
+        assertEquals(1_000_000_000L / 30, high)
+        // And the value the camera actually settles on is at the very end of
+        // the track rather than two thirds along it.
+        assertEquals(1f, Mechanism.positionOfValue(high.toDouble(), low.toDouble(), high.toDouble()), 0.001f)
+        assertEquals(0f, Mechanism.positionOfValue(low.toDouble(), low.toDouble(), high.toDouble()), 0.001f)
+    }
+
+    @Test
+    fun aSlowerFrameRateOpensTheShutterEndOfTheTrack() {
+        val at24 = Mechanism.shutterFaderRange(24, 10_868L, 1_000_000_000L).second
+        val at60 = Mechanism.shutterFaderRange(60, 10_868L, 1_000_000_000L).second
+        assertTrue("24fps must allow a longer shutter than 60", at24 > at60)
+        assertEquals(1_000_000_000L / 24, at24)
+    }
+
+    @Test
+    fun aPositionAndItsValueAreTheSameQuestionBothWaysRound() {
+        for (position in 0..20) {
+            val at = position / 20f
+            val value = Mechanism.valueAtPosition(at, 50.0, 12800.0)
+            assertEquals("at $at", at, Mechanism.positionOfValue(value, 50.0, 12800.0), 0.001f)
+        }
+        // Halfway along is halfway in stops, which is what a stop-spaced fader
+        // means: eight stops of ISO, four of them behind the knob.
+        val middle = Mechanism.valueAtPosition(0.5f, 50.0, 12800.0)
+        assertEquals(800.0, middle, 1.0)
+    }
+
+    @Test
+    fun aFaderWithNoRangeDoesNotDivideByZero() {
+        assertEquals(0f, Mechanism.positionOfValue(100.0, 100.0, 100.0), 0.0001f)
+        assertEquals(0.0, Mechanism.valueAtPosition(0.5f, 0.0, 0.0), 0.0001)
+        // A position off the end of the track is the end of the track.
+        assertEquals(200.0, Mechanism.valueAtPosition(2f, 100.0, 200.0), 0.0001)
+        assertEquals(100.0, Mechanism.valueAtPosition(-1f, 100.0, 200.0), 0.0001)
+    }
+
+    // --- frame rates --------------------------------------------------------
+
+    @Test
+    fun onlyRatesTheCameraWillHoldSteadyAreOffered() {
+        // A phone that offers [15,30] and [30,30]: 30 is steady, and the
+        // sensor's shortest frame duration rules out 50 and 60.
+        val ranges = listOf(15 to 30, 30 to 30)
+        val offered = Mechanism.frameRatesFrom(ranges, 1_000_000_000L / 30)
+        assertTrue(offered.contains(30))
+        assertFalse("60 cannot be sustained", offered.contains(60))
+        assertTrue("24 fits inside 15..30", offered.contains(24))
+    }
+
+    @Test
+    fun aSixtyHertzSensorOffersTheFastRates() {
+        val offered = Mechanism.frameRatesFrom(listOf(15 to 60, 60 to 60), 1_000_000_000L / 60)
+        assertTrue(offered.contains(60))
+        assertTrue(offered.contains(50))
+        assertTrue(offered.contains(24))
+    }
+
+    @Test
+    fun aCameraThatPublishesNothingOffersNothingRatherThanGuessing() {
+        assertTrue(Mechanism.frameRatesFrom(emptyList(), 0L).isEmpty())
+    }
 }

@@ -266,6 +266,135 @@ object WhiteBalance {
 
     val IDENTITY = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
 
+    /** A 3x3 row-major inverse, or null for a matrix that has none. */
+    fun invert(m: FloatArray): FloatArray? {
+        if (m.size < 9) return null
+        val a = m[0].toDouble(); val b = m[1].toDouble(); val c = m[2].toDouble()
+        val d = m[3].toDouble(); val e = m[4].toDouble(); val f = m[5].toDouble()
+        val g = m[6].toDouble(); val h = m[7].toDouble(); val i = m[8].toDouble()
+        val det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+        if (kotlin.math.abs(det) < 1e-12) return null
+        return floatArrayOf(
+            ((e * i - f * h) / det).toFloat(),
+            ((c * h - b * i) / det).toFloat(),
+            ((b * f - c * e) / det).toFloat(),
+            ((f * g - d * i) / det).toFloat(),
+            ((a * i - c * g) / det).toFloat(),
+            ((c * d - a * f) / det).toFloat(),
+            ((d * h - e * g) / det).toFloat(),
+            ((b * g - a * h) / det).toFloat(),
+            ((a * e - b * d) / det).toFloat()
+        )
+    }
+
+    // --- the anchor: the camera's own answer, and the calibration's shape ----
+
+    /**
+     * **This is the green, and why a third attempt at it is not a fourth
+     * guess.**
+     *
+     * v65 moved the gains and left the matrix. v77 computed both from the
+     * sensor's published calibration, which is right in principle and still
+     * wrong on his phone by whatever the absolute model is out by — and an
+     * absolute error in white balance has exactly one colour, because green is
+     * the channel a Bayer sensor has twice as many of.
+     *
+     * So the fader stops being absolute. The camera's own automatic white
+     * balance is a measurement, made by the people who tuned this ISP, and it
+     * is reported in every capture result: the gains it chose and the matrix it
+     * chose. That pair is the **anchor**. The calibration is then used for the
+     * only thing it is unarguably good for — the *shape* of the change from one
+     * temperature to another — and the fader carries the camera's own answer
+     * along that shape.
+     *
+     * At the anchor the picture is exactly what auto was showing, to the last
+     * digit, so there is nothing left for a cast to hide in; moving away from
+     * it moves both halves by the same interpolation, so the two still cannot
+     * disagree. It is the same discipline as `M`: leave auto from where auto
+     * had got to, and the picture does not jump.
+     */
+    fun shiftGains(
+        measured: FloatArray,
+        modelAtAnchor: FloatArray,
+        modelAtWanted: FloatArray
+    ): FloatArray {
+        if (measured.size < 4 || modelAtAnchor.size < 4 || modelAtWanted.size < 4) {
+            return normaliseGains(modelAtWanted)
+        }
+        val out = FloatArray(4)
+        for (i in 0..3) {
+            val from = modelAtAnchor[i]
+            val to = modelAtWanted[i]
+            out[i] = if (from > 1e-6f) measured[i] * (to / from) else measured[i]
+        }
+        return normaliseGains(out)
+    }
+
+    /**
+     * The same shift, for the other half.
+     *
+     * `T(k) = measured · model(anchor)⁻¹ · model(k)` — the camera's own matrix
+     * at the anchor, carried along the calibration's own change. Null when the
+     * model cannot be inverted, which is a calibration not worth trusting.
+     */
+    fun shiftTransform(
+        measured: FloatArray,
+        modelAtAnchor: FloatArray,
+        modelAtWanted: FloatArray
+    ): FloatArray? {
+        val back = invert(modelAtAnchor) ?: return null
+        return multiply(measured, multiply(back, modelAtWanted))
+    }
+
+    /** Sensor gains as the camera wants them: nothing below unity. */
+    fun normaliseGains(gains: FloatArray): FloatArray {
+        if (gains.size < 4) return floatArrayOf(1f, 1f, 1f, 1f)
+        val smallest = gains.min()
+        if (smallest <= 0f) return floatArrayOf(1f, 1f, 1f, 1f)
+        return FloatArray(4) { gains[it] / smallest }
+    }
+
+    /**
+     * Which temperature the camera's own gains amount to, so the fader can
+     * start where auto had got to and say a number for it.
+     *
+     * Matched on the ratios rather than the absolute gains, because the gains
+     * are normalised and the ratios are what carry the colour. Searched in
+     * mired, one step at a time, over the fader's own travel: the range is
+     * fifteen stops of nothing and a hundred and sixty steps, so a search is
+     * both exact and cheaper than thinking about it.
+     */
+    fun anchorKelvin(measured: FloatArray, colourMatrix: (Int) -> FloatArray): Int {
+        if (measured.size < 4) return 5600
+        val mR = measured[0].toDouble()
+        val mG = measured[1].toDouble()
+        val mB = measured[3].toDouble()
+        if (mG <= 0.0 || mR <= 0.0 || mB <= 0.0) return 5600
+        val wantRed = mR / mG
+        val wantBlue = mB / mG
+
+        var best = COOLEST_KELVIN
+        var bestError = Double.MAX_VALUE
+        val cool = mired(COOLEST_KELVIN)
+        val warm = mired(WARMEST_KELVIN)
+        var m = warm
+        while (m <= cool + 0.5) {
+            val kelvin = (1_000_000.0 / m).toInt().coerceIn(COOLEST_KELVIN, WARMEST_KELVIN)
+            val model = gains(kelvin, colourMatrix(kelvin))
+            val g = model[1].toDouble()
+            val red = if (g > 0.0) model[0] / g else 0.0
+            val blue = if (g > 0.0) model[3] / g else 0.0
+            if (red > 0.0 && blue > 0.0) {
+                val error = sq(kotlin.math.ln(red / wantRed)) + sq(kotlin.math.ln(blue / wantBlue))
+                if (error < bestError) { bestError = error; best = kelvin }
+            }
+            m += 1.0
+        }
+        return best
+    }
+
+    private fun sq(x: Double) = x * x
+
     // --- the fallback: the camera's own presets -------------------------------
 
     /**

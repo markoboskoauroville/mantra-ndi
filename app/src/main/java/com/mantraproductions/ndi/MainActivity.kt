@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -32,17 +33,24 @@ import androidx.core.view.WindowInsetsCompat
  * The camera, and the two rails of keys in the black beside it.
  *
  *     LENS 1..4   the physical lenses this phone actually has
- *     LGHT        the lamp
  *     AF          the focus director: hold, notice, rack over a beat
  *     PEAK        edge detector on the monitor only
- *     SNAP        the sensor's own frame as a DNG, uncorrected
  *     LOG         which log curve the phone's tone mapper is applying
- *     ROT         a quarter turn of the preview, by hand
- *     M / CTRL    manual exposure, and the columns on the picture
+ *     ROT         a quarter turn of the preview, by hand, remembered per lens
+ *     M / CTRL    manual exposure, and the zones on the picture
  *     HX / FULL   which kind of NDI, or neither
  *
- *     REC         the take, at the top of the other rail, and the LUT
- *     1..11       slots below it
+ *     REC         the take, at the top of the other rail
+ *     LGHT        the lamp
+ *     SNAP        the sensor's own frame as a DNG, uncorrected
+ *     1..11       the LUT slots, five at a time, then the gear
+ *
+ * The lamp and the stills key moved to the right rail in v80: two keys fewer
+ * on the left is two keys' worth of height shared among the ten that are left,
+ * and they belong beside record anyway — they are what a right thumb reaches
+ * for without taking the left hand off the lens keys. Nothing is drawn round a
+ * key any more either. A box costs an outline, a corner, an inset and a margin,
+ * and every one of those is taken off the word inside it.
  *
  * The audio meter runs down the inside edge of the picture whenever the app
  * does, because a dead microphone found after the take is a take that happens
@@ -83,12 +91,35 @@ class MainActivity : AppCompatActivity() {
     private var bufferSize = Size(1920, 1080)
     private var pendingSlot = 0
 
-    /** Manual exposure, and whether the invisible columns are listening. */
+    /** Manual exposure, and whether the zones on the picture are listening. */
     private var manual = false
     private var zonesOn = false
     private var iso = 400
     private var shutterNs = 1_000_000_000L / 60
     private var focusFraction = 0f
+
+    /**
+     * Where each zone's knob is, 0..1, as the thumb left it.
+     *
+     * **This is "the slider stops two thirds of the way along and is very
+     * strange to move".** The knob used to be drawn from the value the camera
+     * reported, while the drag moved a fixed six stops per swipe — two
+     * different instruments wearing one hat. The camera will not expose for
+     * longer than a frame, so at 30fps it clamps at 1/30 whatever the sensor
+     * says it can do, and 1/30 is two thirds of the way along a range that
+     * reaches 1/92030 at the other end. A third of the track could not be
+     * reached and nothing on the screen said why.
+     *
+     * So the position is the instrument: the whole track is the whole of the
+     * range the camera will honour, the knob goes exactly where the thumb puts
+     * it, and the value is read off the position. Seeded from what the camera
+     * is doing whenever it is taken over, so nothing jumps.
+     */
+    private var isoPosition = 0.5f
+    private var shutterPosition = 0.5f
+
+    /** Said once per lens, not once per drag. */
+    private var focusComplaintFor = ""
 
     /** Colour temperature: tungsten at the left of the fader, daylight right. */
     private var wbAuto = true
@@ -185,7 +216,7 @@ class MainActivity : AppCompatActivity() {
 
         zones.onDrag = { index, delta -> nudge(index, delta) }
         zones.onGrab = { refreshZones() }
-        zones.onTap = { index -> handBack(index) }
+        zones.onDoubleTap = { index -> handToCamera(index) }
 
         // The trace is the only instrument that reaches a phone with no cable,
         // so it is always one long press away rather than behind a menu.
@@ -278,10 +309,15 @@ class MainActivity : AppCompatActivity() {
             lensKeys.add(key)
             railLeft.addView(key)
         }
-        lightKey = newKey("LGHT") { toggleLight() }.also { railLeft.addView(it) }
+        // LGHT and SNAP are on the other rail now, under the record key.
+        //
+        // *"We need to optimise how many buttons are on the left so the text
+        // can be bigger."* Two keys off this rail is two keys' worth of height
+        // shared among the ten that are left, and the lamp and the stills
+        // belong beside record anyway: they are the three things a right thumb
+        // reaches for without taking the left hand off the lens keys.
         focusKey = newKey("AF") { toggleAutoFocus() }.also { railLeft.addView(it) }
         peakKey = newKey("PEAK") { togglePeaking() }.also { railLeft.addView(it) }
-        snapKey = newKey("SNAP") { takeSnap() }.also { railLeft.addView(it) }
         logKey = newKey("LOG") { nextCurve() }.also { railLeft.addView(it) }
         rotKey = newKey("ROT") { turnPreview() }.also { railLeft.addView(it) }
         manualKey = newKey("M") { toggleManual() }.also { railLeft.addView(it) }
@@ -299,6 +335,8 @@ class MainActivity : AppCompatActivity() {
             it.setOnClickListener { toggleRecording() }
             railRight.addView(it)
         }
+        lightKey = newKey("LGHT") { toggleLight() }.also { railRight.addView(it) }
+        snapKey = newKey("SNAP") { takeSnap() }.also { railRight.addView(it) }
 
         // Five slots at a time, not eleven. Eleven keys down the side of a
         // phone are each too small to hit with a thumb, and the right rail now
@@ -417,6 +455,33 @@ class MainActivity : AppCompatActivity() {
         layoutForOrientation(newConfig.orientation)
     }
 
+    /**
+     * **The half turn: landscape, the other way up.**
+     *
+     * *"If I turn my phone upside down in landscape mode, the phone doesn't
+     * follow."* It cannot, and nothing in this app was ever going to hear
+     * about it. Turning a phone end for end takes the display from 90° to 270°
+     * and changes **nothing else**: the configuration's orientation is
+     * landscape either way, the window is the same size, so no configuration
+     * change arrives and no layout change arrives — and the preview transform
+     * is only ever recomputed when one of those two does. The picture is left
+     * standing on its head with no event anywhere to say so.
+     *
+     * A display listener is the one thing that does hear it. It fires for any
+     * change to the display including a rotation that changes nothing else,
+     * which is exactly and only the case that was missing.
+     */
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+        override fun onDisplayChanged(displayId: Int) {
+            if (preview.isAvailable) applyPreviewTransform()
+        }
+    }
+
+    private val displays: DisplayManager?
+        get() = getSystemService(DisplayManager::class.java)
+
     // --- the camera ----------------------------------------------------------
 
     private fun openCamera() {
@@ -437,9 +502,16 @@ class MainActivity : AppCompatActivity() {
         val texture = preview.surfaceTexture ?: return
         val lens = lenses.getOrNull(activeLens) ?: lenses.first()
 
-        // The resolution first: it decides the session, and a session cannot
-        // be resized once it is built.
+        // The resolution and the frame rate first: they decide the session,
+        // and a session can be neither resized nor re-timed once it is built.
         pipeline.maxWidth = settings.captureWidth
+        pipeline.fps = settings.fps
+        // Each lens carries its own correction. A front camera is a separate
+        // sensor in a separate hole and is not always mounted the same way
+        // round as the rear ones, so one global quarter turn meant fixing the
+        // selfie lens broke the other three.
+        manualQuarterTurns = settings.quarterTurnsFor(lensKey())
+        focusComplaintFor = ""
         // The buffer size has to be right before the session is built.
         bufferSize = pipeline.previewSizeFor(lens.id, lens.physicalId)
         holdBufferSize()
@@ -482,6 +554,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        displays?.registerDisplayListener(displayListener, ui)
         // The camera session is lost while backgrounded even with a foreground
         // service, so it is rebuilt rather than tested for.
         if (preview.isAvailable && !pipeline.isRunning) openCamera()
@@ -491,7 +564,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        runCatching { displays?.unregisterDisplayListener(displayListener) }
         ui.removeCallbacks(rateTick)
+        ui.removeCallbacks(focusWatch)
         focus.stop()
         // The file is closed before the camera goes, not after: a take whose
         // encoder disappeared underneath it has no moov atom and opens nowhere.
@@ -644,6 +719,7 @@ class MainActivity : AppCompatActivity() {
         val producer = FloatArray(16)
         runCatching { preview.surfaceTexture?.getTransformMatrix(producer) }
         val producerDegrees = Mechanism.producerRotation(producer)
+        val producerMirrored = Mechanism.producerMirrored(producer)
         lastProducerDegrees = producerDegrees
 
         val auto = Mechanism.previewRotation(sensor, displayDegrees, front, producerDegrees)
@@ -664,6 +740,17 @@ class MainActivity : AppCompatActivity() {
         )
         val scale = Mechanism.previewFit(vw, vh, effective[0], effective[1], applied)
         val matrix = Matrix()
+        // THE SELFIE CAMERA, UPSIDE DOWN.
+        //
+        // A front camera hands over a *mirrored* frame, and a mirror is not a
+        // rotation: the old decoder saw the negative entry in the matrix and
+        // answered "half a turn", so half a turn that was never there was
+        // taken off the angle and lens four came up upside down while the three
+        // rear lenses were right. The mirror is read separately now and put
+        // back here, before the rotation — this is a broadcast camera and the
+        // monitor has to show what the wire is carrying. The encoder is fed the
+        // camera buffer directly and never sees this matrix at all.
+        if (producerMirrored) matrix.postScale(-1f, 1f, vw / 2f, vh / 2f)
         matrix.postRotate(applied.toFloat(), vw / 2f, vh / 2f)
         matrix.postScale(scale[0], scale[1], vw / 2f, vh / 2f)
         preview.setTransform(matrix)
@@ -686,7 +773,9 @@ class MainActivity : AppCompatActivity() {
         )
         val squeeze = if (shown > 0.0 && wanted > 0.0) shown / wanted else 1.0
 
-        val line = "sensor $sensor · disp $displayDegrees · cam $producerDegrees · rot $applied" +
+        val line = "sensor $sensor · disp $displayDegrees · cam $producerDegrees" +
+            (if (producerMirrored) " mirrored" else "") +
+            (if (front) " front" else "") + " · rot $applied" +
             (if (manualQuarterTurns != 0) " (auto $auto +${manualQuarterTurns * 90})" else "") +
             " · buf ${bufferSize.width}x${bufferSize.height} · view ${vw}x$vh" +
             " · squeeze " + String.format("%.3f", squeeze) +
@@ -794,6 +883,9 @@ class MainActivity : AppCompatActivity() {
         if (manual) {
             iso = pipeline.engine.lastIso ?: iso
             shutterNs = pipeline.engine.lastExposureNs ?: shutterNs
+            // The knobs go where the camera already is, before the first drag
+            // can move them from somewhere else.
+            seedZonePositions()
             pipeline.engine.setManualExposure(iso, shutterNs)
         } else {
             pipeline.engine.setAutoExposure()
@@ -803,7 +895,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * The columns on, and the focus box off.
+     * The zones on, and the focus box off.
      *
      * Exclusive on purpose: a tap on the picture that could mean "focus here"
      * and could mean "start changing ISO" is a tap that means neither.
@@ -820,57 +912,69 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * One fader moved. Right is more of everything.
+     * One zone dragged. Right is more of everything.
      *
-     * ISO and shutter move in stops rather than in units, because a stop is
-     * what an operator thinks in and a linear sweep across 50..12800 spends
-     * nine tenths of its travel in a range nobody uses. A full sweep of the
-     * track is six stops, which is the whole of a usable range in one gesture
-     * and still fine enough to place a value with a thumb.
+     * The drag moves the **knob**, and the value is read off where the knob
+     * ends up. Every zone's whole track is the whole of the range the camera
+     * will actually honour — so a full sweep is the full range, half way along
+     * is half way along, and there is no part of the travel that cannot be
+     * reached. Geometric, because ISO and shutter are stops and a stop is what
+     * an operator thinks in.
+     *
+     * Dragging a zone takes that parameter over, rather than doing nothing
+     * until a key somewhere else has been pressed first. A zone that has to be
+     * armed is a zone that looks broken.
      */
     private fun nudge(index: Int, delta: Float) {
         val engine = pipeline.engine
         when (index) {
             0 -> {
-                // Dragging a fader takes it, rather than doing nothing until a
-                // key somewhere else has been pressed first. A fader that has
-                // to be armed is a fader that looks broken.
                 if (!manual) { toggleManual(); if (!manual) return }
                 val range = engine.isoRange() ?: return
-                iso = (iso * Math.pow(2.0, (delta * 6f).toDouble())).toInt()
-                    .coerceIn(range.lower, range.upper)
+                isoPosition = (isoPosition + delta).coerceIn(0f, 1f)
+                iso = Mechanism.valueAtPosition(
+                    isoPosition, range.lower.toDouble(), range.upper.toDouble()
+                ).toInt().coerceIn(range.lower, range.upper)
                 engine.setManualExposure(iso, shutterNs)
             }
             1 -> {
                 if (!manual) { toggleManual(); if (!manual) return }
-                val range = engine.exposureRange() ?: return
-                shutterNs = (shutterNs * Math.pow(2.0, (delta * 6f).toDouble())).toLong()
-                    .coerceIn(range.lower, range.upper)
+                val (low, high) = shutterBounds() ?: return
+                shutterPosition = (shutterPosition + delta).coerceIn(0f, 1f)
+                shutterNs = Mechanism.valueAtPosition(
+                    shutterPosition, low.toDouble(), high.toDouble()
+                ).toLong().coerceIn(low, high)
                 engine.setManualExposure(iso, shutterNs)
             }
             2 -> {
                 // A lens with no focus motor is said outright rather than
-                // letting the number move while the picture does not. This was
-                // the whole of "focus doesn't change focus at all": the ultra
-                // wide is fixed, and the drag was refused in silence.
-                if (!engine.supportsManualFocus()) {
-                    say("This lens is fixed focus; there is nothing to pull")
-                    return
-                }
+                // letting the number move while the picture does not. An ultra
+                // wide is fixed on nearly every phone, and the selfie lens on
+                // this one, and for six versions the drag was refused in
+                // silence — which is exactly what "focus doesn't change focus"
+                // looks like from the outside.
+                if (!engine.supportsManualFocus()) { sayFixedFocus(); return }
                 focusFraction = (focusFraction + delta).coerceIn(0f, 1f)
                 if (focus.mode == FocusDirector.Mode.AUTO) {
                     focus.setMode(FocusDirector.Mode.MANUAL)
                     refreshKeys()
                 }
                 engine.setManualFocus(focusFraction)
+                // And then look, a moment later, at whether the glass moved.
+                ui.removeCallbacks(focusWatch)
+                ui.postDelayed(focusWatch, 600)
             }
             3 -> {
                 // Left is tungsten, right is daylight — the way the numbers on
                 // a colour meter run, and the way every white balance dial ever
-                // made is laid out.
+                // made is laid out. Taking it over starts from what the camera
+                // had settled on, so the colour does not jump.
+                if (wbAuto) {
+                    wbKelvin = engine.measuredKelvin() ?: wbKelvin
+                    wbAuto = false
+                }
                 val at = (WhiteBalance.travel(wbKelvin) + delta).coerceIn(0f, 1f)
                 wbKelvin = WhiteBalance.kelvinAt(at)
-                wbAuto = false
                 engine.setWhiteBalanceKelvin(wbKelvin)
             }
         }
@@ -878,46 +982,85 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * A row tapped: hand that parameter back to the camera, or take it.
+     * Two taps on a zone: the camera takes that parameter back.
      *
-     * There is no room on the rail for a key per parameter and there should not
-     * be one — the place to say "you take this" about white balance is the
-     * white balance fader. The two that already have keys behave the same way
-     * from either end.
+     * It used to be one tap, and one tap is what a thumb does by accident
+     * while it is finding the band it wants — losing manual exposure in the
+     * middle of a shot because a finger brushed the glass is not a control. A
+     * double tap always means *auto*, never "the other one": a gesture that
+     * toggles is a gesture whose result has to be checked afterwards.
      */
-    private fun handBack(index: Int) {
+    private fun handToCamera(index: Int) {
+        val engine = pipeline.engine
         when (index) {
-            0, 1 -> toggleManual()
-            2 -> if (pipeline.engine.supportsManualFocus()) toggleAutoFocus()
-                 else say("This lens is fixed focus; there is nothing to pull")
-            3 -> {
-                wbAuto = !wbAuto
-                if (wbAuto) {
-                    pipeline.engine.setAutoWhiteBalance()
-                    say("White balance: the camera's own")
-                } else {
-                    pipeline.engine.setWhiteBalanceKelvin(wbKelvin)
-                    say(
-                        "White balance: ${WhiteBalance.format(wbKelvin)}" +
-                            if (pipeline.engine.whiteBalanceIsContinuous) ""
-                            else ", nearest preset — this sensor publishes no calibration"
-                    )
+            0, 1 -> {
+                if (manual) toggleManual()
+                say("Exposure: the camera's own")
+            }
+            2 -> when {
+                !engine.supportsManualFocus() -> sayFixedFocus()
+                focus.mode != FocusDirector.Mode.AUTO -> {
+                    toggleAutoFocus()
+                    say("Focus: the camera's own")
                 }
+                else -> say("Focus: already the camera's own")
+            }
+            3 -> {
+                wbAuto = true
+                engine.setAutoWhiteBalance()
+                say("White balance: the camera's own")
                 refreshKeys()
             }
         }
         refreshZones()
     }
 
+    /** Said once per lens: a fixed lens is a fact, not an error to repeat. */
+    private fun sayFixedFocus() {
+        val lens = lenses.getOrNull(activeLens)?.label ?: "This lens"
+        val key = lensKey()
+        if (focusComplaintFor != key) {
+            focusComplaintFor = key
+            Trace.refused("focus", "$lens has no focus travel; it is fixed")
+        }
+        say("$lens is fixed focus — there is nothing to pull")
+    }
+
     /**
-     * What the four columns currently say.
+     * Did the glass actually move?
+     *
+     * A lens that refuses in silence and a lens doing its job look identical
+     * from in here, and this camera has shipped both. The request and what the
+     * capture result says the lens reached are compared a beat later, and a
+     * lens that is not following is said on the status line rather than left
+     * for the operator to work out from a picture that will not sharpen.
+     */
+    private val focusWatch = Runnable {
+        if (pipeline.isRunning && !pipeline.engine.focusIsResponding()) {
+            val lens = lenses.getOrNull(activeLens)?.label ?: "This lens"
+            say("$lens is not following the focus zone — see the trace")
+            Trace.refused(
+                "focus",
+                "$lens did not reach what was asked: wanted " +
+                    pipeline.engine.focusCommanded + ", reached " +
+                    pipeline.engine.lastFocusDistance
+            )
+        }
+    }
+
+    /**
+     * What the four zones currently say.
      *
      * The numbers are the camera's own answers wherever the camera has one —
      * the ISO and the shutter it settled on, the distance the lens actually
-     * reached — rather than the value that was asked for. A column that echoes
+     * reached — rather than the value that was asked for. A zone that echoes
      * the request agrees with itself whatever the lens is doing, which is how
      * a focus control that never moved anything looked correct for six
      * versions.
+     *
+     * The knob, though, is where the thumb left it. Those are two different
+     * questions and answering both with one number is what made the shutter
+     * zone stop two thirds of the way along its own track.
      */
     private fun refreshZones() {
         val engine = pipeline.engine
@@ -928,44 +1071,50 @@ class MainActivity : AppCompatActivity() {
 
         val canFocus = running && engine.supportsManualFocus()
         val reached = engine.lastFocusDistance
+        val autoFocus = focus.mode == FocusDirector.Mode.AUTO
         val focusText = when {
             !running -> "—"
-            // No focus motor on this lens. An ultra wide on most phones.
+            // No focus motor on this lens. An ultra wide on most phones, and
+            // the selfie lens on this one.
             !canFocus -> "FIXED"
-            focus.mode == FocusDirector.Mode.AUTO -> "AUTO"
+            autoFocus -> "AUTO"
             reached != null && reached > 0.01f -> String.format("%.2fm", 1f / reached)
             else -> "∞"
         }
+        val closest = if (running) engine.minimumFocusDistance() else 0f
+        val focusPosition = when {
+            !canFocus -> 0f
+            autoFocus && reached != null && closest > 0f -> (reached / closest).coerceIn(0f, 1f)
+            else -> focusFraction
+        }
 
-        // Four faders, and every one of them has a track.
-        //
-        // The iris used to be here with no track and the width of one, which is
-        // a row of empty space where a control should be. A phone has one
-        // aperture; it is a fact about the lens, so it is a readout in the
-        // corner beside the rest of the facts, not a fader that cannot move.
+        val isoPositionShown = engine.isoRange()?.let {
+            if (manual) isoPosition
+            else Mechanism.positionOfValue(
+                liveIso.toDouble(), it.lower.toDouble(), it.upper.toDouble()
+            )
+        } ?: isoPosition
+        val shutterPositionShown = shutterBounds()?.let { (low, high) ->
+            if (manual) shutterPosition
+            else Mechanism.positionOfValue(
+                liveShutter.toDouble(), low.toDouble(), high.toDouble()
+            )
+        } ?: shutterPosition
+
         zones.zones = listOf(
+            ControlZones.Zone("ISO", liveIso.toString(), true, isoPositionShown, !manual),
             ControlZones.Zone(
-                "ISO", liveIso.toString(), true,
-                engine.isoRange()?.let {
-                    travel(liveIso.toDouble(), it.lower.toDouble(), it.upper.toDouble())
-                } ?: 0f
+                "SHTR", Mechanism.formatShutter(liveShutter), true, shutterPositionShown, !manual
             ),
-            ControlZones.Zone(
-                "SHUTTER", Mechanism.formatShutter(liveShutter), true,
-                engine.exposureRange()?.let {
-                    // Longer is more light, so the knob travels the way the
-                    // picture brightens: right is a slower shutter.
-                    travel(liveShutter.toDouble(), it.lower.toDouble(), it.upper.toDouble())
-                } ?: 0f
-            ),
-            ControlZones.Zone("FOCUS", focusText, canFocus, focusFraction),
-            // Tungsten on the left, daylight on the right. Dragging it takes it
-            // off auto; a tap hands it back.
+            ControlZones.Zone("FOCUS", focusText, canFocus, focusPosition, autoFocus),
+            // Tungsten on the left, daylight on the right. Dragging it takes
+            // it off auto; two taps hand it back.
             ControlZones.Zone(
                 "WB",
                 if (wbAuto) "AUTO" else WhiteBalance.format(wbKelvin),
                 running,
-                WhiteBalance.travel(wbKelvin)
+                WhiteBalance.travel(wbKelvin),
+                wbAuto
             )
         )
 
@@ -974,26 +1123,54 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Where a value sits in its own travel, 0..1, on a log scale.
+     * The shutter speeds this camera will actually honour, at this frame rate.
      *
-     * Log because these are stops. A knob placed linearly across 50..12800
-     * spends nine tenths of the track above ISO 1600 and never leaves the left
-     * edge in a room, which tells the eye nothing.
+     * The ceiling is one frame interval — a shutter longer than a frame cannot
+     * be held at the frame rate, and the camera settles the argument by
+     * dropping the rate, which on a live stream is worse than a dark picture.
+     * The floor is 1/8000, because the sensor's own eleven microseconds reads
+     * 1/92030 and nobody has ever chosen it.
      */
-    private fun travel(value: Double, low: Double, high: Double): Float {
-        if (value <= 0.0 || low <= 0.0 || high <= low) return 0f
-        val span = Math.log(high / low)
-        if (span <= 0.0) return 0f
-        return (Math.log(value.coerceIn(low, high) / low) / span).toFloat().coerceIn(0f, 1f)
+    private fun shutterBounds(): Pair<Long, Long>? {
+        val range = pipeline.engine.exposureRange() ?: return null
+        return Mechanism.shutterFaderRange(pipeline.fps, range.lower, range.upper)
+    }
+
+    /**
+     * Put the knobs where the camera already is.
+     *
+     * Called whenever this app takes a parameter over or the camera is rebuilt
+     * under it. Without it, the first drag after opening a lens jumps the
+     * picture to wherever the knob happened to be left.
+     */
+    private fun seedZonePositions() {
+        val engine = pipeline.engine
+        engine.isoRange()?.let {
+            isoPosition = Mechanism.positionOfValue(
+                (engine.lastIso ?: iso).toDouble(), it.lower.toDouble(), it.upper.toDouble()
+            )
+        }
+        shutterBounds()?.let { (low, high) ->
+            shutterPosition = Mechanism.positionOfValue(
+                (engine.lastExposureNs ?: shutterNs).toDouble(), low.toDouble(), high.toDouble()
+            )
+        }
     }
 
     private fun turnPreview() {
         manualQuarterTurns = (manualQuarterTurns + 1) % 4
-        // Kept, so a phone whose sensor is mounted unusually is corrected once
-        // rather than at the start of every shoot.
-        settings.quarterTurns = manualQuarterTurns
+        // Kept, and kept per lens, so a sensor that is mounted unusually is
+        // corrected once rather than at the start of every shoot — and
+        // correcting one lens never turns another.
+        settings.setQuarterTurnsFor(lensKey(), manualQuarterTurns)
         applyPreviewTransform()
         refreshKeys()
+    }
+
+    /** What this lens is called in the preferences: its id, and its sub-lens. */
+    private fun lensKey(): String {
+        val lens = lenses.getOrNull(activeLens) ?: return "0"
+        return lens.id + (lens.physicalId?.let { ":$it" } ?: "")
     }
 
     private fun toggleMode(want: CameraPipeline.Mode) {
