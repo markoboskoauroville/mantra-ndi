@@ -15,10 +15,16 @@ import java.util.Locale
 /**
  * Where a take goes, and the descriptor the muxer writes down.
  *
- * Movies/Mantra NDI, through MediaStore, so the file appears in the gallery
+ * **DCIM/Mantra NDI**, through MediaStore, so the file appears in the gallery
  * and in a file manager the moment it is finished — the same lesson as
  * [Downloads], for the same reason: a path into a public folder is refused
  * silently from Android 10 and the app carries on as if it had worked.
+ *
+ * DCIM rather than Movies, and that was a real bug rather than a preference:
+ * the first build of this put takes in Movies, he looked in DCIM — where every
+ * camera on a phone puts its footage, and where he had been told to look — and
+ * reported that recording was broken. It was not; 577 frames were in the file.
+ * A take nobody can find is a take that did not happen.
  *
  * IS_PENDING is used here, unlike the trace, and the difference is what the
  * file is. A half-written trace is still worth reading; a half-written MP4 has
@@ -58,7 +64,7 @@ object Recordings {
                 put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
                 put(
                     MediaStore.MediaColumns.RELATIVE_PATH,
-                    Environment.DIRECTORY_MOVIES + "/" + FOLDER
+                    Environment.DIRECTORY_DCIM + "/" + FOLDER
                 )
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
@@ -81,7 +87,7 @@ object Recordings {
                 } else {
                     Take(
                         name = name,
-                        where = Environment.DIRECTORY_MOVIES + "/" + FOLDER + "/" + name,
+                        where = Environment.DIRECTORY_DCIM + "/" + FOLDER + "/" + name,
                         descriptor = pfd
                     ) { keep ->
                         if (keep) {
@@ -101,7 +107,7 @@ object Recordings {
         } else {
             @Suppress("DEPRECATION")
             val dir = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
                 FOLDER
             )
             dir.mkdirs()
@@ -118,5 +124,5 @@ object Recordings {
     }
 
     /** Where a person should look, for showing on screen. */
-    fun folder(): String = Environment.DIRECTORY_MOVIES + "/" + FOLDER
+    fun folder(): String = Environment.DIRECTORY_DCIM + "/" + FOLDER
 }

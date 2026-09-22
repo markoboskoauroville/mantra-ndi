@@ -724,6 +724,71 @@ class MechanismTest {
         assertEquals(180, Mechanism.previewRotation(270, 270, frontFacing = true))
     }
 
+    /**
+     * The producer's own turn, decoded from the texture matrix.
+     *
+     * The numbers here are his Pixel 7's, read off the phone: `0,-1,-1,0` where
+     * a camera that turns nothing reads `1,0,0,-1`. Held across, the formula
+     * answered 0 and he had to dial ROT to 270; held upright it answered 90 and
+     * he dialled 270 to reach 0. Both are the formula minus the 90 this decodes.
+     */
+    @Test
+    fun `the camera's own rotation is read out of the texture matrix`() {
+        // A camera that turned nothing: the vertical flip alone.
+        assertEquals(0, Mechanism.producerRotation(floatArrayOf(
+            1f, 0f, 0f, 0f,
+            0f, -1f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            0f, 1f, 0f, 1f
+        )))
+
+        // His Pixel 7, which turns a quarter.
+        assertEquals(90, Mechanism.producerRotation(floatArrayOf(
+            0f, -1f, 0f, 0f,
+            -1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 1f, 0f, 1f
+        )))
+
+        // The crop rides in the same matrix, so nothing is ever exactly one.
+        assertEquals(90, Mechanism.producerRotation(floatArrayOf(
+            0f, -0.998f, 0f, 0f,
+            -0.996f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 1f, 0f, 1f
+        )))
+
+        // A texture with no frame in it yet turns nothing.
+        assertEquals(0, Mechanism.producerRotation(FloatArray(16)))
+        assertEquals(0, Mechanism.producerRotation(FloatArray(2)))
+    }
+
+    @Test
+    fun `the camera's turn is taken off the angle we apply`() {
+        // His phone, held across: the formula says 0, the camera did 90, so
+        // the preview needs 270 — which is the number he found by hand.
+        assertEquals(
+            270,
+            Mechanism.previewRotation(90, 90, frontFacing = false, producerDegrees = 90)
+        )
+        // The same phone held upright: formula 90, camera 90, so 0.
+        assertEquals(
+            0,
+            Mechanism.previewRotation(90, 0, frontFacing = false, producerDegrees = 90)
+        )
+        // A camera that turns nothing leaves the old answer exactly as it was.
+        for (sensor in intArrayOf(0, 90, 180, 270)) {
+            for (display in intArrayOf(0, 90, 180, 270)) {
+                for (front in booleanArrayOf(false, true)) {
+                    assertEquals(
+                        Mechanism.previewRotation(sensor, display, front),
+                        Mechanism.previewRotation(sensor, display, front, 0)
+                    )
+                }
+            }
+        }
+    }
+
     @Test
     fun rotationIsAlwaysAQuarterTurnAndNeverNegative() {
         for (sensor in listOf(0, 90, 180, 270)) {

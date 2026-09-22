@@ -6,6 +6,89 @@ working state of *this* app.
 
 ---
 
+## 22.9.2026, early afternoon — v76, the rotation cause found in his own trace
+
+### The rotation. Found, and it was never the formula.
+
+`cam 0,-1,-1,0` on his screen is the whole answer. A `SurfaceTexture` carries a
+transform matrix from its producer; a `TextureView` **applies that matrix before
+any of this app's code runs**; and the Pixel 7's camera puts **a quarter turn**
+in it. A camera that turns nothing reports `1,0,0,-1` — the vertical flip alone,
+because a texture's origin is at the bottom and a screen's is at the top.
+
+So seven attempts at this argued about `sensorOrientation` against the display —
+which is the right formula, for a buffer that arrives as the sensor read it —
+and every one of them was adding a correct rotation **on top of one that was
+already there**.
+
+His own numbers say it twice:
+
+| held | formula says | he dialled ROT to | total |
+|---|---|---|---|
+| across, `disp 90` | 0 | +270 | **270** |
+| upright, `disp 0` | 90 | +270 | **0** |
+
+Both are the formula **minus 90**, and 90 is exactly what the matrix decodes to.
+
+`Mechanism.producerRotation(matrix)` decodes it — pure, with the real matrix off
+his phone in the test suite, including the near-±1 form the crop produces. It is
+read on every frame and acted on only when it changes, because the matrix is
+empty until frames flow. A phone whose camera turns nothing decodes 0 and gets
+the old answer unchanged, asserted over all sixteen sensor/display pairs.
+
+### Recording was never broken — the file was in the wrong folder
+
+Line 694 of his trace:
+
+    11:51:19.690  CONTROL  record  stop → 577 frames, 0 refused, mantra-20260922-115059.mp4
+
+577 frames, none refused, 19.5 s ≈ 29.6 fps. It went to **Movies/Mantra NDI**;
+he looked in **DCIM/Mantra NDI**, which is where every camera on a phone puts
+its footage and where he had been told to look. Takes go to DCIM now. A take
+nobody can find is a take that did not happen.
+
+### The microphone was never asked for
+
+`REFUSED audio meter — no microphone permission`, four times in his trace. The
+pair of permissions sits beside `openCamera`, and on a phone that already had
+this app installed the camera was granted long ago, so that branch is never
+reached and **no dialog ever appears**. The microphone is now asked for where it
+is needed, once, when the meter tries to start.
+
+### The controls are horizontal faders now
+
+They were four invisible vertical columns, and that was wrong twice over: the
+values sat at the foot of the picture where the geometry readout lives, so the
+two overlapped; and a phone held across is wide and short, so a vertical drag
+had the *short* side of the screen to travel in while the long side sat empty.
+
+Four rows now, stacked from the top beside `L1`: **name, value, then the track
+running away to the right** with the whole width of a landscape screen in it.
+Right is more. A knob shows where the value sits in its own travel, on a log
+scale, because these are stops — a linear knob across 50..12800 never leaves the
+left edge in a room. A full sweep is six stops. `IRIS` and a fixed lens's
+`FOCUS` keep their row and their value, dimmed, with no track at all.
+
+The status line is back on the **top edge**, centred. The middle of the picture
+is where the subject is.
+
+### Confirmed working on his phone in v75
+
+- **Focus.** `requested 2.453 dioptres → reached 0.315` — the lens moves.
+  `focus: lens travel 0.0, logical travel 9.523809, AF modes 0,1,2,3,4,5,
+  manual yes` is the line that proves the v75 diagnosis: the ultra wide has no
+  travel of its own, the logical camera has 9.52, and reading only the first is
+  what made focus dead for six versions.
+- **Recording.** 577 frames, 0 refused.
+
+### Worth telling him
+
+The session came up **`everything, 8-bit`** with no 10-bit attempt in the trace
+at all — which means **ten bit is switched off in Settings**, not refused by the
+phone. v74 was giving 10-bit HEVC. One tick in the gear puts it back.
+
+---
+
 ## 22.9.2026, afternoon — v75, landscape, the take, and the focus bug named
 
 ### What he asked for, in his words

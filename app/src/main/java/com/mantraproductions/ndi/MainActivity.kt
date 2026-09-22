@@ -75,6 +75,9 @@ class MainActivity : AppCompatActivity() {
     private var activeSlot = 0            // 0 means no LUT
     private var curveIndex = 0
     private var manualQuarterTurns = 0
+
+    /** The camera's own turn, as last decoded from the texture matrix. */
+    private var lastProducerDegrees = -1
     private var peaking = false
     private var bufferSize = Size(1920, 1080)
     private var pendingSlot = 0
@@ -96,6 +99,7 @@ class MainActivity : AppCompatActivity() {
      */
     private var meter: AudioMeter? = null
     private var recordingSince = 0L
+    private var microphoneAsked = false
 
     private val lensKeys = mutableListOf<RailButton>()
     private val slotKeys = mutableListOf<RailButton>()
@@ -232,7 +236,20 @@ class MainActivity : AppCompatActivity() {
                 holdBufferSize()
                 applyPreviewTransform()
             }
-            override fun onSurfaceTextureUpdated(t: SurfaceTexture) = Unit
+            /**
+             * The producer's transform is not known until frames are flowing.
+             *
+             * It is empty before the first frame and it can change when the
+             * camera reconfigures, so the one moment it can be trusted is on a
+             * frame. Decoded here and acted on only when it actually changes,
+             * which is a handful of times in a session rather than thirty times
+             * a second.
+             */
+            override fun onSurfaceTextureUpdated(t: SurfaceTexture) {
+                val m = FloatArray(16)
+                runCatching { t.getTransformMatrix(m) }
+                if (Mechanism.producerRotation(m) != lastProducerDegrees) applyPreviewTransform()
+            }
 
             /**
              * The session's surface dies with the TextureView. The pipeline is
@@ -425,6 +442,13 @@ class MainActivity : AppCompatActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 2) {
+            // The microphone alone. The camera is already running; only the
+            // meter and the sound on a take were waiting for this.
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startMeter()
+            else say("No microphone: takes will be silent and the meter is dark")
+            return
+        }
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
             openCamera()
             startMeter()
@@ -472,6 +496,19 @@ class MainActivity : AppCompatActivity() {
         ) {
             vu.dead = true
             Trace.refused("audio meter", "no microphone permission")
+            // Asked here rather than only beside the camera.
+            //
+            // On a phone that already had this app installed, the camera was
+            // granted long ago, so the pair of permissions beside `openCamera`
+            // is never reached and the microphone is never asked for at all —
+            // which is why his first take came out silent with "no microphone
+            // permission" in the trace and no dialog in sight. Asked once.
+            if (!microphoneAsked) {
+                microphoneAsked = true
+                ActivityCompat.requestPermissions(
+                    this, arrayOf(Manifest.permission.RECORD_AUDIO), 2
+                )
+            }
             refreshKeys()
             return
         }
@@ -572,7 +609,21 @@ class MainActivity : AppCompatActivity() {
         }
         val sensor = if (pipeline.isRunning) pipeline.engine.sensorOrientation else 90
         val front = pipeline.isRunning && pipeline.engine.isFrontFacing
-        val auto = Mechanism.previewRotation(sensor, displayDegrees, front)
+
+        // What the camera already did, before we were handed the frame.
+        //
+        // A TextureView applies its producer's transform matrix before any of
+        // this runs, and this phone's camera puts a quarter turn in it. Seven
+        // attempts at the angle argued about sensor against display and every
+        // one of them was adding a correct rotation on top of one that was
+        // already there. It is read rather than assumed, so a phone whose
+        // camera turns nothing is left exactly as it was.
+        val producer = FloatArray(16)
+        runCatching { preview.surfaceTexture?.getTransformMatrix(producer) }
+        val producerDegrees = Mechanism.producerRotation(producer)
+        lastProducerDegrees = producerDegrees
+
+        val auto = Mechanism.previewRotation(sensor, displayDegrees, front, producerDegrees)
         val applied = ((auto + manualQuarterTurns * 90) % 360 + 360) % 360
 
         val scale = Mechanism.previewFit(vw, vh, bufferSize.width, bufferSize.height, applied)
@@ -585,25 +636,10 @@ class MainActivity : AppCompatActivity() {
         val viewAspect = vw.toDouble() / vh
         val squeeze = viewAspect / bufAspect
 
-        // Whether the camera turned the buffer before we got it.
-        //
-        // This is the one number nobody has ever had, and it is why the angle
-        // has been argued about six times. A TextureView applies the producer's
-        // own transform matrix before anything here runs: if the camera
-        // pre-rotated the frame, our rotation is added to one already applied
-        // and the picture ends up a quarter turn out. `1,0,0,1` is no rotation
-        // — the camera handed the frame over as the sensor read it.
-        val producer = FloatArray(16)
-        val producerTurn = runCatching {
-            preview.surfaceTexture?.getTransformMatrix(producer)
-            String.format("%.0f,%.0f,%.0f,%.0f", producer[0], producer[1], producer[4], producer[5])
-        }.getOrDefault("?")
-
-        val line = "sensor $sensor · disp $displayDegrees · rot $applied" +
+        val line = "sensor $sensor · disp $displayDegrees · cam $producerDegrees · rot $applied" +
             (if (manualQuarterTurns != 0) " (auto $auto +${manualQuarterTurns * 90})" else "") +
             " · buf ${bufferSize.width}x${bufferSize.height} · view ${vw}x$vh" +
             " · squeeze " + String.format("%.3f", squeeze) +
-            " · cam " + producerTurn +
             (if (kotlin.math.abs(squeeze - 1.0) > 0.01) "  STRETCHED" else "")
         geometry.text = line
         Trace.control("preview geometry", line, applied)
@@ -734,11 +770,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * One column moved. Up is more of everything.
+     * One fader moved. Right is more of everything.
      *
      * ISO and shutter move in stops rather than in units, because a stop is
      * what an operator thinks in and a linear sweep across 50..12800 spends
-     * nine tenths of its travel in a range nobody uses.
+     * nine tenths of its travel in a range nobody uses. A full sweep of the
+     * track is six stops, which is the whole of a usable range in one gesture
+     * and still fine enough to place a value with a thumb.
      */
     private fun nudge(index: Int, delta: Float) {
         val engine = pipeline.engine
@@ -746,14 +784,14 @@ class MainActivity : AppCompatActivity() {
             0 -> {
                 if (!manual) return
                 val range = engine.isoRange() ?: return
-                iso = (iso * Math.pow(2.0, (delta * 3f).toDouble())).toInt()
+                iso = (iso * Math.pow(2.0, (delta * 6f).toDouble())).toInt()
                     .coerceIn(range.lower, range.upper)
                 engine.setManualExposure(iso, shutterNs)
             }
             1 -> {
                 if (!manual) return
                 val range = engine.exposureRange() ?: return
-                shutterNs = (shutterNs * Math.pow(2.0, (delta * 3f).toDouble())).toLong()
+                shutterNs = (shutterNs * Math.pow(2.0, (delta * 6f).toDouble())).toLong()
                     .coerceIn(range.lower, range.upper)
                 engine.setManualExposure(iso, shutterNs)
             }
@@ -767,7 +805,7 @@ class MainActivity : AppCompatActivity() {
                     say("This lens is fixed focus; there is nothing to pull")
                     return
                 }
-                focusFraction = (focusFraction + delta * 0.8f).coerceIn(0f, 1f)
+                focusFraction = (focusFraction + delta).coerceIn(0f, 1f)
                 if (focus.mode == FocusDirector.Mode.AUTO) {
                     focus.setMode(FocusDirector.Mode.MANUAL)
                     refreshKeys()
@@ -807,8 +845,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         zones.zones = listOf(
-            ControlZones.Zone("ISO", liveIso.toString(), manual),
-            ControlZones.Zone("SHUTTER", Mechanism.formatShutter(liveShutter), manual),
+            ControlZones.Zone(
+                "ISO", liveIso.toString(), manual,
+                engine.isoRange()?.let { travel(liveIso.toDouble(), it.lower.toDouble(), it.upper.toDouble()) } ?: 0f
+            ),
+            ControlZones.Zone(
+                "SHUTTER", Mechanism.formatShutter(liveShutter), manual,
+                engine.exposureRange()?.let {
+                    // Longer is more light, so the knob travels the way the
+                    // picture brightens: right is a slower shutter.
+                    travel(liveShutter.toDouble(), it.lower.toDouble(), it.upper.toDouble())
+                } ?: 0f
+            ),
             // The f-stop is shown for every lens, because it changes with the
             // lens and it is worth knowing. There is no fader behind it: a
             // phone has one aperture and a slider that cannot move is furniture.
@@ -817,8 +865,22 @@ class MainActivity : AppCompatActivity() {
                 apertures.firstOrNull()?.let { String.format("f/%.2f", it) } ?: "—",
                 apertures.size > 1
             ),
-            ControlZones.Zone("FOCUS", focusText, canFocus)
+            ControlZones.Zone("FOCUS", focusText, canFocus, focusFraction)
         )
+    }
+
+    /**
+     * Where a value sits in its own travel, 0..1, on a log scale.
+     *
+     * Log because these are stops. A knob placed linearly across 50..12800
+     * spends nine tenths of the track above ISO 1600 and never leaves the left
+     * edge in a room, which tells the eye nothing.
+     */
+    private fun travel(value: Double, low: Double, high: Double): Float {
+        if (value <= 0.0 || low <= 0.0 || high <= low) return 0f
+        val span = Math.log(high / low)
+        if (span <= 0.0) return 0f
+        return (Math.log(value.coerceIn(low, high) / low) / span).toFloat().coerceIn(0f, 1f)
     }
 
     private fun turnPreview() {

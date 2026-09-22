@@ -777,6 +777,70 @@ object Mechanism {
         return ((sensorOrientation - displayRotation * sign) + 360) % 360
     }
 
+    /**
+     * What the *camera* already did to the frame, before we were handed it.
+     *
+     * **This is the rotation bug, and it is why seven attempts at the angle all
+     * failed.** Every one of them argued about `sensorOrientation` against the
+     * display, which is the right formula — for a buffer that arrives as the
+     * sensor read it. On this phone it does not. A `SurfaceTexture` carries a
+     * transform matrix from its producer, a `TextureView` applies that matrix
+     * before anything in this app runs, and the Pixel 7's camera puts a quarter
+     * turn in it. So the correct angle was being worked out and then added to
+     * one that was already there, and the picture came out a quarter turn wrong
+     * no matter which way the arithmetic was pushed.
+     *
+     * His own numbers say it twice over: held across (`disp 90`) the formula
+     * answers 0 and he had to dial `ROT` to 270; held upright (`disp 0`) it
+     * answers 90 and he had to dial 270 again to reach 0. Both are the formula
+     * **minus 90**, and 90 is exactly what the matrix below decodes to.
+     *
+     * The matrix is 4x4 column-major, as OpenGL wants it. Only the top-left
+     * 2x2 carries rotation: index 0 and 1 are the first column, 4 and 5 the
+     * second. A camera that has not turned anything still reports a vertical
+     * flip, because a texture's origin is at the bottom and a screen's is at
+     * the top — so that flip is divided out first and what is left is the turn.
+     *
+     * Dominance rather than equality, because the same matrix also carries the
+     * crop, so the entries are near ±1 rather than exactly ±1.
+     *
+     * @return the producer's own clockwise rotation: 0, 90, 180 or 270
+     */
+    fun producerRotation(matrix: FloatArray): Int {
+        if (matrix.size < 6) return 0
+        // Divide out the standard vertical flip: R = M · flipY.
+        val r00 = matrix[0]
+        val r10 = matrix[1]
+        val r01 = -matrix[4]
+        val r11 = -matrix[5]
+        // A matrix with nothing in it at all is a texture that has not had a
+        // frame yet. Nothing has been turned, so nothing is taken off.
+        if (kotlin.math.abs(r00) < 1e-4f && kotlin.math.abs(r10) < 1e-4f &&
+            kotlin.math.abs(r01) < 1e-4f && kotlin.math.abs(r11) < 1e-4f
+        ) return 0
+        return if (kotlin.math.abs(r00) >= kotlin.math.abs(r10)) {
+            if (r00 >= 0f) 0 else 180
+        } else {
+            if (r10 < 0f) 90 else 270
+        }
+    }
+
+    /**
+     * The angle to put on the preview, once the camera's own turn is taken off.
+     *
+     * On a phone whose camera turns nothing this is the old formula unchanged,
+     * so nothing that worked stops working.
+     */
+    fun previewRotation(
+        sensorOrientation: Int,
+        displayRotation: Int,
+        frontFacing: Boolean,
+        producerDegrees: Int
+    ): Int {
+        val auto = previewRotation(sensorOrientation, displayRotation, frontFacing)
+        return ((auto - producerDegrees) % 360 + 360) % 360
+    }
+
     // --- fitting a picture into a view ----------------------------------------
 
     /**

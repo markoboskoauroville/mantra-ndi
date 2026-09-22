@@ -71,24 +71,27 @@
                 android:layout_width="5dp"
                 android:layout_height="match_parent"
                 android:layout_gravity="start"
-                android:layout_marginTop="42dp"
+                android:layout_marginTop="24dp"
                 android:layout_marginBottom="20dp" />
 
             <!--
-                 The status, across the middle.
+                 The status, pinned to the top edge.
 
-                 It was at the top left, which is where the four manual values
-                 now are, and two lines of monospace in the same corner is one
-                 line nobody can read. The middle is the one place on a picture
-                 that is never covered by anything else on this screen.
+                 It was put in the middle of the picture for one version, to
+                 keep it off the manual values, and the middle of the picture is
+                 the one place on a camera that must stay clear — it is where
+                 the subject is. The faders start below this line instead.
             -->
             <TextView
                 android:id="@+id/status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
+                android:layout_gravity="top"
                 android:gravity="center"
-                android:padding="4dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 android:fontFamily="monospace"
                 android:textSize="9sp"
                 android:textColor="#9AA0A6"
