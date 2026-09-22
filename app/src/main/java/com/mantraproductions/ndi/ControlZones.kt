@@ -83,7 +83,16 @@ class ControlZones @JvmOverloads constructor(
         val count = zones.size
         if (count == 0 || width == 0) return
         val columnWidth = width.toFloat() / count
-        val baseline = height - density(10f)
+
+        // At the top, level with the first keys on the rail.
+        //
+        // They were at the foot of each column, and the foot of the picture is
+        // where the geometry readout lives — so on a real phone the two sat on
+        // top of each other and neither could be read. The top of the picture
+        // is also where a hand already is: it is beside L1, and a value read
+        // there is read without the eye leaving the frame.
+        val titleY = density(14f)
+        val valueY = density(30f)
 
         for (i in zones.indices) {
             val zone = zones[i]
@@ -93,13 +102,16 @@ class ControlZones @JvmOverloads constructor(
             // The column being held gets the faintest wash there is. Enough to
             // confirm the finger landed where it was aimed; not enough to be a
             // panel sitting on the shot.
-            if (held == i) {
+            if (held == i && zone.live) {
                 wash.color = Color.argb(28, 51, 209, 122)
                 canvas.drawRect(left, 0f, left + columnWidth, height.toFloat(), wash)
             }
-            if (i > 0) {
+            // A divider marks a column that can be dragged. The iris has no
+            // fader on a phone, so it is a readout and is not fenced off as if
+            // there were something in it to grab.
+            if (i > 0 && zone.live && zones[i - 1].live) {
                 divider.color = Color.argb(34, 255, 255, 255)
-                canvas.drawLine(left, density(18f), left, height - density(34f), divider)
+                canvas.drawLine(left, density(6f), left, height - density(6f), divider)
             }
 
             val tint = when {
@@ -107,14 +119,16 @@ class ControlZones @JvmOverloads constructor(
                 held == i -> RailButton.GREEN
                 else -> Color.argb(210, 235, 238, 240)
             }
-            title.color = Color.argb(if (zone.live) 170 else 90, Color.red(tint), Color.green(tint), Color.blue(tint))
+            title.color = Color.argb(
+                if (zone.live) 170 else 90, Color.red(tint), Color.green(tint), Color.blue(tint)
+            )
             value.color = tint
             // Drawn with a shadow because it sits on a picture, and a picture
             // can be any colour at all.
             title.setShadowLayer(density(2f), 0f, 0f, Color.BLACK)
             value.setShadowLayer(density(2f), 0f, 0f, Color.BLACK)
-            canvas.drawText(zone.title, centre, baseline - density(15f), title)
-            canvas.drawText(zone.value, centre, baseline, value)
+            canvas.drawText(zone.title, centre, titleY, title)
+            canvas.drawText(zone.value, centre, valueY, value)
         }
     }
 
@@ -126,6 +140,11 @@ class ControlZones @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 val index = (event.x / columnWidth).toInt().coerceIn(0, count - 1)
+                // A column with nothing behind it is not grabbed. The iris is
+                // fixed on a phone and a fixed lens has no focus travel: a
+                // column that lights up and then does nothing is worse than
+                // one that never answers.
+                if (zones.getOrNull(index)?.live != true) return false
                 held = index
                 lastY = event.y
                 onGrab?.invoke(index)

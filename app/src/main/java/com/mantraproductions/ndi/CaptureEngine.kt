@@ -177,6 +177,21 @@ class CaptureEngine(private val context: Context) {
                             ", mounted at ${sensorOrientation}°" +
                             ", rotate-and-crop modes " + rotateAndCropModes().joinToString(",")
                     )
+                    // Focus, stated rather than assumed. Six versions of this
+                    // app let a drag do nothing without a line anywhere to say
+                    // the lens had no travel to give.
+                    Trace.state(
+                        "focus: lens travel " +
+                            (lensCharacteristics?.get(
+                                CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE
+                            ) ?: 0f) +
+                            ", logical travel " +
+                            (characteristics?.get(
+                                CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE
+                            ) ?: 0f) +
+                            ", AF modes " + afModes().joinToString(",") +
+                            ", manual " + if (supportsManualFocus()) "yes" else "NO"
+                    )
                     attempts = planAttempts(wantTenBit)
                     attemptIndex = 0
                     tryNextCombination(camera)
@@ -713,14 +728,26 @@ class CaptureEngine(private val context: Context) {
      * ignored.
      */
     fun setFocusDistance(dioptres: Float): Boolean {
-        val request = builder ?: return false
+        val request = builder ?: run {
+            Trace.refused("focus", "the camera has no request to change")
+            return false
+        }
         val closest = minimumFocusDistance()
+        val wanted = dioptres.coerceIn(0f, if (closest > 0f) closest else dioptres)
+        // Focus regions belong to a tap on the picture. Left in place they are
+        // what the camera goes back to the moment AF is switched on again, and
+        // a rack that snaps back to the last tapped point is not a rack.
+        request.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL)
         request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-        request.set(
-            CaptureRequest.LENS_FOCUS_DISTANCE,
-            dioptres.coerceIn(0f, if (closest > 0f) closest else dioptres)
+        request.set(CaptureRequest.LENS_FOCUS_DISTANCE, wanted)
+        val ok = apply()
+        request.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+        Trace.control(
+            "focus",
+            String.format("%.3f dioptres (closest %.3f)", wanted, closest),
+            if (ok) String.format("reached %.3f", lastFocusDistance ?: -1f) else "refused"
         )
-        return apply()
+        return ok
     }
 
     fun setContinuousFocus(): Boolean {
@@ -809,7 +836,10 @@ class CaptureEngine(private val context: Context) {
     /** Focus as a fraction of this lens's travel, 0 at infinity, 1 at closest. */
     fun setManualFocus(fraction: Float): Boolean {
         val closest = minimumFocusDistance()
-        if (closest <= 0f) return false
+        if (closest <= 0f) {
+            Trace.refused("focus", "this lens has no focus travel; it is fixed")
+            return false
+        }
         return setFocusDistance(closest * fraction.coerceIn(0f, 1f))
     }
 
@@ -886,10 +916,46 @@ class CaptureEngine(private val context: Context) {
             ) ?: IntArray(0)
         } else IntArray(0)
 
-    fun minimumFocusDistance(): Float =
-        lensCharacteristics?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+    /**
+     * How close this lens can be driven, in dioptres, or 0 for a fixed lens.
+     *
+     * **This is the focus bug.** It was read from the *physical* sub-lens
+     * alone, and a Pixel's ultra wide reports 0 there because it has no focus
+     * motor of its own. `setManualFocus` therefore refused before it reached
+     * the camera, on every drag, and refused in silence: no request, no
+     * `REFUSED` line, nothing in the trace at all. The column moved, the
+     * number moved, and the lens never did — which is exactly what "focus
+     * doesn't change focus" looks like from the outside.
+     *
+     * A capture request goes to the *logical* camera, not to the sub-lens, so
+     * the logical camera's travel is what the request is validated against.
+     * Whichever of the two reports travel is taken, and both go in the trace,
+     * so a lens that genuinely cannot focus can be told apart from one this
+     * app was asking the wrong question about.
+     */
+    fun minimumFocusDistance(): Float {
+        val lens = lensCharacteristics
+            ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+        val logical = characteristics
+            ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+        return maxOf(lens, logical)
+    }
 
-    fun supportsManualFocus(): Boolean = minimumFocusDistance() > 0f
+    /** The AF modes this camera will actually accept. */
+    fun afModes(): IntArray =
+        characteristics?.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES) ?: IntArray(0)
+
+    /**
+     * Whether the lens can be driven by hand at all.
+     *
+     * Two things are needed and both have been assumed before: travel to drive
+     * it through, and an `AF_MODE_OFF` the camera will take — without the
+     * second, `LENS_FOCUS_DISTANCE` is ignored and the autofocus simply keeps
+     * doing what it was doing.
+     */
+    fun supportsManualFocus(): Boolean =
+        minimumFocusDistance() > 0f &&
+            afModes().contains(CameraCharacteristics.CONTROL_AF_MODE_OFF)
 
     fun characteristicsOrNull(): CameraCharacteristics? = characteristics
 

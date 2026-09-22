@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     One layout for both ways up.
+     Landscape, and only landscape.
 
-     The stage is a LinearLayout whose orientation the activity sets from the
-     phone's rotation: across in landscape, so the rails are the left and right
-     margins of the picture; down in portrait, so they are the bands above and
-     below it. The keys, their order and their meaning never move, which is the
-     point — a hand that has learned this rail keeps it when the phone turns.
+     The app used to follow the phone and re-lay itself out both ways up. It is
+     locked across now, because that is how this camera is held and because a
+     20:9 screen turned sideways is where the room is: the 16:9 picture takes
+     the height, and the two rails live in the black at either end of it
+     instead of in bands above and below that eat the picture.
 
      There is no layout-land twin on purpose. Two files is two places for the
-     ids to drift apart, and the last build lost a day to exactly that.
+     ids to drift apart, and an earlier build lost a day to exactly that.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
@@ -57,11 +57,37 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
+            <!--
+                 The audio, down the inside edge of the picture.
+
+                 A hairline, because the picture is what is being looked at and
+                 a meter only has to answer two questions: is there sound, and
+                 is it clipping. It runs whenever the app does, not only during
+                 a take — a dead microphone found after the take is a take that
+                 has to happen again.
+            -->
+            <com.mantraproductions.ndi.VuMeterView
+                android:id="@+id/vu"
+                android:layout_width="5dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="start"
+                android:layout_marginTop="42dp"
+                android:layout_marginBottom="20dp" />
+
+            <!--
+                 The status, across the middle.
+
+                 It was at the top left, which is where the four manual values
+                 now are, and two lines of monospace in the same corner is one
+                 line nobody can read. The middle is the one place on a picture
+                 that is never covered by anything else on this screen.
+            -->
             <TextView
                 android:id="@+id/status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="top"
+                android:layout_gravity="center"
+                android:gravity="center"
                 android:padding="4dp"
                 android:fontFamily="monospace"
                 android:textSize="9sp"
@@ -69,6 +95,7 @@
                 android:shadowColor="#000000"
                 android:shadowRadius="3"
                 android:text="@string/starting" />
+
             <!--
                  The geometry, on screen.
 

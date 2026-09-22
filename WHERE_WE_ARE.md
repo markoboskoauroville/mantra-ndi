@@ -6,6 +6,96 @@ working state of *this* app.
 
 ---
 
+## 22.9.2026, afternoon — v75, landscape, the take, and the focus bug named
+
+### What he asked for, in his words
+
+> "focus is buggy. It doesn't change focus at all."
+> "we are changing from vertical orientation to horizontal because in horizontal
+> rotation there is much more space and I want to see parameters in the middle
+> of the screen. Down there, they're hidden and they're overlapping."
+> "when I switch lenses, I can see f-stop, but slider should be removed."
+> "add recording. I need a record button ... on the right side action bar. There
+> is already a vu meter built in in the old app. Take the code for the vu meter."
+
+### The focus bug, found
+
+`minimumFocusDistance()` read `LENS_INFO_MINIMUM_FOCUS_DISTANCE` from the
+**physical sub-lens** alone. A Pixel's ultra wide — the lens on `L1`, the one he
+was looking through — reports **0** there, because it has no focus motor of its
+own. So `setManualFocus` returned `false` before it reached the camera, on every
+single drag, **and it returned in silence**: no request, no `REFUSED` line,
+nothing in the trace at all. That is why the trace from 11:21 has four `focus
+mode` lines from the `AF` key and **not one focus distance line** in six minutes
+of him dragging the column.
+
+A capture request goes to the **logical** camera, not to the sub-lens, so the
+logical camera's travel is what it is validated against. Both are now read, the
+larger is used, and both go in the trace at open with the AF modes beside them.
+A lens that genuinely cannot focus now says **FIXED** in the column, dims, and
+refuses the finger, instead of letting the number move while the picture does
+not. Every focus request is traced, applied or refused, with the distance the
+lens actually reached.
+
+### Landscape, and the readouts
+
+The activity is `sensorLandscape`. The portrait layout branch is gone with it:
+16:9 across the height, rails in the black at both ends. Turning the phone end
+for end still works and still does not rebuild the session.
+
+The four values moved from the **foot** of the columns to the **top**, level
+with `L1` — the foot of the picture is where the geometry readout lives, which
+is exactly the overlap in his screenshot. The status line moved to the **middle
+of the picture**, centred, which is the one place nothing else on this screen
+covers. `IRIS` shows the f-stop for every lens and has no fader behind it: a
+phone has one aperture, and a column that lights up and does nothing is worse
+than one that never answers. Same order, ISO → SHUTTER → IRIS → FOCUS.
+
+`ROT` is remembered between runs now.
+
+### Recording, and the meter
+
+`REC` is a red circle at the top of the right rail — filled, with the running
+time inside, while a take runs.
+
+**Recording is independent of both NDI keys.** The encoder is in the session
+whether or not anything is being sent, so a take costs a file write and the same
+frames go to the wire and to the card. Nothing is encoded twice. The muxer gets
+the encoder's own `MediaFormat` and its own output buffers, not the byte arrays
+NDI is handed. The file opens on the first keyframe, never mid-GOP. It is
+written through a MediaStore descriptor into **Movies/Mantra NDI**, `IS_PENDING`
+until the muxer has closed it, because a half-written MP4 has no moov atom and
+opens nowhere.
+
+The VU meter is the old build's, arithmetic unchanged, down the inside edge of
+the picture with −6 and −18 marked. What changed is where its samples come from:
+the old build handed the microphone back and forth between a meter and an
+encoder, and a handover is a thing that can fail — when it failed, the take had
+no sound and the meter said it did. **One reader now.** It meters every buffer
+and, while a take runs, passes that same buffer to the AAC encoder, so the meter
+and the file cannot disagree. It runs whenever the app is in front, not only
+during a take.
+
+### The rotation — what the numbers actually say
+
+He says the rotation is still wrong. His own screenshot says the preview is
+`rot 0`, `buf 1920x1080`, `view 1788x1006`, `squeeze 1.000` — a full-frame 16:9
+buffer filling a 16:9 view with no distortion. **A frame cannot be a quarter
+turn out and still fill that view without stretching**, so whatever is wrong
+there, it is not a 90° error at that moment.
+
+Rather than guess a seventh time, the geometry line now also prints **`cam`** —
+the producer's own transform matrix. A `TextureView` applies the camera's
+transform before anything in this app runs, so if the camera pre-rotated the
+frame, our rotation is added to one already applied. `1,0,0,1` means no rotation
+and the frame arrived as the sensor read it. **One screenshot of that field now
+settles the angle for good.**
+
+*Needed from him:* if it still looks wrong, **how** — upside down, mirrored, or
+a quarter turn — because those are three different causes.
+
+---
+
 ## 22.9.2026, midday — v74 in progress
 
 ### Shipped and on his phone

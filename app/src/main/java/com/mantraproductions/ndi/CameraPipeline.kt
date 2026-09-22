@@ -5,6 +5,7 @@ import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCharacteristics
 import android.media.Image
 import android.media.ImageReader
+import android.media.MediaFormat
 import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.HandlerThread
@@ -69,6 +70,29 @@ class CameraPipeline(private val context: Context) {
     private var fps: Int = 30
 
     private var parameterSets: Triple<ByteArray, ByteArray?, ByteArray?>? = null
+
+    // --- the take ------------------------------------------------------------
+    private var recorder: Mp4Recorder? = null
+    private var take: Recordings.Take? = null
+    private var audio: AacEncoder? = null
+    private var encodedVideoFormat: MediaFormat? = null
+
+    /**
+     * Whether a file is being written.
+     *
+     * Recording is deliberately independent of the two NDI keys. The encoder
+     * exists whether or not anything is being sent, so a take costs the same
+     * file write with HX green, with FULL green, or with the phone off the
+     * network entirely — which is the case that matters, because a camera that
+     * can only record while it streams is not a camera.
+     */
+    @Volatile var isRecording = false
+        private set
+
+    /** Where the current take is going, for the status line. */
+    var takeName: String? = null
+        private set
+
     private var multicast: WifiManager.MulticastLock? = null
     private var startedAtUs = 0L
     @Volatile private var frames = 0L
@@ -210,6 +234,14 @@ class CameraPipeline(private val context: Context) {
                 }
             }
         )
+        // The muxer needs the encoder's own format, and the encoder announces
+        // it exactly once, long before anybody presses record. So it is kept.
+        codec.onEncodedFormat = { format ->
+            encodedVideoFormat = format
+            recorder?.setVideoFormat(format)
+        }
+        codec.onEncodedSample = { buffer, info -> recorder?.writeVideo(buffer, info) }
+
         val surface = codec.start()
         if (surface == null) {
             listener?.onError("This phone will not encode ${size.width}x${size.height}")
@@ -274,6 +306,8 @@ class CameraPipeline(private val context: Context) {
      *   mixer treats as a lost input.
      */
     fun stop(keepSource: Boolean = false) {
+        if (isRecording) stopRecording()
+        encodedVideoFormat = null
         if (keepSource) {
             // Leave the targets, keep the sender. The encoder is stopped below
             // and its parameter sets are re-sent when the mode is restored.
@@ -315,7 +349,9 @@ class CameraPipeline(private val context: Context) {
 
         // Leave the old one first, so the two are never both live.
         when (mode) {
-            Mode.HX -> encoderSurface?.let { engine.setTargetLive(it, false) }
+            // Left live if a take is running: the file is fed by the encoder,
+            // and stopping the stream must never stop the recording.
+            Mode.HX -> if (!isRecording) encoderSurface?.let { engine.setTargetLive(it, false) }
             Mode.FULL -> fullSurface?.let { engine.setTargetLive(it, false) }
             Mode.OFF -> Unit
         }
@@ -458,6 +494,112 @@ class CameraPipeline(private val context: Context) {
     val hxAvailable: Boolean get() = isRunning && engine.isConfigured(encoderSurface)
     val fullAvailable: Boolean get() = isRunning && engine.isConfigured(fullReader?.surface)
     val snapAvailable: Boolean get() = isRunning && snap.armed && engine.isConfigured(snap.surface)
+
+    // --- recording ------------------------------------------------------------
+
+    /**
+     * Starts a take, and makes the encoder live if the stream was not already.
+     *
+     * @param meter the one reader on the microphone; its samples are forwarded
+     *   to the sound encoder for as long as the take runs, so what is metered
+     *   and what is in the file cannot disagree.
+     * @return where the file is going, or null with the reason traced and said.
+     */
+    fun startRecording(context: Context, meter: AudioMeter?): String? {
+        if (isRecording) return takeName
+        if (!isRunning) {
+            listener?.onError("The camera is not open")
+            return null
+        }
+        val surface = encoderSurface
+        if (surface == null || !engine.isConfigured(surface)) {
+            listener?.onError("This phone's session has no encoder to record from")
+            Trace.refused("recording", "the encoder target is not in the session")
+            return null
+        }
+
+        val opened = Recordings.open(context) ?: run {
+            listener?.onError("The file could not be created")
+            return null
+        }
+        val file = Mp4Recorder(opened.fileDescriptor)
+        if (!file.opened) {
+            opened.close(keep = false)
+            listener?.onError("The muxer refused the file")
+            return null
+        }
+
+        take = opened
+        recorder = file
+        isRecording = true
+        takeName = opened.where
+
+        // If the encoder has already announced its format — and it has, unless
+        // this is the first second after opening — the muxer can start now.
+        encodedVideoFormat?.let { file.setVideoFormat(it) }
+
+        if (meter != null) {
+            val aac = AacEncoder()
+            aac.onFormat = { format -> recorder?.setAudioFormat(format) }
+            aac.onSample = { buffer, info -> recorder?.writeAudio(buffer, info) }
+            if (aac.start()) {
+                audio = aac
+                meter.sink = { pcm, bytes -> aac.feed(pcm, bytes) }
+            } else {
+                Trace.refused("recording", "no AAC encoder, the take will be silent")
+            }
+        } else {
+            Trace.refused("recording", "no microphone, the take will be silent")
+        }
+
+        // The stream may be off, in which case the encoder is configured but
+        // receiving nothing. A take needs it fed either way.
+        if (mode != Mode.HX) engine.setTargetLive(surface, true)
+        encoder?.requestKeyframe()
+
+        Trace.control("record", "start", opened.where)
+        return opened.where
+    }
+
+    /** @return where the file went, or null if nothing was written. */
+    fun stopRecording(): String? {
+        if (!isRecording) return null
+        isRecording = false
+
+        audio?.let { aac ->
+            aac.onFormat = null
+            aac.onSample = null
+            aac.stop()
+        }
+        audio = null
+
+        val file = recorder
+        recorder = null
+        val frames = file?.frames ?: 0
+        val dropped = file?.dropped ?: 0
+        file?.stop()
+
+        // The encoder goes back to being fed only while HX is green.
+        if (mode != Mode.HX) encoderSurface?.let { engine.setTargetLive(it, false) }
+
+        val opened = take
+        take = null
+        val where = if (frames > 0) opened?.where else null
+        opened?.close(keep = frames > 0)
+
+        Trace.control(
+            "record", "stop",
+            if (frames > 0) "$frames frames, $dropped refused, ${opened?.name}"
+            else "nothing was written, the file was removed"
+        )
+        takeName = null
+        return where
+    }
+
+    /** Frames in the file so far, and frames the muxer would not take. */
+    val recordedFrames: Long get() = recorder?.frames ?: 0
+    val recordedDrops: Long get() = recorder?.dropped ?: 0
+    val recordingIsWriting: Boolean get() = recorder?.isWriting == true
 
     private companion object {
         /**

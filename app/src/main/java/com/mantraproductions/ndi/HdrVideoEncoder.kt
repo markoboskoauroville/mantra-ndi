@@ -40,6 +40,18 @@ class HdrVideoEncoder(
     private val running = AtomicBoolean(false)
     private var worker: Thread? = null
 
+    /**
+     * The recorder's two taps, and the reason recording costs nothing.
+     *
+     * A muxer needs the encoder's own `MediaFormat` and its own output buffers
+     * — not the byte arrays NDI is handed, which have already been copied and
+     * have lost the codec-specific data a file needs in its header. So the
+     * recorder is given the real thing at the one point it exists, and the
+     * same frame goes to the wire and to the file with nothing encoded twice.
+     */
+    @Volatile var onEncodedFormat: ((MediaFormat) -> Unit)? = null
+    @Volatile var onEncodedSample: ((ByteBuffer, MediaCodec.BufferInfo) -> Unit)? = null
+
     /** True once configured: ten bit forces HEVC, since AVC has no Main10 here. */
     val isHevc: Boolean get() = tenBit || preferHevc
 
@@ -133,6 +145,7 @@ class HdrVideoEncoder(
 
             if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                 val output = c.outputFormat
+                runCatching { onEncodedFormat?.invoke(output) }
                 // Parameter sets arrive in the format rather than as a frame on
                 // most encoders, and NDI wants them as extra data on keyframes.
                 val sps = output.getByteBuffer("csd-0")?.toArray()
@@ -155,6 +168,13 @@ class HdrVideoEncoder(
                 }
                 buffer.position(info.offset)
                 buffer.limit(info.offset + info.size)
+
+                // The file first, on a duplicate: reading the bytes out for
+                // NDI below consumes the buffer, and a muxer handed a spent
+                // one writes a zero length sample.
+                onEncodedSample?.let { write ->
+                    runCatching { write(buffer.duplicate(), info) }
+                }
 
                 val bytes = ByteArray(info.size)
                 buffer.get(bytes)

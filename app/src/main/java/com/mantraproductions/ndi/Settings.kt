@@ -64,6 +64,20 @@ class Settings(context: Context) {
         get() = prefs.getInt(BITRATE, 12)
         set(value) = prefs.edit().putInt(BITRATE, value.coerceIn(2, 50)).apply()
 
+    /**
+     * Quarter turns added to the preview by hand, kept between runs.
+     *
+     * The automatic angle is the sensor's mounting against the display's
+     * rotation, and it is right on nearly every device. On one where it is
+     * not, `ROT` is how the operator corrects it — and having to press it
+     * again after every launch makes a correct camera feel like a broken one.
+     * So the correction is remembered. Nothing else about the geometry is a
+     * preference; this is the one number that is a fact about the phone.
+     */
+    var quarterTurns: Int
+        get() = prefs.getInt(TURNS, 0)
+        set(value) = prefs.edit().putInt(TURNS, ((value % 4) + 4) % 4).apply()
+
     /** Ten bit is asked for unless somebody has a reason not to. */
     var wantTenBit: Boolean
         get() = prefs.getBoolean(TEN_BIT, true)
@@ -77,5 +91,6 @@ class Settings(context: Context) {
         const val PEAK_COLOUR = "peakColour"
         const val BITRATE = "bitRateMbps"
         const val TEN_BIT = "wantTenBit"
+        const val TURNS = "quarterTurns"
     }
 }

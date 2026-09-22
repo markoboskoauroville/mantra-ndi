@@ -38,9 +38,15 @@ import androidx.core.view.WindowInsetsCompat
  *     SNAP        the sensor's own frame as a DNG, uncorrected
  *     LOG         which log curve the phone's tone mapper is applying
  *     ROT         a quarter turn of the preview, by hand
+ *     M / CTRL    manual exposure, and the columns on the picture
  *     HX / FULL   which kind of NDI, or neither
  *
- *     1..11       the LUT slots, down the other side
+ *     REC         the take, at the top of the other rail, and the LUT
+ *     1..11       slots below it
+ *
+ * The audio meter runs down the inside edge of the picture whenever the app
+ * does, because a dead microphone found after the take is a take that happens
+ * again.
  *
  * Grey is off and green is on, everywhere, with no exceptions — that is the
  * whole of the interface language and it is why the keys can be this small.
@@ -54,6 +60,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var zones: ControlZones
     private lateinit var status: TextView
     private lateinit var geometry: TextView
+    private lateinit var vu: VuMeterView
     private lateinit var stage: LinearLayout
     private lateinit var railLeft: LinearLayout
     private lateinit var railRight: LinearLayout
@@ -79,8 +86,20 @@ class MainActivity : AppCompatActivity() {
     private var shutterNs = 1_000_000_000L / 60
     private var focusFraction = 0f
 
+    /**
+     * The microphone, held for as long as the app is in front.
+     *
+     * One reader, not two. The old build gave the mic to a meter and took it
+     * back for the encoder when a take started, and a handover is a thing that
+     * can fail — when it failed, the take had no sound and the meter said it
+     * did. Now the meter owns it and the take borrows its samples.
+     */
+    private var meter: AudioMeter? = null
+    private var recordingSince = 0L
+
     private val lensKeys = mutableListOf<RailButton>()
     private val slotKeys = mutableListOf<RailButton>()
+    private lateinit var recKey: RecordButtonView
     private lateinit var pageKey: RailButton
     private lateinit var gearKey: RailButton
 
@@ -115,6 +134,7 @@ class MainActivity : AppCompatActivity() {
         zones = findViewById(R.id.zones)
         status = findViewById(R.id.status)
         geometry = findViewById(R.id.geometry)
+        vu = findViewById(R.id.vu)
         stage = findViewById(R.id.stage)
         railLeft = findViewById(R.id.railLeft)
         railRight = findViewById(R.id.railRight)
@@ -122,6 +142,7 @@ class MainActivity : AppCompatActivity() {
         pipeline = CameraPipeline(this)
         slots = LutSlots(this)
         settings = Settings(this)
+        manualQuarterTurns = settings.quarterTurns
         lenses = CameraCatalogue.lenses(this)
         Trace.state(
             "lenses: " + lenses.joinToString {
@@ -135,7 +156,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         buildRails()
-        layoutForOrientation(resources.configuration.orientation)
+        layoutRails()
 
         // Android draws its camera-in-use indicator over the top of the screen
         // whenever this app is doing its job, and on the first run it sat on
@@ -245,6 +266,16 @@ class MainActivity : AppCompatActivity() {
         fullKey = newKey("FULL") { toggleMode(CameraPipeline.Mode.FULL) }
             .also { railLeft.addView(it) }
 
+        // Record, at the top of the right rail where a thumb already is.
+        //
+        // Not a key like the others on purpose: it is the only control on this
+        // camera whose state has to be readable without being read, so it is a
+        // red circle that fills and counts rather than a word that turns green.
+        recKey = RecordButtonView(this).also {
+            it.setOnClickListener { toggleRecording() }
+            railRight.addView(it)
+        }
+
         // Five slots at a time, not eleven. Eleven keys down the side of a
         // phone are each too small to hit with a thumb, and the right rail now
         // also has to carry the way into settings. So the slots are paged, and
@@ -299,55 +330,44 @@ class MainActivity : AppCompatActivity() {
         }
 
     /**
-     * Across in landscape, down in portrait.
+     * The rails down either side of the picture. Across, always.
      *
-     * The keys keep their order and their meaning; only the direction of the
-     * rail changes, so a hand that has learned this camera keeps it when the
-     * phone turns. Every key is re-sized here because a rail that runs across
-     * wants square-ish keys and one that runs down wants wide ones.
+     * This used to answer the phone's orientation and lay the rails out in
+     * bands above and below the picture when it was held upright. That branch
+     * is gone with the portrait layout it existed for: the activity is locked
+     * to landscape now, the picture is 16:9 across the height, and the keys
+     * live in the black at both ends where they take nothing from the shot.
+     *
+     * Turning the phone end for end still reaches here, because sensorLandscape
+     * allows both ways round — the rails swap sides with the phone and the
+     * preview transform is recomputed, which is what a camera does.
      */
-    private fun layoutForOrientation(orientation: Int) {
-        val landscape = orientation == Configuration.ORIENTATION_LANDSCAPE
-        stage.orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        railLeft.orientation = if (landscape) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-        railRight.orientation = if (landscape) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+    private fun layoutRails() {
+        stage.orientation = LinearLayout.HORIZONTAL
+        railLeft.orientation = LinearLayout.VERTICAL
+        railRight.orientation = LinearLayout.VERTICAL
 
         val thickness = (44 * resources.displayMetrics.density).toInt()
+        val margin = (2 * resources.displayMetrics.density).toInt()
         for (rail in listOf(railLeft, railRight)) {
             val lp = rail.layoutParams as LinearLayout.LayoutParams
-            if (landscape) {
-                lp.width = thickness
-                lp.height = ViewGroup.LayoutParams.MATCH_PARENT
-            } else {
-                lp.width = ViewGroup.LayoutParams.MATCH_PARENT
-                lp.height = thickness
-            }
+            lp.width = thickness
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
             rail.layoutParams = lp
 
             for (i in 0 until rail.childCount) {
-                val child = rail.getChildAt(i)
-                val margin = (2 * resources.displayMetrics.density).toInt()
-                val klp = LinearLayout.LayoutParams(0, 0).apply {
-                    if (landscape) {
-                        width = ViewGroup.LayoutParams.MATCH_PARENT
-                        height = 0
-                    } else {
-                        width = 0
-                        height = ViewGroup.LayoutParams.MATCH_PARENT
-                    }
+                rail.getChildAt(i).layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, 0
+                ).apply {
                     weight = 1f
                     setMargins(margin, margin, margin, margin)
                 }
-                child.layoutParams = klp
             }
         }
 
         val stageLp = (findViewById<View>(R.id.picture)).layoutParams as LinearLayout.LayoutParams
-        if (landscape) {
-            stageLp.width = 0; stageLp.height = ViewGroup.LayoutParams.MATCH_PARENT
-        } else {
-            stageLp.width = ViewGroup.LayoutParams.MATCH_PARENT; stageLp.height = 0
-        }
+        stageLp.width = 0
+        stageLp.height = ViewGroup.LayoutParams.MATCH_PARENT
         stageLp.weight = 1f
         findViewById<View>(R.id.picture).layoutParams = stageLp
 
@@ -357,7 +377,7 @@ class MainActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         Trace.state("rotated: orientation=${newConfig.orientation}")
-        layoutForOrientation(newConfig.orientation)
+        layoutRails()
     }
 
     // --- the camera ----------------------------------------------------------
@@ -366,7 +386,13 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 1)
+            // Both at once. Asking for the microphone later, at the moment the
+            // record key is pressed, is a dialog in the middle of a take.
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO),
+                1
+            )
             return
         }
         if (lenses.isEmpty()) { say("This phone reports no usable camera"); return }
@@ -399,8 +425,12 @@ class MainActivity : AppCompatActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) openCamera()
-        else say("Camera permission refused, there is nothing to show")
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            openCamera()
+            startMeter()
+        } else {
+            say("Camera permission refused, there is nothing to show")
+        }
     }
 
     override fun onResume() {
@@ -408,6 +438,7 @@ class MainActivity : AppCompatActivity() {
         // The camera session is lost while backgrounded even with a foreground
         // service, so it is rebuilt rather than tested for.
         if (preview.isAvailable && !pipeline.isRunning) openCamera()
+        startMeter()
         ui.post(rateTick)
     }
 
@@ -415,14 +446,94 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
         ui.removeCallbacks(rateTick)
         focus.stop()
+        // The file is closed before the camera goes, not after: a take whose
+        // encoder disappeared underneath it has no moov atom and opens nowhere.
+        if (pipeline.isRecording) stopRecording()
         pipeline.stop()
+        meter?.stop()
+        meter = null
+        vu.dead = true
+        vu.reset()
+        refreshKeys()
+    }
+
+    /**
+     * The meter runs whenever the app is in front, take or no take.
+     *
+     * That is the whole point of having one. A microphone that is dead, muted
+     * at the socket, or pointed at nothing is something to find out about
+     * before the take, and a meter that only appears once recording starts
+     * reports it afterwards, when it is a reshoot rather than a fix.
+     */
+    private fun startMeter() {
+        if (meter?.isRunning == true) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            vu.dead = true
+            Trace.refused("audio meter", "no microphone permission")
+            refreshKeys()
+            return
+        }
+        val m = AudioMeter { rms -> ui.post { vu.setLevel(rms) } }
+        if (m.start()) {
+            meter = m
+            vu.dead = false
+        } else {
+            vu.dead = true
+        }
+        refreshKeys()
     }
 
     private val rateTick = object : Runnable {
         override fun run() {
             if (pipeline.isRunning) pipeline.sampleRate()
+            if (pipeline.isRecording) {
+                recKey.elapsedSeconds =
+                    (android.os.SystemClock.elapsedRealtime() - recordingSince) / 1000
+            }
             ui.postDelayed(this, 1000)
         }
+    }
+
+    // --- the take -------------------------------------------------------------
+
+    /**
+     * Record, independent of both NDI keys.
+     *
+     * A camera that can only record while it is streaming is not a camera. The
+     * encoder is in the session whether or not anything is being sent, so the
+     * file costs a write and the same frames go to the wire and to the card.
+     */
+    private fun toggleRecording() {
+        if (pipeline.isRecording) stopRecording() else startRecording()
+    }
+
+    private fun startRecording() {
+        if (!pipeline.isRunning) { say("The camera is not open"); return }
+        if (meter == null) say("No microphone: this take will have no sound")
+        val where = pipeline.startRecording(this, meter) ?: run { refreshKeys(); return }
+        recordingSince = android.os.SystemClock.elapsedRealtime()
+        recKey.elapsedSeconds = 0
+        recKey.recording = true
+        say("Recording → $where")
+        refreshKeys()
+    }
+
+    private fun stopRecording() {
+        val frames = pipeline.recordedFrames
+        val drops = pipeline.recordedDrops
+        val where = pipeline.stopRecording()
+        recKey.recording = false
+        recKey.elapsedSeconds = 0
+        say(
+            when {
+                where == null -> "Nothing was written; the file was removed"
+                drops > 0 -> "Saved → $where ($frames frames, $drops refused)"
+                else -> "Saved → $where ($frames frames)"
+            }
+        )
+        refreshKeys()
     }
 
     /**
@@ -473,10 +584,26 @@ class MainActivity : AppCompatActivity() {
         val bufAspect = bufferSize.width.toDouble() / bufferSize.height
         val viewAspect = vw.toDouble() / vh
         val squeeze = viewAspect / bufAspect
+
+        // Whether the camera turned the buffer before we got it.
+        //
+        // This is the one number nobody has ever had, and it is why the angle
+        // has been argued about six times. A TextureView applies the producer's
+        // own transform matrix before anything here runs: if the camera
+        // pre-rotated the frame, our rotation is added to one already applied
+        // and the picture ends up a quarter turn out. `1,0,0,1` is no rotation
+        // — the camera handed the frame over as the sensor read it.
+        val producer = FloatArray(16)
+        val producerTurn = runCatching {
+            preview.surfaceTexture?.getTransformMatrix(producer)
+            String.format("%.0f,%.0f,%.0f,%.0f", producer[0], producer[1], producer[4], producer[5])
+        }.getOrDefault("?")
+
         val line = "sensor $sensor · disp $displayDegrees · rot $applied" +
             (if (manualQuarterTurns != 0) " (auto $auto +${manualQuarterTurns * 90})" else "") +
             " · buf ${bufferSize.width}x${bufferSize.height} · view ${vw}x$vh" +
             " · squeeze " + String.format("%.3f", squeeze) +
+            " · cam " + producerTurn +
             (if (kotlin.math.abs(squeeze - 1.0) > 0.01) "  STRETCHED" else "")
         geometry.text = line
         Trace.control("preview geometry", line, applied)
@@ -632,6 +759,14 @@ class MainActivity : AppCompatActivity() {
             }
             2 -> Unit    // the iris is fixed on a phone; the column says so
             3 -> {
+                // A lens with no focus motor is said outright rather than
+                // letting the number move while the picture does not. This was
+                // the whole of "focus doesn't change focus at all": the ultra
+                // wide is fixed, and the drag was refused in silence.
+                if (!engine.supportsManualFocus()) {
+                    say("This lens is fixed focus; there is nothing to pull")
+                    return
+                }
                 focusFraction = (focusFraction + delta * 0.8f).coerceIn(0f, 1f)
                 if (focus.mode == FocusDirector.Mode.AUTO) {
                     focus.setMode(FocusDirector.Mode.MANUAL)
@@ -643,36 +778,54 @@ class MainActivity : AppCompatActivity() {
         refreshZones()
     }
 
-    /** What the four columns currently say. */
+    /**
+     * What the four columns currently say.
+     *
+     * The numbers are the camera's own answers wherever the camera has one —
+     * the ISO and the shutter it settled on, the distance the lens actually
+     * reached — rather than the value that was asked for. A column that echoes
+     * the request agrees with itself whatever the lens is doing, which is how
+     * a focus control that never moved anything looked correct for six
+     * versions.
+     */
     private fun refreshZones() {
         val engine = pipeline.engine
+        val running = pipeline.isRunning
         val apertures = engine.apertures()
         val liveIso = engine.lastIso ?: iso
         val liveShutter = engine.lastExposureNs ?: shutterNs
-        val closest = engine.minimumFocusDistance()
-        val metres = if (closest > 0f && focusFraction > 0f) {
-            val dioptres = closest * focusFraction
-            if (dioptres > 0f) String.format("%.2fm", 1f / dioptres) else "∞"
-        } else "∞"
+
+        val canFocus = running && engine.supportsManualFocus()
+        val reached = engine.lastFocusDistance
+        val focusText = when {
+            !running -> "—"
+            // No focus motor on this lens. An ultra wide on most phones.
+            !canFocus -> "FIXED"
+            focus.mode == FocusDirector.Mode.AUTO -> "AUTO"
+            reached != null && reached > 0.01f -> String.format("%.2fm", 1f / reached)
+            else -> "∞"
+        }
 
         zones.zones = listOf(
             ControlZones.Zone("ISO", liveIso.toString(), manual),
             ControlZones.Zone("SHUTTER", Mechanism.formatShutter(liveShutter), manual),
+            // The f-stop is shown for every lens, because it changes with the
+            // lens and it is worth knowing. There is no fader behind it: a
+            // phone has one aperture and a slider that cannot move is furniture.
             ControlZones.Zone(
                 "IRIS",
                 apertures.firstOrNull()?.let { String.format("f/%.2f", it) } ?: "—",
                 apertures.size > 1
             ),
-            ControlZones.Zone(
-                "FOCUS",
-                if (focus.mode == FocusDirector.Mode.AUTO) "AUTO" else metres,
-                true
-            )
+            ControlZones.Zone("FOCUS", focusText, canFocus)
         )
     }
 
     private fun turnPreview() {
         manualQuarterTurns = (manualQuarterTurns + 1) % 4
+        // Kept, so a phone whose sensor is mounted unusually is corrected once
+        // rather than at the start of every shoot.
+        settings.quarterTurns = manualQuarterTurns
         applyPreviewTransform()
         refreshKeys()
     }
@@ -842,6 +995,9 @@ class MainActivity : AppCompatActivity() {
             if (activeSlot > 0 && (activeSlot - 1) / PAGE_SIZE != slotPage) RailButton.State.ARMED
             else RailButton.State.OFF
         gearKey.state = RailButton.State.OFF
+
+        recKey.dead = !pipeline.isRunning
+        recKey.recording = pipeline.isRecording
     }
 
     // --- the status line ------------------------------------------------------

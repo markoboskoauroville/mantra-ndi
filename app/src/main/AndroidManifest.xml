@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- The take has sound, and the meter runs whether or not a take does: a
+         microphone found dead after the shoot is a shoot that happens again. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
     <!-- NDI: the source is advertised and the frames go out over the local
@@ -27,17 +30,23 @@
         android:theme="@style/Theme.MantraNdi"
         android:supportsRtl="true">
 
-        <!-- The activity handles a turn of the phone itself rather than being
-             recreated. Recreating it would tear down the capture session and
-             the NDI source on every rotation, which on a live stream is a
-             dropped source at the far end. The rails are re-laid out and the
-             preview transform recomputed instead, and both numbers go into the
-             trace, because the automatic answer to orientation was wrong six
-             times in the last build. -->
+        <!-- Landscape, and only landscape.
+
+             The camera shoots 16:9 and the phone's screen is 20:9, so held
+             across there is height for the whole picture and black at both
+             ends for the keys. Held upright there is neither, and following
+             the phone between the two was six versions of argument about which
+             way the picture should be turned for a case that no longer exists.
+             sensorLandscape rather than landscape, so the phone can be held
+             either way round and the picture follows.
+
+             The turn is still handled here rather than by being recreated:
+             recreating would tear down the capture session and the NDI source,
+             which on a live stream is a dropped input at the far end. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="fullSensor"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -49,6 +58,6 @@
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="@string/settings"
-            android:screenOrientation="fullSensor" />
+            android:screenOrientation="sensorLandscape" />
     </application>
 </manifest>
