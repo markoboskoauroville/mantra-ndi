@@ -155,4 +155,22 @@
             android:orientation="vertical"
             android:padding="3dp" />
     </LinearLayout>
+
+    <!--
+         The clean feed's only control, and it is invisible.
+
+         In full screen there is nothing on the glass but the picture — no
+         rails, no status, no meter, no geometry — because the phone's screen
+         is the broadcast. Something still has to be able to bring the camera
+         back, and it cannot be a key, because a key is a thing on the screen.
+         So the whole picture takes a double tap, and this view sits over
+         everything to catch it: over the rails, which are gone, and over the
+         focus box, which is also gone, so a single accidental touch during a
+         take cannot rack the lens or move an exposure.
+    -->
+    <View
+        android:id="@+id/fullScreenCatcher"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
 </FrameLayout>

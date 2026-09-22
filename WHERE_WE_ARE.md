@@ -6,6 +6,54 @@ working state of *this* app.
 
 ---
 
+## 22.9.2026, night — v81, the clean feed, and one key for NDI
+
+*"I'm using screen copy to broadcast my camera, not our NDI, so I need the pure
+full screen mode without anything on the screen, not even the VU meter.
+Nothing, not even parts of the interface of the phone."*
+
+### FULL: the picture and nothing else on the glass
+
+When the wire is the phone's own screen, **every pixel this app draws is on the
+wire** — so the question is not which controls to shrink but which to take away,
+and the answer is all of them: both rails, the status line, the geometry
+readout, the audio meter, the zones, the focus box. **And Android's own status
+and navigation bars with them.**
+
+The picture keeps its shape. It is centred on black at the largest size that
+does not stretch it, because a stretched picture is the fault this app has
+shipped most often and a receiver can crop black but cannot undo a squeeze.
+
+**The camera is untouched.** A take goes on being written and NDI goes on being
+sent while the screen is clean; this is a mode of the *screen* and of nothing
+else.
+
+**Its only control is invisible, because a key would be a thing on the screen.**
+A **double tap anywhere** brings the camera back, and so does the back key. One
+tap is what a phone gets by accident while it is being carried, so one tap does
+nothing at all — which also means a hand on the glass during a take cannot rack
+the lens or move an exposure. The bars are hidden transient-by-swipe rather than
+immovably, so a phone left in this mode is never trapped in it, and they are
+re-hidden after a rotation and after the app has been away, because they come
+back on their own.
+
+**The one thing no app can take off his screen** is Android's green camera
+indicator: it is drawn by SystemUI, above everything, and there is no API for
+it. It can be switched off over the same cable that carries the screen copy —
+`adb shell cmd device_config put privacy camera_mic_icons_enabled false`, which
+lasts until the phone is restarted.
+
+### NDI is one key now
+
+HX and full were always **the two ends of one switch** — an NDI source is one
+stream, and a receiver is either given compressed access units or whole frames.
+Two keys made that look like two independent things that might both be on. One
+key, **NDI**, cycling off → HX → full → off, with its small word saying which;
+a mode this phone cannot offer is stepped over rather than being a tap that does
+nothing. That is also what freed the key below it to be `FULL`.
+
+---
+
 ## 22.9.2026, night — v80, the manual camera he actually asked for
 
 Eight faults in one pass, and seven of them turned out to be one sentence each

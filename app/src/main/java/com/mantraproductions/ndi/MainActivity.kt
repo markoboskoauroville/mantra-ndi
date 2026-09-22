@@ -21,6 +21,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -28,6 +29,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * The camera, and the two rails of keys in the black beside it.
@@ -38,7 +40,8 @@ import androidx.core.view.WindowInsetsCompat
  *     LOG         which log curve the phone's tone mapper is applying
  *     ROT         a quarter turn of the preview, by hand, remembered per lens
  *     M / CTRL    manual exposure, and the zones on the picture
- *     HX / FULL   which kind of NDI, or neither
+ *     NDI         off, HX, full, off — one stream, so one key
+ *     FULL        the clean feed: the picture and nothing else on the glass
  *
  *     REC         the take, at the top of the other rail
  *     LGHT        the lamp
@@ -66,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var preview: TextureView
     private lateinit var focusSquare: FocusSquareView
     private lateinit var zones: ControlZones
+    private lateinit var fullScreenCatcher: View
     private lateinit var status: TextView
     private lateinit var geometry: TextView
     private lateinit var vu: VuMeterView
@@ -94,6 +98,21 @@ class MainActivity : AppCompatActivity() {
     /** Manual exposure, and whether the zones on the picture are listening. */
     private var manual = false
     private var zonesOn = false
+
+    /**
+     * The clean feed: the picture and nothing else at all.
+     *
+     * He broadcasts this phone by mirroring its screen rather than over NDI,
+     * and everything this app draws goes down that wire with the picture — the
+     * rails, the status line, the geometry, the audio meter. So `FULL` takes
+     * all of it off, and the phone's own status and navigation bars with it,
+     * and leaves a picture on black. A double tap anywhere brings the camera
+     * back; so does the back key.
+     *
+     * Nothing about the camera changes: a take goes on being written and NDI
+     * goes on being sent while this is on. It is a mode of the *screen*.
+     */
+    private var fullScreen = false
     private var iso = 400
     private var shutterNs = 1_000_000_000L / 60
     private var focusFraction = 0f
@@ -153,8 +172,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rotKey: RailButton
     private lateinit var manualKey: RailButton
     private lateinit var ctrlKey: RailButton
-    private lateinit var hxKey: RailButton
-    private lateinit var fullKey: RailButton
+    private lateinit var ndiKey: RailButton
+    private lateinit var screenKey: RailButton
 
     private val ui = Handler(Looper.getMainLooper())
 
@@ -172,6 +191,7 @@ class MainActivity : AppCompatActivity() {
         preview = findViewById(R.id.preview)
         focusSquare = findViewById(R.id.focusSquare)
         zones = findViewById(R.id.zones)
+        fullScreenCatcher = findViewById(R.id.fullScreenCatcher)
         status = findViewById(R.id.status)
         geometry = findViewById(R.id.geometry)
         vu = findViewById(R.id.vu)
@@ -213,6 +233,24 @@ class MainActivity : AppCompatActivity() {
             focus.bounds = focusSquare.normalisedBounds()
         }
         focusSquare.onTapped = { focus.focusHereAndHold() }
+
+        onBackPressedDispatcher.addCallback(this, leaveFullScreen)
+        // The clean feed's only control: two taps anywhere on the glass. One
+        // tap is what a phone gets by accident while it is being carried.
+        val leaving = android.view.GestureDetector(
+            this,
+            object : android.view.GestureDetector.SimpleOnGestureListener() {
+                override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                    setFullScreen(false)
+                    return true
+                }
+                override fun onDown(e: android.view.MotionEvent) = true
+            }
+        )
+        fullScreenCatcher.setOnTouchListener { view, event ->
+            view.performClick()
+            leaving.onTouchEvent(event)
+        }
 
         zones.onDrag = { index, delta -> nudge(index, delta) }
         zones.onGrab = { refreshZones() }
@@ -322,8 +360,16 @@ class MainActivity : AppCompatActivity() {
         rotKey = newKey("ROT") { turnPreview() }.also { railLeft.addView(it) }
         manualKey = newKey("M") { toggleManual() }.also { railLeft.addView(it) }
         ctrlKey = newKey("CTRL") { toggleZones() }.also { railLeft.addView(it) }
-        hxKey = newKey("HX") { toggleMode(CameraPipeline.Mode.HX) }.also { railLeft.addView(it) }
-        fullKey = newKey("FULL") { toggleMode(CameraPipeline.Mode.FULL) }
+        // One key for NDI, not two.
+        //
+        // HX and full were always the two ends of one switch — an NDI source is
+        // one stream, and a receiver is either given compressed access units or
+        // whole frames. Two keys made that look like two independent things
+        // that might both be on. It cycles: off, HX, full, off, and its small
+        // word says which. That frees the key below it to mean something else.
+        ndiKey = newKey("NDI") { nextNdiMode() }.also { railLeft.addView(it) }
+        // The clean feed, for a phone that is being broadcast by its screen.
+        screenKey = newKey("FULL") { setFullScreen(!fullScreen) }
             .also { railLeft.addView(it) }
 
         // Record, at the top of the right rail where a thumb already is.
@@ -453,6 +499,7 @@ class MainActivity : AppCompatActivity() {
         super.onConfigurationChanged(newConfig)
         Trace.state("rotated: orientation=${newConfig.orientation}")
         layoutForOrientation(newConfig.orientation)
+        if (fullScreen) hideSystemBars(true)
     }
 
     /**
@@ -555,6 +602,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         displays?.registerDisplayListener(displayListener, ui)
+        if (fullScreen) hideSystemBars(true)
         // The camera session is lost while backgrounded even with a foreground
         // service, so it is rebuilt rather than tested for.
         if (preview.isAvailable && !pipeline.isRunning) openCamera()
@@ -1167,16 +1215,108 @@ class MainActivity : AppCompatActivity() {
         refreshKeys()
     }
 
+    /**
+     * **The clean feed.** Everything off the glass but the picture.
+     *
+     * *"I'm using screen copy to broadcast my camera, not our NDI, so I need
+     * the pure full screen mode without anything on the screen, not even the
+     * VU meter. Nothing, not even parts of the interface of the phone."*
+     *
+     * Every pixel this app draws is on the wire when the wire is the phone's
+     * own screen, so the question is not which controls to shrink but which to
+     * take away — and the answer is all of them, including Android's own
+     * status and navigation bars. The picture keeps its shape: it is centred
+     * on black at the largest size that does not stretch it, because a
+     * stretched picture is the one fault this app has shipped most often and a
+     * receiver can crop black but cannot undo a squeeze.
+     *
+     * The camera is untouched. A take goes on being written and NDI goes on
+     * being sent; this is a mode of the screen and of nothing else.
+     */
+    private fun setFullScreen(on: Boolean) {
+        fullScreen = on
+        val hidden = if (on) View.GONE else View.VISIBLE
+        railLeft.visibility = hidden
+        railRight.visibility = hidden
+        status.visibility = hidden
+        geometry.visibility = hidden
+        vu.visibility = hidden
+        // The zones and the focus box come back to whichever of them was up.
+        zones.visibility = if (!on && zonesOn) View.VISIBLE else View.GONE
+        focusSquare.visibility = if (!on && !zonesOn) View.VISIBLE else View.GONE
+        iris.visibility = if (!on && zonesOn) View.VISIBLE else View.GONE
+        fullScreenCatcher.visibility = if (on) View.VISIBLE else View.GONE
+        leaveFullScreen.isEnabled = on
+
+        hideSystemBars(on)
+        if (on) {
+            Toast.makeText(this, "Clean feed — double tap to come back", Toast.LENGTH_SHORT)
+                .show()
+        }
+        Trace.control("clean feed", if (on) "on" else "off", if (on) "screen cleared" else "back")
+        refreshKeys()
+        // The picture has the whole window to itself now, or has given it back.
+        preview.post { holdBufferSize(); applyPreviewTransform() }
+    }
+
+    /**
+     * Android's own status and navigation bars, off and on.
+     *
+     * Re-applied rather than set once: the bars come back of their own accord
+     * on a rotation and after the app has been away, and a clean feed with a
+     * clock and three buttons across it is not a clean feed.
+     *
+     * Transient-by-swipe rather than immovable, so a phone left in this mode
+     * is never trapped in it.
+     */
+    private fun hideSystemBars(hide: Boolean) {
+        val bars = WindowInsetsControllerCompat(window, window.decorView)
+        if (hide) {
+            bars.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars.hide(WindowInsetsCompat.Type.systemBars())
+            findViewById<View>(R.id.root).setPadding(0, 0, 0, 0)
+        } else {
+            bars.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /** The back key leaves the clean feed before it leaves the app. */
+    private val leaveFullScreen = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = setFullScreen(false)
+    }
+
     /** What this lens is called in the preferences: its id, and its sub-lens. */
     private fun lensKey(): String {
         val lens = lenses.getOrNull(activeLens) ?: return "0"
         return lens.id + (lens.physicalId?.let { ":$it" } ?: "")
     }
 
-    private fun toggleMode(want: CameraPipeline.Mode) {
+    /**
+     * Off, HX, full, off.
+     *
+     * A mode this phone cannot offer is stepped over rather than being a tap
+     * that does nothing: on a session that gave up the full-NDI reader to get
+     * ten bit, the key goes straight from HX back to off.
+     */
+    private fun nextNdiMode() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
-        val next = if (pipeline.mode == want) CameraPipeline.Mode.OFF else want
+        var next = pipeline.mode
+        for (step in 1..3) {
+            next = when (next) {
+                CameraPipeline.Mode.OFF -> CameraPipeline.Mode.HX
+                CameraPipeline.Mode.HX -> CameraPipeline.Mode.FULL
+                CameraPipeline.Mode.FULL -> CameraPipeline.Mode.OFF
+            }
+            val possible = when (next) {
+                CameraPipeline.Mode.OFF -> true
+                CameraPipeline.Mode.HX -> pipeline.hxAvailable
+                CameraPipeline.Mode.FULL -> pipeline.fullAvailable
+            }
+            if (possible) break
+        }
         pipeline.setMode(next)
+        Trace.control("stream", next.name, next.name)
         refreshKeys()
     }
 
@@ -1305,16 +1445,18 @@ class MainActivity : AppCompatActivity() {
         ctrlKey.state = if (zonesOn) RailButton.State.ON else RailButton.State.OFF
         rotKey.sub = "${manualQuarterTurns * 90}"
         rotKey.state = if (manualQuarterTurns == 0) RailButton.State.OFF else RailButton.State.ON
-        hxKey.state = when {
-            pipeline.mode == CameraPipeline.Mode.HX -> RailButton.State.ON
-            pipeline.isRunning && !pipeline.hxAvailable -> RailButton.State.DEAD
+        ndiKey.sub = when (pipeline.mode) {
+            CameraPipeline.Mode.HX -> "HX"
+            CameraPipeline.Mode.FULL -> "FULL"
+            CameraPipeline.Mode.OFF -> "OFF"
+        }
+        ndiKey.state = when {
+            pipeline.mode != CameraPipeline.Mode.OFF -> RailButton.State.ON
+            pipeline.isRunning && !pipeline.hxAvailable && !pipeline.fullAvailable ->
+                RailButton.State.DEAD
             else -> RailButton.State.OFF
         }
-        fullKey.state = when {
-            pipeline.mode == CameraPipeline.Mode.FULL -> RailButton.State.ON
-            pipeline.isRunning && !pipeline.fullAvailable -> RailButton.State.DEAD
-            else -> RailButton.State.OFF
-        }
+        screenKey.state = if (fullScreen) RailButton.State.ON else RailButton.State.OFF
 
         slotKeys.forEachIndexed { i, key ->
             val index = slotFor(i + 1)
