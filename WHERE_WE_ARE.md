@@ -6,6 +6,80 @@ working state of *this* app.
 
 ---
 
+## 22.9.2026, afternoon — v77, colour temperature, tungsten to daylight
+
+He asked for the fader he had before: *"manual control for colour and light
+temperature. Left side tungsten, right side daylight. This range please add."*
+
+### Why this was not simply a slider
+
+**v65 is the reason, and it is written into this repo's history.** White balance
+went green twice, and the cause was structural rather than a bad number: *gains
+are only half of white balance.* The other half is a colour correction matrix,
+calibrated per sensor and per illuminant. Supplying our gains beside somebody
+else's matrix leaves the two disagreeing, and on a Bayer sensor a disagreement
+reads as **green**, because green is the channel with twice the samples. No
+slider position undid it, because the slider was only moving one of the halves.
+
+v65's answer was to give up the sweep and use the camera's six presets. That was
+the right trade then, and it is still the fallback. But the conclusion drawn with
+it — that the matrix *"is not something an app can compute"* — was too
+pessimistic, and that is what has changed.
+
+### What v77 does instead
+
+A sensor that can produce a DNG **must publish its own calibration**: two
+reference illuminants, and for each a colour matrix and a forward matrix,
+measured by the people who built it. Interpolating between those two in **mired**
+is what the DNG specification says to do and what every raw converter has always
+done. Both halves then come out of *one* blend, from the sensor's own numbers,
+so **they cannot disagree** — which is the only thing that was ever wrong.
+
+`WhiteBalance.kt` is pure and under the purity gate beside `LogCurves` and
+`CubeLut`. Fifteen tests, including the one that states the v65 bug outright:
+*both halves come out of the same blend* — the gains must return the light that
+the interpolated matrix says the sensor sees to the grey axis, exactly.
+
+### The half-millimetre that is a green picture
+
+Tungsten is a black body; **daylight is not.** The sky is lit by a filament and
+scattered by air, and it sits measurably above the Planckian locus — about
+**0.005 in y at 6500K, which is a green cast**. D50, D55 and D65 are points on
+the *daylight* curve and not on the black-body one.
+
+So the fader is on the Planckian locus at the warm end, the CIE daylight locus at
+the cool end, and crossfades between them over 3500–4500K, because the two are
+0.007 apart in y where they meet and a step that size part way along a fader is a
+visible lurch in the picture's colour. Asserted at Standard A, D50, D55 and D65
+to within 0.001, and asserted to have no step anywhere in its travel.
+
+### The fader itself
+
+A fifth row under FOCUS. **Left is tungsten, right is daylight**, 2000K to
+10000K, travelling in **mired** — a hundred Kelvin at the warm end moves the knob
+more than three times as far as a hundred Kelvin at the daylight end, which is
+how the eye works and why every colour meter ever made reads in reciprocal
+degrees.
+
+**A tap on a row hands that parameter back to the camera, or takes it.** There is
+no room on the rail for a key per parameter and there should not be one: the
+place to say "you take this" about white balance is the white balance fader. It
+works on ISO, SHUTTER and FOCUS too, from either end, alongside the keys they
+already have.
+
+The fader says which route it took. If the sensor publishes no calibration it
+falls back to the nearest preset and says so on screen, rather than pretending to
+a resolution it does not have. The temperature is put back after a lens change,
+because a new session rebuilds the request from the template and would otherwise
+revert to auto in silence.
+
+*Needed from him:* **is it green anywhere?** Sweep it slowly end to end against
+something white. The trace now names the route at open — `white balance: AWB
+modes …, calibration published (2856K and 6504K), continuous yes` — so if it goes
+green, that line and the per-change `gains` line say which half did it.
+
+---
+
 ## 22.9.2026, early afternoon — v76, the rotation cause found in his own trace
 
 ### The rotation. Found, and it was never the formula.

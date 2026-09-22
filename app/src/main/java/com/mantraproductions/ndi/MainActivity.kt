@@ -89,6 +89,10 @@ class MainActivity : AppCompatActivity() {
     private var shutterNs = 1_000_000_000L / 60
     private var focusFraction = 0f
 
+    /** Colour temperature: tungsten at the left of the fader, daylight right. */
+    private var wbAuto = true
+    private var wbKelvin = 5600
+
     /**
      * The microphone, held for as long as the app is in front.
      *
@@ -179,6 +183,7 @@ class MainActivity : AppCompatActivity() {
 
         zones.onDrag = { index, delta -> nudge(index, delta) }
         zones.onGrab = { refreshZones() }
+        zones.onTap = { index -> handBack(index) }
 
         // The trace is the only instrument that reaches a phone with no cable,
         // so it is always one long press away rather than behind a menu.
@@ -795,7 +800,7 @@ class MainActivity : AppCompatActivity() {
                     .coerceIn(range.lower, range.upper)
                 engine.setManualExposure(iso, shutterNs)
             }
-            2 -> Unit    // the iris is fixed on a phone; the column says so
+            2 -> Unit    // the iris is fixed on a phone; the row says so
             3 -> {
                 // A lens with no focus motor is said outright rather than
                 // letting the number move while the picture does not. This was
@@ -811,6 +816,48 @@ class MainActivity : AppCompatActivity() {
                     refreshKeys()
                 }
                 engine.setManualFocus(focusFraction)
+            }
+            4 -> {
+                // Left is tungsten, right is daylight — the way the numbers on
+                // a colour meter run, and the way every white balance dial ever
+                // made is laid out.
+                val at = (WhiteBalance.travel(wbKelvin) + delta).coerceIn(0f, 1f)
+                wbKelvin = WhiteBalance.kelvinAt(at)
+                wbAuto = false
+                engine.setWhiteBalanceKelvin(wbKelvin)
+            }
+        }
+        refreshZones()
+    }
+
+    /**
+     * A row tapped: hand that parameter back to the camera, or take it.
+     *
+     * There is no room on the rail for a key per parameter and there should not
+     * be one — the place to say "you take this" about white balance is the
+     * white balance fader. The two that already have keys behave the same way
+     * from either end.
+     */
+    private fun handBack(index: Int) {
+        when (index) {
+            0, 1 -> toggleManual()
+            2 -> say("A phone has one aperture; there is nothing to set")
+            3 -> if (pipeline.engine.supportsManualFocus()) toggleAutoFocus()
+                 else say("This lens is fixed focus; there is nothing to pull")
+            4 -> {
+                wbAuto = !wbAuto
+                if (wbAuto) {
+                    pipeline.engine.setAutoWhiteBalance()
+                    say("White balance: the camera's own")
+                } else {
+                    pipeline.engine.setWhiteBalanceKelvin(wbKelvin)
+                    say(
+                        "White balance: ${WhiteBalance.format(wbKelvin)}" +
+                            if (pipeline.engine.whiteBalanceIsContinuous) ""
+                            else ", nearest preset — this sensor publishes no calibration"
+                    )
+                }
+                refreshKeys()
             }
         }
         refreshZones()
@@ -865,7 +912,15 @@ class MainActivity : AppCompatActivity() {
                 apertures.firstOrNull()?.let { String.format("f/%.2f", it) } ?: "—",
                 apertures.size > 1
             ),
-            ControlZones.Zone("FOCUS", focusText, canFocus, focusFraction)
+            ControlZones.Zone("FOCUS", focusText, canFocus, focusFraction),
+            // Tungsten on the left, daylight on the right. A tap hands it back
+            // to the camera; the fader takes it again.
+            ControlZones.Zone(
+                "WB",
+                if (wbAuto) "AUTO" else WhiteBalance.format(wbKelvin),
+                running && !wbAuto,
+                WhiteBalance.travel(wbKelvin)
+            )
         )
     }
 
@@ -965,6 +1020,10 @@ class MainActivity : AppCompatActivity() {
      * stream would throw away the range the log curve was chosen to keep.
      */
     private fun applyLook() {
+        // The temperature belongs to the operator, not to the session. A new
+        // lens rebuilds the request from the template, so a chosen white
+        // balance has to be put back or it silently reverts to auto.
+        if (!wbAuto && pipeline.isRunning) pipeline.engine.setWhiteBalanceKelvin(wbKelvin)
         val cube = if (activeSlot > 0) slots.cube(activeSlot) else null
         // The monitor gets the cube exactly; the wire gets as much of it as a
         // tone curve can carry, which is its tone and its colour balance.

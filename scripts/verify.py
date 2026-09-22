@@ -93,7 +93,7 @@ def main():
 
     # G12 — the colour maths must import nothing from Android either, or the
     # curves can only be checked on a phone, which means they are not checked.
-    for pure in ("LogCurves.kt", "CubeLut.kt", "Histogram.kt"):
+    for pure in ("LogCurves.kt", "CubeLut.kt", "Histogram.kt", "WhiteBalance.kt"):
         path = ROOT / "app/src/main/java/com/mantraproductions/ndi" / pure
         if path.exists():
             bad = re.findall(r"^\s*import android\.", path.read_text(), re.M)

@@ -12,7 +12,9 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.params.MeteringRectangle
+import android.hardware.camera2.params.ColorSpaceTransform
 import android.hardware.camera2.params.OutputConfiguration
+import android.hardware.camera2.params.RggbChannelVector
 import android.hardware.camera2.params.SessionConfiguration
 import android.hardware.camera2.params.TonemapCurve
 import android.os.Build
@@ -191,6 +193,25 @@ class CaptureEngine(private val context: Context) {
                             ) ?: 0f) +
                             ", AF modes " + afModes().joinToString(",") +
                             ", manual " + if (supportsManualFocus()) "yes" else "NO"
+                    )
+                    // Colour, stated rather than assumed. White balance has
+                    // gone green twice, and both times the trace said nothing
+                    // about which half of it the camera was actually taking.
+                    val colour = colourCharacteristics()
+                    Trace.state(
+                        "white balance: AWB modes " + awbModes().joinToString(",") +
+                            ", post-processing " + (if (canPostProcess()) "yes" else "NO") +
+                            ", calibration " + (if (colour != null) "published" else "NONE") +
+                            (colour?.let { c ->
+                                " (" + WhiteBalance.kelvinForIlluminant(
+                                    c.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1) ?: 17
+                                ) + "K and " + WhiteBalance.kelvinForIlluminant(
+                                    c.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT2)
+                                        ?.toInt() ?: 21
+                                ) + "K)"
+                            } ?: "") +
+                            ", continuous " +
+                            (if (supportsContinuousWhiteBalance()) "yes" else "no, presets only")
                     )
                     attempts = planAttempts(wantTenBit)
                     attemptIndex = 0
@@ -933,6 +954,188 @@ class CaptureEngine(private val context: Context) {
      * so a lens that genuinely cannot focus can be told apart from one this
      * app was asking the wrong question about.
      */
+    // --- white balance ---------------------------------------------------------
+
+    /**
+     * The sensor's own calibration: its two reference illuminants and the
+     * matrices measured against them.
+     *
+     * Read from the lens actually being looked through first, the way focus now
+     * is, because a physical sub-lens is its own sensor with its own colour.
+     */
+    private fun colourCharacteristics(): CameraCharacteristics? = when {
+        lensCharacteristics?.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1) != null ->
+            lensCharacteristics
+        characteristics?.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1) != null ->
+            characteristics
+        else -> null
+    }
+
+    private fun matrix(t: ColorSpaceTransform?): FloatArray? {
+        if (t == null) return null
+        val out = FloatArray(9)
+        for (row in 0..2) for (column in 0..2) {
+            val r = t.getElement(column, row)
+            if (r.denominator == 0) return null
+            out[row * 3 + column] = r.numerator.toFloat() / r.denominator
+        }
+        return out
+    }
+
+    /** The AWB modes this camera will take. */
+    fun awbModes(): IntArray =
+        characteristics?.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES) ?: IntArray(0)
+
+    private fun canPostProcess(): Boolean =
+        characteristics?.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+            ?.contains(
+                CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING
+            ) == true
+
+    /**
+     * Whether a continuous temperature fader is honest on this phone.
+     *
+     * Three things are needed and all three have been assumed before: the
+     * camera must take `AWB_MODE_OFF`, it must accept a colour correction
+     * matrix at all, and the sensor must publish the calibration there is
+     * anything to interpolate between. Without the third, the gains would be
+     * ours and the matrix would be somebody else's — which is v65, and v65 was
+     * green.
+     */
+    fun supportsContinuousWhiteBalance(): Boolean =
+        awbModes().contains(CameraCharacteristics.CONTROL_AWB_MODE_OFF) &&
+            canPostProcess() &&
+            colourCharacteristics() != null
+
+    /** The presets this camera offers, as indices into [WhiteBalance.PRESETS]. */
+    fun awbPresetsAvailable(): IntArray {
+        val modes = awbModes()
+        return (0..6).filter { modes.contains(presetMode(it)) }.toIntArray()
+    }
+
+    private fun presetMode(index: Int): Int = when (index) {
+        0 -> CameraCharacteristics.CONTROL_AWB_MODE_INCANDESCENT
+        1 -> CameraCharacteristics.CONTROL_AWB_MODE_WARM_FLUORESCENT
+        2 -> CameraCharacteristics.CONTROL_AWB_MODE_FLUORESCENT
+        3 -> CameraCharacteristics.CONTROL_AWB_MODE_DAYLIGHT
+        4 -> CameraCharacteristics.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT
+        5 -> CameraCharacteristics.CONTROL_AWB_MODE_SHADE
+        else -> CameraCharacteristics.CONTROL_AWB_MODE_TWILIGHT
+    }
+
+    /** Which route the last temperature took, for the fader to say so. */
+    @Volatile var whiteBalanceIsContinuous = false
+        private set
+
+    /**
+     * A colour temperature, tungsten to daylight.
+     *
+     * **Both halves are set here, from one interpolation of the sensor's own
+     * two calibrated illuminants.** That is the whole point. v65 moved the
+     * gains and left the matrix somebody else's, the two disagreed, and a Bayer
+     * sensor shows a disagreement as green because green has twice the samples.
+     * Derived together, out of the same blend, they cannot disagree.
+     *
+     * A phone that publishes no calibration gets its nearest own preset, which
+     * is v65's answer and is correct at each of its six steps.
+     */
+    fun setWhiteBalanceKelvin(kelvin: Int): Boolean {
+        val request = builder ?: run {
+            Trace.refused("white balance", "the camera has no request to change")
+            return false
+        }
+        val colour = colourCharacteristics()
+        val wanted = kelvin.coerceIn(WhiteBalance.COOLEST_KELVIN, WhiteBalance.WARMEST_KELVIN)
+
+        if (supportsContinuousWhiteBalance() && colour != null) {
+            val k1 = WhiteBalance.kelvinForIlluminant(
+                colour.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1) ?: 17
+            )
+            val k2 = WhiteBalance.kelvinForIlluminant(
+                colour.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT2)?.toInt() ?: 21
+            )
+            val cm1 = matrix(colour.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1))
+            val cm2 = matrix(colour.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2)) ?: cm1
+            val fm1 = matrix(colour.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX1))
+            val fm2 = matrix(colour.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX2)) ?: fm1
+
+            if (cm1 != null && cm2 != null) {
+                val t = WhiteBalance.blend(wanted, k1, k2)
+                val colourMatrix = WhiteBalance.mix(cm1, cm2, t)
+                val gains = WhiteBalance.gains(wanted, colourMatrix)
+                val forward =
+                    if (fm1 != null && fm2 != null) WhiteBalance.mix(fm1, fm2, t) else null
+
+                request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+                request.set(
+                    CaptureRequest.COLOR_CORRECTION_MODE,
+                    CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
+                )
+                request.set(
+                    CaptureRequest.COLOR_CORRECTION_GAINS,
+                    RggbChannelVector(gains[0], gains[1], gains[2], gains[3])
+                )
+                // The other half, out of the same blend. Without it this is v65.
+                if (forward != null) {
+                    request.set(
+                        CaptureRequest.COLOR_CORRECTION_TRANSFORM,
+                        transformOf(WhiteBalance.transform(forward))
+                    )
+                }
+                val ok = apply()
+                whiteBalanceIsContinuous = ok
+                Trace.control(
+                    "white balance",
+                    "${wanted}K between ${k1}K and ${k2}K" +
+                        String.format(", gains %.2f/%.2f/%.2f", gains[0], gains[1], gains[3]) +
+                        (if (forward == null) ", NO forward matrix" else ""),
+                    if (ok) "applied, continuous" else "refused"
+                )
+                // A refusal falls through to the presets rather than leaving the
+                // operator with a fader that does nothing.
+                if (ok) return true
+            }
+        }
+
+        val index = WhiteBalance.nearestPreset(wanted, awbPresetsAvailable())
+        if (index < 0) {
+            whiteBalanceIsContinuous = false
+            Trace.refused("white balance", "this camera offers no preset either")
+            return false
+        }
+        request.set(CaptureRequest.CONTROL_AWB_MODE, presetMode(index))
+        val ok = apply()
+        whiteBalanceIsContinuous = false
+        Trace.control(
+            "white balance", "${wanted}K",
+            if (ok) "applied, nearest preset ${WhiteBalance.PRESETS[index]}K" else "refused"
+        )
+        return ok
+    }
+
+    private fun transformOf(m: FloatArray): ColorSpaceTransform {
+        val elements = IntArray(18)
+        for (i in 0..8) {
+            elements[i * 2] = Math.round(m[i] * 10_000f)
+            elements[i * 2 + 1] = 10_000
+        }
+        return ColorSpaceTransform(elements)
+    }
+
+    /** Back to the camera's own judgement. */
+    fun setAutoWhiteBalance(): Boolean {
+        val request = builder ?: return false
+        request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+        request.set(
+            CaptureRequest.COLOR_CORRECTION_MODE,
+            CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY
+        )
+        val ok = apply()
+        whiteBalanceIsContinuous = false
+        Trace.control("white balance", "auto", if (ok) "applied" else "refused")
+        return ok
+    }
+
     fun minimumFocusDistance(): Float {
         val lens = lensCharacteristics
             ?.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f

@@ -63,8 +63,21 @@ class ControlZones @JvmOverloads constructor(
     /** Told when a row is grabbed and let go, so the name can light up. */
     var onGrab: ((index: Int?) -> Unit)? = null
 
+    /**
+     * A row tapped rather than dragged: hand it back to the camera, or take it.
+     *
+     * There is no room on the rail for a key per parameter, and there should
+     * not be one: the place to say "you take this" about white balance is the
+     * white balance fader. A tap is a press that did not move, which is a
+     * gesture a thumb makes by accident only if it meant to.
+     */
+    var onTap: ((index: Int) -> Unit)? = null
+
     private var held: Int? = null
     private var lastX = 0f
+    private var downX = 0f
+    private var downY = 0f
+    private var moved = false
 
     private val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.LEFT
@@ -83,11 +96,29 @@ class ControlZones @JvmOverloads constructor(
     }
     private val knob = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
+    private var tapped: Int? = null
+
     private fun density(dp: Float) = dp * resources.displayMetrics.density
+
+    /** How far a finger may wander and still have meant a tap. */
+    private val slop get() = density(8f)
 
     /** Below the status line, which is pinned to the top edge. */
     private val topInset get() = density(26f)
-    private val rowHeight get() = density(40f)
+
+    /**
+     * Tall enough to hit, short enough that five of them clear the picture.
+     *
+     * Five rows at a fixed height is fine on this phone and is not on a small
+     * one, so the height is whatever fits in the top half of the frame and
+     * never more than a comfortable thumb's worth.
+     */
+    private val rowHeight: Float
+        get() {
+            val count = zones.size.coerceAtLeast(1)
+            val room = (height - topInset) * 0.62f
+            return (room / count).coerceIn(density(26f), density(40f))
+        }
     private val nameWidth get() = density(62f)
     private val valueWidth get() = density(96f)
     private val sideGap get() = density(10f)
@@ -161,19 +192,25 @@ class ControlZones @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 val index = rowAt(event.y) ?: return false
-                // A row with nothing behind it is not grabbed. The iris is
-                // fixed on a phone and an ultra wide has no focus travel: a row
-                // that lights up and then does nothing is worse than one that
-                // never answers.
-                if (zones.getOrNull(index)?.live != true) return false
-                held = index
+                // A dead row still takes a tap, because a tap is what hands it
+                // back to the camera — and AUTO is exactly the state a row is
+                // in when it has nothing for the finger to drag.
+                held = if (zones.getOrNull(index)?.live == true) index else null
                 lastX = event.x
-                onGrab?.invoke(index)
+                downX = event.x
+                downY = event.y
+                moved = false
+                tapped = index
+                if (held != null) onGrab?.invoke(index)
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                val index = held ?: return false
+                if (!moved &&
+                    (kotlin.math.abs(event.x - downX) > slop ||
+                        kotlin.math.abs(event.y - downY) > slop)
+                ) moved = true
+                val index = held ?: return true
                 // Relative to the last position rather than to where the finger
                 // landed: a parameter that jumps to an absolute value the moment
                 // it is touched is a parameter that cannot be nudged.
@@ -183,8 +220,18 @@ class ControlZones @JvmOverloads constructor(
                 onDrag?.invoke(index, delta)
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
+                val index = tapped
                 held = null
+                tapped = null
+                onGrab?.invoke(null)
+                invalidate()
+                if (!moved && index != null) onTap?.invoke(index)
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                held = null
+                tapped = null
                 onGrab?.invoke(null)
                 invalidate()
                 return true
