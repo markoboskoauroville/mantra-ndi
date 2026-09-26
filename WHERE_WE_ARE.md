@@ -6,6 +6,34 @@ working state of *this* app.
 
 ---
 
+## 26.9.2026, closing the day: v87, mixer faders and A / M, and what comes next
+
+**v87 (released, CI green):** the zones are thick mixer faders (a dark slot with ticks, a flat cap
+with a line across it, the number big above and moving with the thumb). Each has an **A / M switch**
+at its head: ISO, shutter, focus, WB (WB from A to M reads the camera's answer once and keeps it).
+The M key cycles **AUTO → HM → FM**, read off the four switches (`Mechanism.cameraMode`). Half-manual
+exposure uses the phone's own ISO / shutter priority where the lens lists it (Android 16 key
+`android.control.aePriorityMode`, looked up by name, since the app compiles against 15), otherwise
+the app's loop (`priorityLoop`: a 24x14 read of the preview four times a second,
+`Mechanism.priorityStep`, half the error per step, at most a stop). No double tap, no hold. A/M is
+put back when the camera reopens. 249 unit tests.
+
+**Tested:** CI; on the emulator installed over v86 and the faders drawn. **Not yet:** the monkey, a
+drag test, the half-manual loop in the trace, anything on his phone.
+
+**Found on v87:** the M key reads **HM at start** because the focus director starts in manual focus;
+the fader **names are weak over a bright picture**.
+
+**His Pixel on v86** (screenshot): L1–L5, 4K 3840x2160, recording, 77.9 GB / 3:39 h, the zones and
+IRIS f/2.20 visible, `sensor 90 · disp 90 · cam 90 · rot 270` (ROT is set on that lens).
+
+**Next:** v88 his cosmetic list (geometry line gone; timecode bottom middle, white; REC/PLAY word
+beside it; record key a plain circle, white / red; SNAP the app icon; LGHT gone; LANDSCAPE / PORTRAIT
+toggle) with the two v87 findings; v89 the in-app player with LUTs; then v90 onwards. The full list of
+every request and where it stands is in the phase document.
+
+---
+
 ## 26.9.2026, late: v85 and v86, the interface of a professional camera
 
 *"Right side is record button, preview file button, portrait or landscape shooting, and the LUT

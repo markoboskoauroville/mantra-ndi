@@ -5,11 +5,13 @@ decided and what is not tested.
 
 ## State
 
-**v68. Phase 0, logging. No camera in this build.**
+**v87, 26.9.2026. Mantra Manual Camera** (renamed from Mantra NDI at v83; package id unchanged).
+Read `v81 version bumps upgrades prompts for phase development of professional application for
+shooting video.md` first: it holds the phase plan (v82 → v97), a section *Tomorrow starts here*,
+and a table of every request Marko made on 26.9.2026 with where each one stands. Then
+`WHERE_WE_ARE.md` (newest at the top), `LESSONS.md`, and `NDI_LICENSING_AND_WEBCAM.md`.
 
-The previous build ended at v65 and is in git history. It was not extended;
-it was taken apart, because the half-finished parts of it looked finished.
-63 Kotlin files were deleted.
+The history below this line is from v68 and is kept for what it explains.
 
 ## What was kept, and why
 

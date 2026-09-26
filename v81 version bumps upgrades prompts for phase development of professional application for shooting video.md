@@ -31,16 +31,75 @@ because there is no Apple developer account. The order is now:
 | 1d | **v85** | The interface reorganised: right rail = REC, PLAY (last take), SNAP, LGHT, SHOOT (auto / landscape / portrait, labels upright), LUT switcher, PEAK, FALSE colour, ZEBRA, gear, storage (free space + time left); LUT library, record folder (any drive, USB SSD) and ROT in settings; record-run timecode; the LOG key says HLG or STD instead of "Rec.709" |
 | 1e | **v86** | v85's two findings on the emulator: key labels clipped in portrait (now shrink to fit), the LUT key dead with an empty library (now opens settings) |
 | 2 | **v87** | Mixer faders, thick, the number moving with the fader; **A / M per parameter**; modes AUTO, HM (half manual), FM (full manual); no more meaning in a double tap |
-| 3b | **v88** | The measuring corner: tiny **waveform** and **vectorscope** tiles on the right side (GPU, no CPU), beside the tools |
-| 3 | **v89** | Settings with a floating live preview (ROT already moved there in v85) |
-| 4 | **v90** | The GPU stage: one camera output fanned out on the GPU to the monitor, the NDI encoder and **a separate recording HEVC encoder at its own high bit rate** (sensor to storage, not the stream); full NDI packed on the GPU; 10-bit full NDI (P216) |
-| 5 | **v91** | Automatic exposure that knows the log curve |
-| 6 | **v92** | The WB key: a grey-card sweep |
-| 7 | **v93** | The Mac companion app: the phone as a webcam in Zoom, no Apple developer account |
-| 8 | **v94** | MANTRA_KELVIN, the colour-temperature calibration app, and its import |
-| 9 | **v95** | Tracking focus on the GPU |
+| 2b | **v88** | **His cosmetic list (26.9.2026, evening, from his Pixel on v86)**: remove the geometry line at the bottom; timecode to the bottom middle, always white; beside it a status word, REC (red while recording) or PLAY; no numbers inside the record key: a white circle idle, red recording; SNAP becomes the app's own icon; LGHT removed; SHOOT becomes a plain LANDSCAPE / PORTRAIT toggle (no AUTO). Plus two findings of v87: M reads HM at start (focus starts manual), fader names weak over a bright picture |
+| 2c | **v89** | **The player inside the app**: PLAY turns the screen into a player for the takes (the same screen, not another app), with the LUT switcher working on playback |
+| 3b | **v90** | The measuring corner: tiny **waveform** and **vectorscope** tiles on the right side (GPU, no CPU), beside the tools |
+| 3 | **v91** | Settings with a floating live preview (ROT already moved there in v85) |
+| 4 | **v92** | The GPU stage: one camera output fanned out on the GPU to the monitor, the NDI encoder and **a separate recording HEVC encoder at its own high bit rate** (sensor to storage, not the stream); full NDI packed on the GPU; 10-bit full NDI (P216) |
+| 5 | **v93** | Automatic exposure that knows the log curve |
+| 6 | **v94** | The WB key: a grey-card sweep |
+| 7 | **v95** | The Mac companion app: the phone as a webcam in Zoom, no Apple developer account |
+| 8 | **v96** | MANTRA_KELVIN, the colour-temperature calibration app, and its import |
+| 9 | **v97** | Tracking focus on the GPU |
 
-**Forecast: the last version is v95** (v84 and v86 were fix rounds; v85 and v88 were added on 26.9.2026). Every fix round adds one.
+**Forecast: the last version is v97** (v84 and v86 were fix rounds; v85, v88, v89 and v90 were added on 26.9.2026 at his request). Every fix round adds one.
+
+## Tomorrow starts here (written 26.9.2026, closing the day)
+
+**State:** v87 is released (CI green, signed with the pinned key, copy in `~/Developer/APK/MANTRA_NDI/`).
+He has tested up to **v86 on his Pixel** (his screenshot: 5 lenses, 4K 3840x2160, recording, 77.9 GB /
+3:39 h left, the zones working). v87 has **not** been on his phone yet, and on the emulator it was only
+installed and looked at: the monkey, a drag test and a run of the half-manual loop are still to do.
+
+**Next, in order:** finish testing v87 (monkey 20,000, drags, A/M switches, the M cycle, the HM loop in
+the trace) → build **v88**, his cosmetic list plus the two v87 findings → **v89**, the player → then
+the table from v90 on, one phase per version, each confirmed on his phone before the next.
+
+## Every request of 26.9.2026, and where it stands
+
+| # | He asked | Where it stands |
+|---|---|---|
+| 1 | Pinch the focus rectangle, tiny to full screen | **v82**, tested on emulator; four pinches full → tiny |
+| 2 | Perfect exposure per log curve, from the manufacturers' specs; auto exposure follows the curve | **v93** (Phase 5) |
+| 3 | F-stop stays on screen in full screen | **v82** fixed |
+| 4 | Tap focuses even when the rectangle is invisible | **v82** (zones up and FULL) |
+| 5 | HEVC for recordings | **v83** (every take HEVC, H.264 only as fallback) |
+| 6 | 10-bit over NDI HX and full NDI | **v92** (Phase 4/4b; HX already Main10 when 10-bit) |
+| 7 | Peaking "will not run the preview shader" on Pixel 7 and Nothing | **v82** fixed (an unbound shader input); works on his Nothing |
+| 8 | Everything possible on the GPU, not the CPU | **v92** (Phase 4); false colour, zebra, peaking, LUT already GPU |
+| 9 | Remove the clean-view toast | **v82** done |
+| 10 | Lens keys only for lenses that exist | **v82** done (his Pixel shows L1–L5) |
+| 11 | Rotation (ROT) into settings; tiny floating live preview in settings | ROT in settings **v85**; floating preview **v91** |
+| 12 | Phone as a webcam for the MacBook Pro (Zoom), best quality | **v95**: Swift companion feeding OBS's signed virtual camera (no Apple account; research in NDI_LICENSING_AND_WEBCAM.md) |
+| 13 | Sister app to calibrate colour temperature against a calibrated light, export/import | **v96** (MANTRA_KELVIN, its own repo) |
+| 14 | WB key: grey-card sweep through every temperature, snap to the most neutral | **v94** |
+| 15 | WB double tap = the camera's own reading, then manual | **v82**; in **v87** it is WB's A→M switch |
+| 16 | Tracking focus: pattern + search zone, GPU/AI cores, tolerance, settings | **v97** |
+| 17 | Test on the Pixel 7 emulator against the manifest's stress tests | done for every build (four tests, monkey 20,000); v87 partly |
+| 18 | This document, one version per phase, a forecast of the last | this file |
+| 19 | Sound distorted, crackling, sped up on the Nothing | **v83** (half of every buffer lost) |
+| 20 | SNAP: PNG in the same folder as the takes | **v83** |
+| 21 | Bit rate: file and stream equal; record HEVC from the sensor | equal since v83 (one encoder, up to 100 Mbit/s); a separate recording encoder from the sensor **v92** |
+| 22 | Mixer faders, thick, number moving; A/M per parameter; AUTO / HM / FM; no tap confusion | **v87** |
+| 23 | README as a Google Play advertisement (€22), unique features, tested on Pixel, trial version | **v83**, extended v85/v87; keep it true at every release |
+| 24 | Log curve freezes the Nothing: say "not supported" instead | **v83** (watchdog; to be confirmed on the Nothing) |
+| 25 | Rename to Mantra Manual Camera for Google Play | **v83** (package id kept) |
+| 26 | NDI: can it be paid per sold copy | researched **v83**: HX needs a paid Advanced SDK contract, volume pricing, no published per-copy price; write to sales@ndi.video |
+| 27 | The Pixel is the priority; never compromise it for another phone | the rule for every phase |
+| 28 | No Apple developer account: companion app / OBS / NDI Tools route | **v95** plan |
+| 29 | Sound and picture out of sync (v83) | **v84** fixed (monotonic clock) |
+| 30 | Constant frame rate, forced | **v84** |
+| 31 | Rotate only when Android's auto-rotate is on | **v84** (`fullUser`) |
+| 32 | Explain the colour science (why it looks filmic) | answered in chat: the phone's own HLG, soft highlight shoulder, no multi-frame processing; README "the look" |
+| 33 | Orientation key so labels read upright | **v85** SHOOT; **v88** becomes LANDSCAPE / PORTRAIT only |
+| 34 | LUT slots off the rail into settings, one LUT switcher | **v85** |
+| 35 | Tell the truth about HLG | **v85** LOG says HLG / STD |
+| 36 | Right rail: REC, PLAY, orientation, LUT switcher; tools: vectorscope, waveform, false colour, zebra, peaking | **v85** except waveform/vectorscope → **v90** |
+| 37 | Timecode while recording, plus a tiny waveform | timecode **v85** (bottom middle, white, REC/PLAY word **v88**); waveform **v90** |
+| 38 | Free space in MB and time left on the chosen drive | **v85** |
+| 39 | Recording folder configurable, external drive | **v85** (system folder picker; a real USB SSD still to be tried by him) |
+| 40 | Cosmetics: geometry line gone, timecode middle white, REC/PLAY word, plain record circle, SNAP = app icon, LGHT gone, LANDSCAPE / PORTRAIT | **v88** |
+| 41 | PLAY plays inside the app, with LUTs | **v89** |
 
 ## The rules every phase follows
 
@@ -141,7 +200,44 @@ HM shows exactly which are manual; the numbers move live; nothing happens on a d
 functions. Emulator: drags on each fader, every A/M switch, modes cycled, screenshots; upgrade from
 v83 keeps each parameter's value; monkey.
 
-## Phase 3: settings with a live floating preview, rotation moves there (v89)
+## Phase 2b: his cosmetic list (v88)
+
+**The prompt** (his words, 26.9.2026, with his Pixel's screenshot of v86 recording in 4K).
+
+> Remove the line at the bottom: sensor, display, camera, rotation, buffer, view, squeeze. It is gone.
+> The timecode comes to the middle, and the timecode is always white. Next to the timecode we have a
+> status, REC, which becomes red when it is active, or PLAY. Remove the running number inside the
+> record button, because it is now duplicated: when not recording it is just a white circle, when
+> recording it becomes red. SNAP is renamed into an icon: put the icon of this application. The light
+> (LGHT) is gone; the user can do that with the phone. SHOOT LAND is not good: it just says LANDSCAPE
+> or PORTRAIT and toggles between the two. The rest is good.
+
+**Also in this build (found on v87):** the M key reads HM at start-up because the focus director
+starts in manual focus; either start focus in AF or leave focus out of "AUTO" (decide with him; the
+cleanest is focus starts A). The fader names are grey on a bright picture: give them the same
+shadow and weight as the numbers, or a dark band behind each fader row.
+
+**Done means.** No geometry line (keep it in the trace only). Bottom middle: `REC 00:00:57:22`, the
+word red while rolling, the timecode white always. Record key: white circle / red circle, no number.
+SNAP is the app icon. No LGHT key. The orientation key reads LANDSCAPE or PORTRAIT.
+
+## Phase 2c: the player inside the app (v89)
+
+**The prompt.**
+
+> PLAY turns this application into a player and plays the take inside the same screen. On the player
+> I can apply LUTs.
+
+**How.** A player surface in the picture's place (MediaPlayer or Media3 into a TextureView), with the
+same GPU shader for the LUT (and peaking, false colour, zebra, which are worth having on playback
+too). Play / pause, scrub, previous / next take in the recording folder, and back to the camera. The
+status word beside the timecode says PLAY, and the timecode shows the take's position. The camera
+stays open underneath (NDI keeps sending) or is paused, to be decided by what the Pixel allows.
+
+**Done means.** PLAY shows the last take full screen in the app, the LUT key changes its look, the
+timecode runs with the playback, and one key returns to the camera without restarting it.
+
+## Phase 3: settings with a live floating preview (v91)
 
 **The prompt.**
 
@@ -167,7 +263,7 @@ never torn down.
 
 ---
 
-## Phase 4: the GPU stage and a separate recording encoder (v90)
+## Phase 4: the GPU stage and a separate recording encoder (v92)
 
 **The prompt.**
 
@@ -197,7 +293,7 @@ colour from the preview. This phase builds the GPU stage that Phases 5, 6 and 9 
 
 ---
 
-## Phase 5: automatic exposure that knows the log curve (v91)
+## Phase 5: automatic exposure that knows the log curve (v93)
 
 **The prompt.**
 
@@ -222,7 +318,7 @@ too coarse, a closed loop that meters the box and drives manual ISO/shutter to t
 
 ---
 
-## Phase 6: the WB key, a grey-card sweep (v92)
+## Phase 6: the WB key, a grey-card sweep (v94)
 
 **The prompt.**
 
@@ -247,7 +343,7 @@ a fine one takes about two seconds at 30 fps.
 
 ---
 
-## Phase 4b: 10-bit NDI HX and full (part of Phase 4, v90; HEVC for every take moved to v83)
+## Phase 4b: 10-bit NDI HX and full (part of Phase 4, v92; HEVC for every take was v83)
 
 **The prompt.**
 
@@ -270,7 +366,7 @@ second camera output. If the phone still refuses, the phase says so with the tra
 
 ---
 
-## Phase 7: the phone as a webcam for the MacBook Pro (v93)
+## Phase 7: the phone as a webcam for the MacBook Pro (v95)
 
 **The prompt.**
 
@@ -303,7 +399,7 @@ phase says this plainly.
 
 ---
 
-## Phase 8: the sister app calibrates colour temperature (MANTRA_KELVIN v1, camera v94)
+## Phase 8: the sister app calibrates colour temperature (MANTRA_KELVIN v1, camera v96)
 
 **The prompt.**
 
@@ -322,7 +418,7 @@ and says so.
 **Tested before delivery.** Test 1: the interpolation (monotone, exact at the points, refuses one
 point and non-monotone input). The file's round trip. On the emulator: export from MANTRA_KELVIN,
 import in NDI camera, the fader's number checked. Upgrade: a phone with no calibration behaves as
-v91.
+v93.
 
 **How a point is measured.** At each reference light the app locks exposure, reads the camera's own
 neutral answer (AWB gains and colour matrix, the same anchor the NDI camera uses) over a grey card,
@@ -331,7 +427,7 @@ and stores (reference K, the camera's gains, its estimated K). The NDI camera's 
 
 ---
 
-## Phase 9: tracking focus (v95)
+## Phase 9: tracking focus (v97)
 
 **The prompt.**
 
@@ -372,4 +468,4 @@ a small model on the AI cores is the upgrade path, and the doc will say so then.
 | 26.9.2026 | v84 | 1c | Sound back on the monotonic clock with counted samples; CFR grid; fullUser rotation. Tested on the emulator (clock proven only on a real phone). His test: in sync |
 | 26.9.2026 | v85 | 1d | Interface reorganised; tested on the emulator: FALSE, ZEBRA, SHOOT, timecode, PLAY, LUT library through the file picker, monkey 20,000 |
 | 26.9.2026 | v86 | 1e | Labels fit, LUT key opens settings when empty |
-| 26.9.2026 | v87 | 2 | Mixer faders, A / M per parameter, AUTO / HM / FM; native priority where the phone has it, the app's loop elsewhere. **Waiting for his test** |
+| 26.9.2026 | v87 | 2 | Mixer faders, A / M per parameter, AUTO / HM / FM; native priority where the phone has it, the app's loop elsewhere. CI green; on the emulator installed over v86 and the faders drawn. **Not yet done: the monkey, a drag test, the HM loop run.** Findings: M reads HM at start; names weak over bright picture. Development closed for the day here |
