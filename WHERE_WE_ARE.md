@@ -6,6 +6,56 @@ working state of *this* app.
 
 ---
 
+## 26.9.2026 — v82, Phase 1 of the big update: the screen
+
+Marko sent fourteen features and fixes in one message. They are split into nine
+phases, one version each, in
+`v81 version bumps upgrades prompts for phase development of professional application for shooting video.md`
+(forecast: the last is v90). **The next phase starts only when he confirms this one on his phone.**
+
+**What v82 does.**
+- **Pinch the focus box**, from an eye's size (`Mechanism.BOX_MIN`, 6% of the short side) to the
+  whole picture; square up to the short side, then it widens to the frame. Kept in prefs
+  (`focusBoxSize`). About four pinches take it from full to tiny: Android's pinch detector stops
+  counting at about 27 mm between fingers, so each pinch roughly halves it.
+- **The camera is given the box as drawn.** Until v81 `focusAtNormalisedPoint` sent a fixed 16%
+  patch, taken as if the screen and the sensor were the same way up and the same shape. Now the
+  box goes through `sensorToViewDegrees` (Android's preview formula plus ROT), `viewRegionToSensor`
+  (portrait, upside down, the front camera's mirror) and `streamRegionToArray` (the 16:9 picture is
+  the middle of a 4:3 sensor). All pure, 15 new cases.
+- **One tap focuses when the box is hidden**: with CTRL's zones up (a single tap, confirmed after
+  the 320 ms double-tap window, so a double tap on a zone never racks) and in FULL
+  (`onSingleTapConfirmed`; the double tap still comes back). This reverses v81's "one tap does
+  nothing in FULL", on his word.
+- **The F-stop no longer returns in FULL**: `refreshZones` runs once a second and switched the iris
+  line back on without asking about full screen.
+- **No toast** entering FULL. (Android's own "Viewing full screen / Got it" appears once per app;
+  no app can remove it; one "Got it" ends it for good.)
+- **Lens keys only for real lenses.**
+- **Peaking works with no LUT.** Every `uniform shader` in AGSL must be bound; with no cube the
+  code returned "refused", so peaking alone failed on every phone. A 1x1 strip is bound now.
+- **WB double tap = the camera's own reading, once** (the uncommitted v81 work, finished): 20 frames
+  of AWB, read the anchor, back to manual at that Kelvin. A 3 s deadline answers if the camera never
+  does. A long press is continuous auto.
+
+**Tested.** Test 1: 225 cases green; the harness was made to fail on purpose (two rules broken, 3
+red, restored). On `Pixel_7_API_35`, with the CI-signed APK: v81 installed and used first (PEAK
+reproduced "This phone will not run the preview shader"; ROT set), v82 installed over it while
+running, ROT kept. Raw multi-touch via `sendevent` (adb root): pinch to full (1.777 = the picture's
+aspect) and to the floor (0.06), size kept across a force-stop; tap with zones up and in FULL,
+both in the trace; FULL for 3 s with CTRL up shows no iris and no toast; WB double tap answered
+5003 K in 0.66 s. Monkey, seed 82082, 20,000 events: no crash, no ANR.
+
+**Not tested, and why.** The emulator's camera focuses on a flat picture, so whether the region
+now lands on the right part of a *real* sensor upright and upside down is for his Pixel 7. The
+feel of the pinch under a thumb. Peaking on the Nothing Phone's GPU.
+
+**Waiting for Marko.** 1. Pinch the box both ways. 2. CTRL up, tap a subject: does it focus there.
+3. FULL, tap to focus, double tap back; no F-stop. 4. PEAK with no LUT. 5. WB double tap. 6. Hold the
+phone upright and tap near the top of the picture: it should focus there (it did not before).
+
+---
+
 ## 22.9.2026, night — v81, the clean feed, and one key for NDI
 
 *"I'm using screen copy to broadcast my camera, not our NDI, so I need the pure

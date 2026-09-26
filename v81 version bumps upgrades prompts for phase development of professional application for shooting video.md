@@ -238,7 +238,7 @@ plugging back in.
 **Tested before delivery.** The emulator stands in for the phone (its network reaches the Mac);
 the Mac side is tested with Photo Booth, QuickTime and Zoom.
 
-**Worth knowing, researched before the phase, not after.** Android 14's built-in "USB webcam" mode
+**Worth knowing, researched before the phase, not after** (and already verified on the bench at v71, see PROJECTS.md). Android 14's built-in "USB webcam" mode
 (Pixel) is a system service that opens the camera itself. **It cannot carry another app's picture**, so
 it would show the plain camera, not this app's clean feed. The honest routes:
 1. **A Mac receiver we build**: a macOS Camera Extension (CoreMediaIO) that takes this app's stream
@@ -316,3 +316,4 @@ a small model on the AI cores is the upgrade path, and the doc will say so then.
 | Date | Version | Phase | Result |
 |---|---|---|---|
 | 26.9.2026 | v81 | — | Document written; Phase 1 started |
+| 26.9.2026 | v82 | 1 | Built by CI, tested on the Pixel 7 emulator (four tests, monkey 20,000). **Waiting for Marko's confirmation on his phone** |
