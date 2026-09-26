@@ -25,11 +25,100 @@ import androidx.appcompat.app.AppCompatActivity
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var settings: Settings
+    private lateinit var slots: LutSlots
+
+    companion object {
+        /** The lens the camera screen was on, for ROT. */
+        const val EXTRA_LENS = "lens"
+        const val EXTRA_LENS_NAME = "lensName"
+    }
+
+    /** The system's folder picker: any drive, a USB SSD included. */
+    private val pickFolder =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { tree ->
+            if (tree == null) return@registerForActivityResult
+            // Kept across restarts, or the next take would have nowhere to go.
+            runCatching {
+                contentResolver.takePersistableUriPermission(
+                    tree,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }.onFailure { Trace.fault("record folder", it) }
+            settings.recordFolder = tree.toString()
+            Trace.control("record folder", Recordings.where(this, tree.toString()), "chosen")
+            showFolder()
+        }
+
+    /** A .cube into the first free slot. */
+    private val pickLut =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            val free = (1..LutSlots.COUNT).firstOrNull { !slots.slot(it).loaded }
+            if (free == null) {
+                Toast.makeText(this, "All ${LutSlots.COUNT} places are full — remove one first", Toast.LENGTH_LONG).show()
+                return@registerForActivityResult
+            }
+            val name = runCatching {
+                contentResolver.query(uri, null, null, null, null)?.use { c ->
+                    val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (i >= 0 && c.moveToFirst()) c.getString(i) else null
+                }
+            }.getOrNull()
+            val size = slots.import(free, uri, name)
+            Toast.makeText(
+                this,
+                if (size == null) "That file is not a 3D cube LUT" else "Added ${slots.slot(free).label}, $size cubed",
+                Toast.LENGTH_LONG
+            ).show()
+            showLuts()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
         settings = Settings(this)
+        slots = LutSlots(this)
+
+        // Where takes go.
+        showFolder()
+        findViewById<Button>(R.id.chooseFolder).setOnClickListener {
+            runCatching { pickFolder.launch(null) }
+                .onFailure { Toast.makeText(this, "This phone has no folder picker", Toast.LENGTH_LONG).show() }
+        }
+        findViewById<Button>(R.id.defaultFolder).setOnClickListener {
+            settings.recordFolder = null
+            showFolder()
+        }
+
+        // The LUT library.
+        showLuts()
+        findViewById<Button>(R.id.addLut).setOnClickListener { pickLut.launch(arrayOf("*/*")) }
+
+        // ROT, for the lens the camera was on.
+        val lens = intent.getStringExtra(EXTRA_LENS)
+        val rot = findViewById<RadioGroup>(R.id.rot)
+        if (lens == null) {
+            rot.addView(TextView(this).apply { text = "Open settings from the camera to turn a lens" })
+        } else {
+            val turns = settings.quarterTurnsFor(lens)
+            (0..3).forEach { q ->
+                rot.addView(RadioButton(this).apply {
+                    id = 100 + q
+                    text = "${q * 90}°"
+                    textSize = 12f
+                    isChecked = q == turns
+                })
+            }
+            rot.setOnCheckedChangeListener { _, id -> settings.setQuarterTurnsFor(lens, id - 100) }
+        }
+
+        // Zebra from 50% to 100%.
+        slider(
+            R.id.zebra, R.id.zebraValue,
+            value = settings.zebraLevel - 50,
+            label = { "from ${it + 50}%" },
+            onSet = { settings.zebraLevel = it + 50 }
+        )
 
         val sourceName = findViewById<EditText>(R.id.sourceName)
         sourceName.setText(settings.sourceName)
@@ -216,6 +305,46 @@ class SettingsActivity : AppCompatActivity() {
             if (NdiSender.available) "NDI SDK present" else "built without the NDI SDK"
     }
 
+    private fun showFolder() {
+        val folder = settings.recordFolder
+        val free = Recordings.freeBytes(this, folder)
+        findViewById<TextView>(R.id.recordFolder).text =
+            Recordings.where(this, folder) + "\n" +
+                (free?.let { Mechanism.formatFree(it) + " free" } ?: "not reachable — plugged in?")
+    }
+
+    /** One row per loaded LUT: its name, its size, and a key to remove it. */
+    private fun showLuts() {
+        val list = findViewById<android.widget.LinearLayout>(R.id.lutList)
+        list.removeAllViews()
+        val loaded = (1..LutSlots.COUNT).map { slots.slot(it) }.filter { it.loaded }
+        if (loaded.isEmpty()) {
+            list.addView(TextView(this).apply {
+                text = "No LUTs yet"
+                setTextColor(resources.getColor(R.color.quiet, theme))
+            })
+        }
+        loaded.forEach { slot ->
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            row.addView(TextView(this).apply {
+                text = "${slot.label}  ·  ${slot.size}³"
+                textSize = 13f
+                setTextColor(RailButton.GREEN)
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            row.addView(Button(this).apply {
+                text = "REMOVE"
+                textSize = 11f
+                setOnClickListener { slots.clear(slot.index); showLuts() }
+            })
+            list.addView(row)
+        }
+        findViewById<Button>(R.id.addLut).isEnabled = loaded.size < LutSlots.COUNT
+    }
+
     /** Every view in the tree tagged as help text. */
     private fun hints(root: View): List<View> = when {
         root.tag == "hint" -> listOf(root)
@@ -226,6 +355,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         showAddresses()
+        showFolder()
     }
 
     /**

@@ -1183,4 +1183,60 @@ class MechanismTest {
     @Test fun noFrameRateStillMovesForward() {
         assertEquals(5L, Mechanism.cfrSlot(123, 0, 0, 4))
     }
+
+    // --- professional readouts (v85) ---------------------------------------------
+
+    @Test fun timecodeCountsFramesAtTheTakesRate() {
+        assertEquals("00:00:00:00", Mechanism.timecode(0, 25))
+        assertEquals("00:00:01:12", Mechanism.timecode(1_480, 25))
+        assertEquals("00:00:00:29", Mechanism.timecode(999, 30))
+        assertEquals("01:02:03:00", Mechanism.timecode(3_723_000, 24))
+    }
+
+    @Test fun timecodeNeverGoesNegative() {
+        assertEquals("00:00:00:00", Mechanism.timecode(-500, 25))
+    }
+
+    @Test fun timeLeftKeepsAReserveSoATakeEndsWithItsIndex() {
+        // 1 GB free at 24 Mbit/s + 192 kbit/s, 50 MB kept back.
+        val free = 1024L * 1024 * 1024
+        val expected = (free - 50L * 1024 * 1024) * 8 / (24_000_000L + 192_000L)
+        assertEquals(expected, Mechanism.secondsLeft(free, 24_000_000, 192_000))
+    }
+
+    @Test fun aNearlyFullDriveHasNoTimeLeftNotNegativeTime() {
+        assertEquals(0L, Mechanism.secondsLeft(10L * 1024 * 1024, 24_000_000, 192_000))
+        assertEquals(0L, Mechanism.secondsLeft(0, 24_000_000, 0))
+        assertEquals(0L, Mechanism.secondsLeft(1_000_000_000, 0, 0))
+    }
+
+    @Test fun freeSpaceFitsInAKey() {
+        assertEquals("412 GB", Mechanism.formatFree(412L * 1024 * 1024 * 1024))
+        assertEquals("9.4 GB", Mechanism.formatFree((9.4 * 1024 * 1024 * 1024).toLong()))
+        assertEquals("780 MB", Mechanism.formatFree(780L * 1024 * 1024))
+    }
+
+    @Test fun timeLeftReadsLikeACamera() {
+        assertEquals("3:20 h", Mechanism.formatTimeLeft(3 * 3600 + 20 * 60 + 5))
+        assertEquals("47 min", Mechanism.formatTimeLeft(47 * 60 + 59))
+        assertEquals("0 min", Mechanism.formatTimeLeft(30))
+    }
+
+    @Test fun lutKeyGoesOffThenEachLoadedLutThenOff() {
+        val loaded = listOf(7, 2, 5)
+        assertEquals(2, Mechanism.nextLut(0, loaded))
+        assertEquals(5, Mechanism.nextLut(2, loaded))
+        assertEquals(7, Mechanism.nextLut(5, loaded))
+        assertEquals(0, Mechanism.nextLut(7, loaded))
+        assertEquals(0, Mechanism.nextLut(0, emptyList()))
+        // a LUT removed while it was on: the next one after it, not a crash
+        assertEquals(5, Mechanism.nextLut(3, loaded))
+    }
+
+    @Test fun shootCyclesAutoLandscapePortrait() {
+        assertEquals(1, Mechanism.nextShoot(0))
+        assertEquals(2, Mechanism.nextShoot(1))
+        assertEquals(0, Mechanism.nextShoot(2))
+        assertEquals(1, Mechanism.nextShoot(-3))
+    }
 }

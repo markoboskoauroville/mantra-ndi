@@ -30,4 +30,14 @@
     <string name="frame_rate_hint">How many frames a second are written to the file and sent down the wire. 24 is film; 25 and 50 belong beside a 50Hz mains and 30 and 60 beside a 60Hz one; 50 and 60 are what to shoot if it will be slowed down. The list is what this phone\'s lenses publish and will hold steady. It takes effect when the camera next opens, and it sets the longest shutter the zones will offer: a shutter longer than a frame cannot be held at the frame rate.</string>
     <string name="depth">Depth</string>
     <string name="depth_hint">Ten bit is HEVC Main10 with an HLG description, and it is what this phone\'s encoder and sensor can both do. Eight bit is there for a receiver that will not take ten. Resolution decides the recording and the stream together; the list is what this phone\'s lenses actually publish. Both take effect when the camera next opens.</string>
+    <string name="record_to">Record to</string>
+    <string name="record_to_hint">Where takes and SNAP stills go. Any folder the phone can see, including a USB drive or SSD on the cable. The storage key on the right rail shows what is free there and how long can still be recorded at the current bit rate.</string>
+    <string name="choose_folder">CHOOSE FOLDER</string>
+    <string name="default_folder">PHONE (DEFAULT)</string>
+    <string name="luts">LUTs</string>
+    <string name="luts_hint">The LUT key on the right rail switches through these, then off. Monitor only: the recording keeps its full range.</string>
+    <string name="add_lut">ADD LUT (.cube)</string>
+    <string name="rot">Turn the preview</string>
+    <string name="rot_hint">Quarter turns for a lens that is mounted unusually, kept per lens. Most phones never need it.</string>
+    <string name="zebra">Zebra level</string>
 </resources>

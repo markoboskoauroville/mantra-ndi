@@ -45,6 +45,8 @@ object Recordings {
         val name: String,
         val where: String,
         private val descriptor: ParcelFileDescriptor,
+        /** What PLAY opens afterwards: a content URI, or a file path before Android 10. */
+        val uri: Uri? = null,
         private val finish: (Boolean) -> Unit
     ) {
         val fileDescriptor: java.io.FileDescriptor get() = descriptor.fileDescriptor
@@ -62,8 +64,11 @@ object Recordings {
     /**
      * @return a take ready to be written, or null with the reason traced.
      */
-    fun open(context: Context, name: String = name()): Take? = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    fun open(context: Context, name: String = name(), folder: String? = null): Take? = try {
+        val tree = folder?.let { Uri.parse(it) }
+        if (tree != null) {
+            openInTree(context, tree, name, "video/mp4")
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
                 put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
@@ -93,7 +98,8 @@ object Recordings {
                     Take(
                         name = name,
                         where = Environment.DIRECTORY_DCIM + "/" + FOLDER + "/" + name,
-                        descriptor = pfd
+                        descriptor = pfd,
+                        uri = uri
                     ) { keep ->
                         if (keep) {
                             resolver.update(
@@ -121,7 +127,7 @@ object Recordings {
                 file,
                 ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_READ_WRITE
             )
-            Take(name, file.absolutePath, pfd) { keep -> if (!keep) file.delete() }
+            Take(name, file.absolutePath, pfd, Uri.fromFile(file)) { keep -> if (!keep) file.delete() }
         }
     } catch (t: Throwable) {
         Trace.fault("recording open", t)
@@ -141,9 +147,23 @@ object Recordings {
      *
      * @return where it went, or null with the reason traced
      */
-    fun savePng(context: Context, bitmap: android.graphics.Bitmap, at: Date = Date()): String? = try {
+    fun savePng(
+        context: Context, bitmap: android.graphics.Bitmap, at: Date = Date(), folder: String? = null
+    ): String? = try {
         val name = "mantra-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.UK).format(at) + ".png"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val tree = folder?.let { Uri.parse(it) }
+        if (tree != null) {
+            val resolver = context.contentResolver
+            val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
+            )
+            val doc = android.provider.DocumentsContract.createDocument(resolver, parent, "image/png", name)
+            val ok = doc != null && resolver.openOutputStream(doc)?.use {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            } == true
+            if (ok) describe(context, tree) + "/" + name
+            else { Trace.refused("still", "the chosen folder would not take the PNG"); null }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = context.contentResolver
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -178,6 +198,79 @@ object Recordings {
         }
     } catch (t: Throwable) {
         Trace.fault("still", t)
+        null
+    }
+
+    // --- a folder he chose: any drive, a USB SSD included (v85) -------------
+
+    /**
+     * A new file in a folder chosen through the system's folder picker.
+     *
+     * *"User can choose also an external drive. The recording folder is
+     * configurable."* The picker hands back a tree the app keeps a lasting
+     * permission for; a file is made in it and opened read-write, because a
+     * muxer seeks back to the start to write the index.
+     */
+    private fun openInTree(context: Context, tree: Uri, name: String, mime: String): Take? {
+        val resolver = context.contentResolver
+        val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+            tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
+        )
+        val doc = android.provider.DocumentsContract.createDocument(resolver, parent, mime, name)
+            ?: run { Trace.refused("recording", "the chosen folder would not take a new file"); return null }
+        val pfd = resolver.openFileDescriptor(doc, "rw")
+            ?: run {
+                runCatching { android.provider.DocumentsContract.deleteDocument(resolver, doc) }
+                Trace.refused("recording", "no descriptor in the chosen folder")
+                return null
+            }
+        return Take(name, describe(context, tree) + "/" + name, pfd, doc) { keep ->
+            if (!keep) runCatching { android.provider.DocumentsContract.deleteDocument(resolver, doc) }
+        }
+    }
+
+    /** A chosen folder as a person reads it: "USB drive/Takes", "Phone/DCIM/Shoot". */
+    fun describe(context: Context, tree: Uri): String {
+        val id = runCatching { android.provider.DocumentsContract.getTreeDocumentId(tree) }.getOrNull()
+            ?: return tree.toString()
+        val volume = id.substringBefore(':')
+        val path = id.substringAfter(':', "")
+        val where = if (volume == "primary") "Phone" else volumeName(context, volume) ?: "Drive $volume"
+        return if (path.isEmpty()) where else "$where/$path"
+    }
+
+    private fun volumeName(context: Context, uuid: String): String? {
+        val sm = context.getSystemService(android.os.storage.StorageManager::class.java) ?: return null
+        return sm.storageVolumes.firstOrNull { it.uuid.equals(uuid, ignoreCase = true) }
+            ?.getDescription(context)
+    }
+
+    /** Where the takes go, as a person reads it. */
+    fun where(context: Context, folder: String?): String =
+        folder?.let { describe(context, Uri.parse(it)) } ?: folder()
+
+    /**
+     * Free bytes on the drive the takes go to, or null if it cannot be read
+     * (a drive unplugged, a folder whose permission was taken back).
+     */
+    fun freeBytes(context: Context, folder: String?): Long? = try {
+        if (folder == null) {
+            android.os.StatFs(Environment.getExternalStorageDirectory().path).availableBytes
+        } else {
+            val id = android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(folder))
+            val volume = id.substringBefore(':')
+            val dir: File? = if (volume == "primary") {
+                Environment.getExternalStorageDirectory()
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.getSystemService(android.os.storage.StorageManager::class.java)
+                    ?.storageVolumes?.firstOrNull { it.uuid.equals(volume, ignoreCase = true) }
+                    ?.directory
+            } else {
+                File("/storage/$volume")
+            }
+            dir?.takeIf { it.exists() }?.let { android.os.StatFs(it.path).availableBytes }
+        }
+    } catch (t: Throwable) {
         null
     }
 }

@@ -28,16 +28,18 @@ because there is no Apple developer account. The order is now:
 | 1 | v82 | The screen: pinch box, tap to focus hidden, F-stop, toast, real lenses, peaking, WB probe (**built, tested on the emulator**) |
 | 1b | **v83** | His test's faults: the take's sound, HEVC for every take, SNAP as PNG beside the takes, log freeze → "not supported", bit rate to 100, the rename, the README advertisement, NDI licensing researched |
 | 1c | **v84** | His second test: sound out of sync (v83 stamped it on the boot clock, 7664 s off), constant frame rate forced, rotation follows the phone's auto-rotate lock |
-| 2 | **v85** | Mixer faders, thick, the number moving with the fader; **A / M per parameter**; modes AUTO, HM (half manual), FM (full manual); no more meaning in a double tap |
-| 3 | **v86** | Settings with a floating live preview; ROT moves there |
-| 4 | **v87** | The GPU stage: one camera output fanned out on the GPU to the monitor, the NDI encoder and **a separate recording HEVC encoder at its own high bit rate** (sensor to storage, not the stream); full NDI packed on the GPU; 10-bit full NDI (P216) |
-| 5 | **v88** | Automatic exposure that knows the log curve |
-| 6 | **v89** | The WB key: a grey-card sweep |
-| 7 | **v90** | The Mac companion app: the phone as a webcam in Zoom, no Apple developer account |
-| 8 | **v91** | MANTRA_KELVIN, the colour-temperature calibration app, and its import |
-| 9 | **v92** | Tracking focus on the GPU |
+| 1d | **v85** | The interface reorganised: right rail = REC, PLAY (last take), SNAP, LGHT, SHOOT (auto / landscape / portrait, labels upright), LUT switcher, PEAK, FALSE colour, ZEBRA, gear, storage (free space + time left); LUT library, record folder (any drive, USB SSD) and ROT in settings; record-run timecode; the LOG key says HLG or STD instead of "Rec.709" |
+| 2 | **v86** | Mixer faders, thick, the number moving with the fader; **A / M per parameter**; modes AUTO, HM (half manual), FM (full manual); no more meaning in a double tap |
+| 3b | **v87** | The measuring corner: tiny **waveform** and **vectorscope** tiles on the right side (GPU, no CPU), beside the tools |
+| 3 | **v88** | Settings with a floating live preview (ROT already moved there in v85) |
+| 4 | **v89** | The GPU stage: one camera output fanned out on the GPU to the monitor, the NDI encoder and **a separate recording HEVC encoder at its own high bit rate** (sensor to storage, not the stream); full NDI packed on the GPU; 10-bit full NDI (P216) |
+| 5 | **v90** | Automatic exposure that knows the log curve |
+| 6 | **v91** | The WB key: a grey-card sweep |
+| 7 | **v92** | The Mac companion app: the phone as a webcam in Zoom, no Apple developer account |
+| 8 | **v93** | MANTRA_KELVIN, the colour-temperature calibration app, and its import |
+| 9 | **v94** | Tracking focus on the GPU |
 
-**Forecast: the last version is v92** (v84 was a fix round). Every fix round adds one.
+**Forecast: the last version is v94** (v84 was a fix round; v85 and v87 were added on 26.9.2026). Every fix round adds one.
 
 ## The rules every phase follows
 
@@ -119,7 +121,7 @@ AAC frames 21.3 ms apart and as many seconds of sound as of picture. Takes are H
 comes back in about a second with "not supported", and LOG skips it after that. The launcher says
 Mantra Manual Camera.
 
-## Phase 2: mixer faders, A / M per parameter, half and full manual (v85)
+## Phase 2: mixer faders, A / M per parameter, half and full manual (v86)
 
 **The prompt.**
 
@@ -138,7 +140,7 @@ HM shows exactly which are manual; the numbers move live; nothing happens on a d
 functions. Emulator: drags on each fader, every A/M switch, modes cycled, screenshots; upgrade from
 v83 keeps each parameter's value; monkey.
 
-## Phase 3: settings with a live floating preview, rotation moves there (v86)
+## Phase 3: settings with a live floating preview, rotation moves there (v88)
 
 **The prompt.**
 
@@ -164,7 +166,7 @@ never torn down.
 
 ---
 
-## Phase 4: the GPU stage and a separate recording encoder (v87)
+## Phase 4: the GPU stage and a separate recording encoder (v89)
 
 **The prompt.**
 
@@ -194,7 +196,7 @@ colour from the preview. This phase builds the GPU stage that Phases 5, 6 and 9 
 
 ---
 
-## Phase 5: automatic exposure that knows the log curve (v88)
+## Phase 5: automatic exposure that knows the log curve (v90)
 
 **The prompt.**
 
@@ -219,7 +221,7 @@ too coarse, a closed loop that meters the box and drives manual ISO/shutter to t
 
 ---
 
-## Phase 6: the WB key, a grey-card sweep (v89)
+## Phase 6: the WB key, a grey-card sweep (v91)
 
 **The prompt.**
 
@@ -244,7 +246,7 @@ a fine one takes about two seconds at 30 fps.
 
 ---
 
-## Phase 4b: 10-bit NDI HX and full (now part of Phase 4, v87; HEVC for every take moved to v83)
+## Phase 4b: 10-bit NDI HX and full (part of Phase 4, v89; HEVC for every take moved to v83)
 
 **The prompt.**
 
@@ -267,7 +269,7 @@ second camera output. If the phone still refuses, the phase says so with the tra
 
 ---
 
-## Phase 7: the phone as a webcam for the MacBook Pro (v90)
+## Phase 7: the phone as a webcam for the MacBook Pro (v92)
 
 **The prompt.**
 
@@ -300,7 +302,7 @@ phase says this plainly.
 
 ---
 
-## Phase 8: the sister app calibrates colour temperature (MANTRA_KELVIN v1, camera v91)
+## Phase 8: the sister app calibrates colour temperature (MANTRA_KELVIN v1, camera v93)
 
 **The prompt.**
 
@@ -319,7 +321,7 @@ and says so.
 **Tested before delivery.** Test 1: the interpolation (monotone, exact at the points, refuses one
 point and non-monotone input). The file's round trip. On the emulator: export from MANTRA_KELVIN,
 import in NDI camera, the fader's number checked. Upgrade: a phone with no calibration behaves as
-v89.
+v90.
 
 **How a point is measured.** At each reference light the app locks exposure, reads the camera's own
 neutral answer (AWB gains and colour matrix, the same anchor the NDI camera uses) over a grey card,
@@ -328,7 +330,7 @@ and stores (reference K, the camera's gains, its estimated K). The NDI camera's 
 
 ---
 
-## Phase 9: tracking focus (v92)
+## Phase 9: tracking focus (v94)
 
 **The prompt.**
 
@@ -366,4 +368,5 @@ a small model on the AI cores is the upgrade path, and the doc will say so then.
 | 26.9.2026 | v81 | — | Document written; Phase 1 started |
 | 26.9.2026 | v82 | 1 | Built by CI, tested on the Pixel 7 emulator (four tests, monkey 20,000) |
 | 26.9.2026 | v83 | 1b | His test: peaking works on the Nothing; the take's sound lost half of every buffer (ffprobe: 386 AAC frames 40 ms apart, 8.2 s of sound in 15.4 s); SNAP unfindable; log froze the Nothing. All fixed in v83; tested on the emulator (take measured, PNG, curves, monkey 20,000). tested by him 26.9: no crackle; sound out of sync |
-| 26.9.2026 | v84 | 1c | Sound back on the monotonic clock with counted samples; CFR grid; fullUser rotation. Tested on the emulator (clock proven only on a real phone). **Waiting for his test** |
+| 26.9.2026 | v84 | 1c | Sound back on the monotonic clock with counted samples; CFR grid; fullUser rotation. Tested on the emulator (clock proven only on a real phone). His test: in sync |
+| 26.9.2026 | v85 | 1d | Interface reorganised (see the table). **Waiting for his test** |

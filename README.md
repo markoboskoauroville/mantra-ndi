@@ -22,7 +22,9 @@ the phone's own tone mapper, so they are in the file and on the stream, not just
 *Coming next:* automatic exposure that knows the curve and puts middle grey exactly where each
 manufacturer says it belongs.
 
-**10-bit HLG HEVC, straight from the phone's own silicon.** The ISP demosaics, the hardware encoder
+**10-bit HLG HEVC, straight from the phone's own silicon, and a filmic look without trying.** With no log
+curve chosen, the picture is the phone's own broadcast HLG: a soft highlight shoulder like negative
+film, a wide colour gamut, and none of the multi-frame smartphone processing that flattens light. The ISP demosaics, the hardware encoder
 compresses. Every take is HEVC, which is half the size of H.264 at the same quality.
 
 **NDI HX and full NDI.** The phone appears as a camera in vMix, OBS, Wirecast, NDI Studio Monitor,
@@ -36,14 +38,21 @@ is ready to broadcast as it is.
 focus mark from the size of an eye to the whole frame. A focus director that holds, then racks
 over a beat you choose instead of hunting like a phone.
 
-**Eleven monitor LUT slots and focus peaking.** Load your own .cube files, compare them with a tap,
-peak edges in the colour you choose. Both are drawn by the GPU on the monitor only, so the recording
+**A LUT library, focus peaking, false colour and zebra, side by side.** Load your own .cube files in
+settings and switch between them with one key; peak edges in the colour you choose; read exposure
+in false colour (middle grey green, skin pink, clipping red) or with zebra from the level you set. Both are drawn by the GPU on the monitor only, so the recording
 keeps its full range.
 
 **White balance like a cinema camera.** Kelvin from tungsten to daylight, anchored to the camera's own
 calibration so it never goes green. Double tap to take the camera's own reading once and keep it.
 *Coming next:* a grey-card sweep that finds the most neutral temperature by itself, and a companion
 app that calibrates the fader to a colour meter.
+
+**A camera's readouts, not a phone's.** Record-run timecode in HH:MM:SS:FF, red while rolling. The
+free space on the recording drive and how many hours and minutes are left at the current bit rate,
+always on screen. Record to the phone or to any drive it can see, a USB-C SSD included. PLAY opens
+the last take at once. SHOOT turns the whole interface for landscape or portrait so every label
+stays upright, whatever the phone's own rotation lock says.
 
 **Every lens, one key each.** Wide, main, telephoto, selfie: whatever your phone physically has,
 and nothing it doesn't.
@@ -52,7 +61,7 @@ and nothing it doesn't.
 with no focus motor: the app says so in words on the screen and carries on, instead of freezing or
 pretending.
 
-*Coming:* the phone as a webcam for a Mac (Zoom, Teams, Meet), tracking focus that follows a pattern
+*Coming:* waveform and vectorscope tiles, the phone as a webcam for a Mac (Zoom, Teams, Meet), tracking focus that follows a pattern
 across the frame, and a live settings preview.
 
 ## Tested on

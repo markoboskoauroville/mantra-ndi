@@ -74,6 +74,57 @@
                 android:textColor="@color/amber" />
         </LinearLayout>
 
+        <!-- v85: where takes go, the LUT library, this lens's turn, zebra -->
+        <TextView style="@style/MantraLabel" android:text="@string/record_to" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/record_to_hint" />
+        <TextView android:id="@+id/recordFolder" style="@style/MantraValue" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/chooseFolder"
+                style="@style/MantraKey"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="@string/choose_folder" />
+            <Button
+                android:id="@+id/defaultFolder"
+                style="@style/MantraKey"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="@string/default_folder" />
+        </LinearLayout>
+
+        <TextView style="@style/MantraLabel" android:text="@string/luts" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/luts_hint" />
+        <LinearLayout
+            android:id="@+id/lutList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+        <Button
+            android:id="@+id/addLut"
+            style="@style/MantraKey"
+            android:layout_width="match_parent"
+            android:text="@string/add_lut" />
+
+        <TextView style="@style/MantraLabel" android:text="@string/rot" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/rot_hint" />
+        <RadioGroup
+            android:id="@+id/rot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+
+        <TextView style="@style/MantraLabel" android:text="@string/zebra" />
+        <TextView android:id="@+id/zebraValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/zebra"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="50" />
+
         <!--
              The wire first.
 

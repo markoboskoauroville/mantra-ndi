@@ -141,6 +141,29 @@ class Settings(context: Context) {
         get() = prefs.getFloat(BOX, 0.18f)
         set(value) = prefs.edit().putFloat(BOX, value.coerceIn(Mechanism.BOX_MIN, 4f)).apply()
 
+    /** SHOOT: 0 follows the phone's own rotation, 1 landscape, 2 portrait. */
+    var shootMode: Int
+        get() = prefs.getInt(SHOOT, 0)
+        set(value) = prefs.edit().putInt(SHOOT, ((value % 3) + 3) % 3).apply()
+
+    /**
+     * Where takes and stills go: a folder the operator chose (any drive the
+     * phone can see, a USB SSD included), or null for DCIM/Mantra Manual Camera.
+     */
+    var recordFolder: String?
+        get() = prefs.getString(FOLDER, null)
+        set(value) = prefs.edit().putString(FOLDER, value).apply()
+
+    /** The last take, so PLAY can open it after a restart. */
+    var lastTake: String?
+        get() = prefs.getString(LAST_TAKE, null)
+        set(value) = prefs.edit().putString(LAST_TAKE, value).apply()
+
+    /** Zebra from this luma up, percent of full scale. */
+    var zebraLevel: Int
+        get() = prefs.getInt(ZEBRA, 95)
+        set(value) = prefs.edit().putInt(ZEBRA, value.coerceIn(50, 100)).apply()
+
     /** Ten bit is asked for unless somebody has a reason not to. */
     var wantTenBit: Boolean
         get() = prefs.getBoolean(TEN_BIT, true)
@@ -159,5 +182,9 @@ class Settings(context: Context) {
         const val VERBOSE = "verboseSettings"
         const val FPS = "framesPerSecond"
         const val BOX = "focusBoxSize"
+        const val SHOOT = "shootMode"
+        const val FOLDER = "recordFolder"
+        const val LAST_TAKE = "lastTake"
+        const val ZEBRA = "zebraLevel"
     }
 }

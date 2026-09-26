@@ -93,7 +93,6 @@ class MainActivity : AppCompatActivity() {
     private var lastProducerDegrees = -1
     private var peaking = false
     private var bufferSize = Size(1920, 1080)
-    private var pendingSlot = 0
 
     /** Manual exposure, and whether the zones on the picture are listening. */
     private var manual = false
@@ -157,19 +156,24 @@ class MainActivity : AppCompatActivity() {
     private var microphoneAsked = false
 
     private val lensKeys = mutableListOf<RailButton>()
-    private val slotKeys = mutableListOf<RailButton>()
     private lateinit var recKey: RecordButtonView
-    private lateinit var pageKey: RailButton
     private lateinit var gearKey: RailButton
+    private lateinit var playKey: RailButton
+    private lateinit var shootKey: RailButton
+    private lateinit var lutKey: RailButton
+    private lateinit var falseKey: RailButton
+    private lateinit var zebraKey: RailButton
+    private lateinit var storageKey: RailButton
+    private lateinit var timecode: TextView
 
-    /** Which five of the eleven slots the right rail is showing. */
-    private var slotPage = 0
+    /** The two exposure tools beside peaking. Monitor only, like peaking. */
+    private var falseColour = false
+    private var zebra = false
     private lateinit var lightKey: RailButton
     private lateinit var focusKey: RailButton
     private lateinit var peakKey: RailButton
     private lateinit var snapKey: RailButton
     private lateinit var logKey: RailButton
-    private lateinit var rotKey: RailButton
     private lateinit var manualKey: RailButton
     private lateinit var ctrlKey: RailButton
     private lateinit var ndiKey: RailButton
@@ -177,10 +181,6 @@ class MainActivity : AppCompatActivity() {
 
     private val ui = Handler(Looper.getMainLooper())
 
-    private companion object {
-        /** Five keys of slots, then the page key, then the gear. */
-        const val PAGE_SIZE = 5
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -199,6 +199,7 @@ class MainActivity : AppCompatActivity() {
         stage = findViewById(R.id.stage)
         railLeft = findViewById(R.id.railLeft)
         railRight = findViewById(R.id.railRight)
+        timecode = findViewById(R.id.timecode)
 
         pipeline = CameraPipeline(this)
         slots = LutSlots(this)
@@ -217,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         buildRails()
+        applyShootMode()
         layoutForOrientation(resources.configuration.orientation)
 
         // Android draws its camera-in-use indicator over the top of the screen
@@ -281,7 +283,7 @@ class MainActivity : AppCompatActivity() {
             ui.post {
                 curveIndex = back.ordinal
                 refusedCurves.add(lensKey() + "/" + refused.name)
-                say("${refused.displayName} is not supported on this lens — back to ${back.displayName}")
+                say("${curveLabel(refused)} is not supported on this lens — back to ${curveLabel(back)}")
                 refreshKeys()
             }
         }
@@ -376,88 +378,57 @@ class MainActivity : AppCompatActivity() {
             lensKeys.add(key)
             railLeft.addView(key)
         }
-        // LGHT and SNAP are on the other rail now, under the record key.
-        //
-        // *"We need to optimise how many buttons are on the left so the text
-        // can be bigger."* Two keys off this rail is two keys' worth of height
-        // shared among the ten that are left, and the lamp and the stills
-        // belong beside record anyway: they are the three things a right thumb
-        // reaches for without taking the left hand off the lens keys.
         focusKey = newKey("AF") { toggleAutoFocus() }.also { railLeft.addView(it) }
-        peakKey = newKey("PEAK") { togglePeaking() }.also { railLeft.addView(it) }
         logKey = newKey("LOG") { nextCurve() }.also { railLeft.addView(it) }
-        rotKey = newKey("ROT") { turnPreview() }.also { railLeft.addView(it) }
         manualKey = newKey("M") { toggleManual() }.also { railLeft.addView(it) }
         ctrlKey = newKey("CTRL") { toggleZones() }.also { railLeft.addView(it) }
-        // One key for NDI, not two.
-        //
-        // HX and full were always the two ends of one switch — an NDI source is
-        // one stream, and a receiver is either given compressed access units or
-        // whole frames. Two keys made that look like two independent things
-        // that might both be on. It cycles: off, HX, full, off, and its small
-        // word says which. That frees the key below it to mean something else.
+        // One key for NDI: off, HX, full, off. An NDI source is one stream.
         ndiKey = newKey("NDI") { nextNdiMode() }.also { railLeft.addView(it) }
         // The clean feed, for a phone that is being broadcast by its screen.
         screenKey = newKey("FULL") { setFullScreen(!fullScreen) }
             .also { railLeft.addView(it) }
 
-        // Record, at the top of the right rail where a thumb already is.
+        // THE RIGHT RAIL, v85: the take, the look, the measuring tools, and
+        // what is left on the drive.
         //
-        // Not a key like the others on purpose: it is the only control on this
-        // camera whose state has to be readable without being read, so it is a
-        // red circle that fills and counts rather than a word that turns green.
+        // *"Right side is record button, preview file button, portrait or
+        // landscape shooting, and the LUT switcher ... and the measuring tools
+        // ... and peaking, so everything is in one place ... and at the bottom
+        // the free space and how much time we can still record."* The eleven
+        // LUT slots went to settings; one key here switches between the ones
+        // loaded there.
         recKey = RecordButtonView(this).also {
             it.setOnClickListener { toggleRecording() }
             railRight.addView(it)
         }
-        lightKey = newKey("LGHT") { toggleLight() }.also { railRight.addView(it) }
+        playKey = newKey("PLAY") { playLastTake() }.also { railRight.addView(it) }
         snapKey = newKey("SNAP") { takeSnap() }.also { railRight.addView(it) }
-
-        // Five slots at a time, not eleven. Eleven keys down the side of a
-        // phone are each too small to hit with a thumb, and the right rail now
-        // also has to carry the way into settings. So the slots are paged, and
-        // the sixth key turns the page.
-        for (i in 1..PAGE_SIZE) {
-            val position = i
-            val key = newKey("") { chooseSlot(slotFor(position)) }
-            key.setOnLongClickListener { offerSlot(slotFor(position)); true }
-            slotKeys.add(key)
-            railRight.addView(key)
-        }
-        pageKey = newKey("") { turnSlotPage() }.also {
-            it.glyph = RailButton.Glyph.DOWN
+        lightKey = newKey("LGHT") { toggleLight() }.also { railRight.addView(it) }
+        shootKey = newKey("SHOOT") { nextShoot() }.also { railRight.addView(it) }
+        lutKey = newKey("LUT") { nextLut() }.also {
+            it.setOnLongClickListener { openSettings(); true }
             railRight.addView(it)
         }
+        peakKey = newKey("PEAK") { togglePeaking() }.also { railRight.addView(it) }
+        falseKey = newKey("FALSE") { falseColour = !falseColour; applyLook(); refreshKeys() }
+            .also { railRight.addView(it) }
+        zebraKey = newKey("ZEBRA") { zebra = !zebra; applyLook(); refreshKeys() }
+            .also { railRight.addView(it) }
         gearKey = newKey("") { openSettings() }.also {
             it.glyph = RailButton.Glyph.GEAR
             railRight.addView(it)
         }
-    }
-
-    /** Which slot the key at [position] on the current page stands for, or 0. */
-    private fun slotFor(position: Int): Int {
-        val slot = slotPage * PAGE_SIZE + position
-        return if (slot in 1..LutSlots.COUNT) slot else 0
-    }
-
-    private val pageCount: Int
-        get() = (LutSlots.COUNT + PAGE_SIZE - 1) / PAGE_SIZE
-
-    /**
-     * The next five, wrapping at the end.
-     *
-     * The arrow points the way the next tap will go, which is down until there
-     * is nothing below and then back up to the start — so the key always says
-     * what it is about to do rather than where you happen to be.
-     */
-    private fun turnSlotPage() {
-        slotPage = (slotPage + 1) % pageCount
-        Trace.control("LUT page", slotPage + 1, "of $pageCount")
-        refreshKeys()
+        // Not a switch: a readout that opens where the takes go.
+        storageKey = newKey("—") { openSettings() }.also { railRight.addView(it) }
     }
 
     private fun openSettings() {
-        startActivity(Intent(this, SettingsActivity::class.java))
+        // The lens in use, so ROT in settings turns this lens and no other.
+        startActivity(
+            Intent(this, SettingsActivity::class.java)
+                .putExtra(SettingsActivity.EXTRA_LENS, lensKey())
+                .putExtra(SettingsActivity.EXTRA_LENS_NAME, lenses.getOrNull(activeLens)?.label)
+        )
     }
 
     private fun newKey(label: String, onTap: () -> Unit): RailButton =
@@ -635,6 +606,10 @@ class MainActivity : AppCompatActivity() {
         // The camera session is lost while backgrounded even with a foreground
         // service, so it is rebuilt rather than tested for.
         if (preview.isAvailable && !pipeline.isRunning) openCamera()
+        // Settings may have removed the LUT that was on.
+        if (activeSlot > 0 && !slots.slot(activeSlot).loaded) { activeSlot = 0; applyLook() }
+        refreshStorage()
+        refreshKeys()
         startMeter()
         ui.post(rateTick)
     }
@@ -697,9 +672,12 @@ class MainActivity : AppCompatActivity() {
         refreshKeys()
     }
 
+    private var storageTicks = 0
+
     private val rateTick = object : Runnable {
         override fun run() {
             if (pipeline.isRunning) pipeline.sampleRate()
+            if (++storageTicks % 5 == 0) refreshStorage()
             if (pipeline.isRecording) {
                 recKey.elapsedSeconds =
                     (android.os.SystemClock.elapsedRealtime() - recordingSince) / 1000
@@ -724,10 +702,13 @@ class MainActivity : AppCompatActivity() {
     private fun startRecording() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
         if (meter == null) say("No microphone: this take will have no sound")
-        val where = pipeline.startRecording(this, meter) ?: run { refreshKeys(); return }
+        val where = pipeline.startRecording(this, meter, settings.recordFolder)
+            ?: run { refreshKeys(); return }
+        pipeline.lastTakeUri?.let { settings.lastTake = it.toString() }
         recordingSince = android.os.SystemClock.elapsedRealtime()
         recKey.elapsedSeconds = 0
         recKey.recording = true
+        showTimecode(true)
         say("Recording → $where")
         refreshKeys()
     }
@@ -738,6 +719,8 @@ class MainActivity : AppCompatActivity() {
         val where = pipeline.stopRecording()
         recKey.recording = false
         recKey.elapsedSeconds = 0
+        showTimecode(false)
+        refreshStorage()
         say(
             when {
                 where == null -> "Nothing was written; the file was removed"
@@ -993,7 +976,7 @@ class MainActivity : AppCompatActivity() {
             ?: run { say("The picture could not be read"); return }
         snapKey.state = RailButton.State.ARMED
         Thread({
-            val where = Recordings.savePng(this, bitmap)
+            val where = Recordings.savePng(this, bitmap, folder = settings.recordFolder)
             bitmap.recycle()
             ui.post {
                 refreshKeys()
@@ -1015,7 +998,8 @@ class MainActivity : AppCompatActivity() {
         }
         val curve = LogCurves.Curve.entries[curveIndex]
         val ok = pipeline.setLogCurve(curve)
-        say(if (ok) "${curve.vendor} ${curve.displayName}" else "${curve.displayName} refused")
+        say(if (ok) (if (curve == LogCurves.Curve.REC709) curveLabel(curve) + ", the camera's own curve"
+                     else "${curve.vendor} ${curve.displayName}") else "${curveLabel(curve)} refused")
         refreshKeys()
     }
 
@@ -1398,16 +1382,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun turnPreview() {
-        manualQuarterTurns = (manualQuarterTurns + 1) % 4
-        // Kept, and kept per lens, so a sensor that is mounted unusually is
-        // corrected once rather than at the start of every shoot — and
-        // correcting one lens never turns another.
-        settings.setQuarterTurnsFor(lensKey(), manualQuarterTurns)
-        applyPreviewTransform()
-        refreshKeys()
-    }
-
     /**
      * **The clean feed.** Everything off the glass but the picture.
      *
@@ -1434,6 +1408,7 @@ class MainActivity : AppCompatActivity() {
         status.visibility = hidden
         geometry.visibility = hidden
         vu.visibility = hidden
+        timecode.visibility = hidden
         // The zones and the focus box come back to whichever of them was up.
         zones.visibility = if (!on && zonesOn) View.VISIBLE else View.GONE
         focusSquare.visibility = if (!on && !zonesOn) View.VISIBLE else View.GONE
@@ -1510,60 +1485,116 @@ class MainActivity : AppCompatActivity() {
         refreshKeys()
     }
 
-    // --- the LUT slots -------------------------------------------------------
+    // --- the LUT switcher, and the other right-rail keys (v85) ----------------
 
-    private fun chooseSlot(index: Int) {
-        if (index == 0) return
-        if (slots.cube(index) == null) { offerSlot(index); return }
-        activeSlot = if (activeSlot == index) 0 else index
+    /**
+     * LUT: off, then each LUT loaded in settings, then off again.
+     *
+     * The eleven slots moved to settings, where LUTs are added and removed;
+     * this key only switches between them. A long press opens settings.
+     */
+    private fun nextLut() {
+        val loaded = (1..LutSlots.COUNT).filter { slots.slot(it).loaded }
+        if (loaded.isEmpty()) { say("No LUTs loaded — add them in settings (hold LUT)"); return }
+        activeSlot = Mechanism.nextLut(activeSlot, loaded)
         applyLook()
         refreshKeys()
-        Trace.control("LUT", index, if (activeSlot == 0) "off" else slots.slot(index).label)
+        say(if (activeSlot == 0) "LUT off" else "LUT: " + (slots.slot(activeSlot).label ?: "$activeSlot"))
+        Trace.control("LUT", activeSlot, if (activeSlot == 0) "off" else slots.slot(activeSlot).label)
     }
 
-    private fun offerSlot(index: Int) {
-        if (index == 0) return
-        val slot = slots.slot(index)
-        if (!slot.loaded) { pickFile(index); return }
-        AlertDialog.Builder(this)
-            .setTitle("Slot $index — ${slot.label}")
-            .setMessage("${slot.size} cubed")
-            .setPositiveButton("Replace") { _, _ -> pickFile(index) }
-            .setNegativeButton("Empty it") { _, _ ->
-                if (activeSlot == index) activeSlot = 0
-                slots.clear(index); applyLook(); refreshKeys()
-            }
-            .setNeutralButton("Keep", null)
-            .show()
-    }
+    /** The last take: this session's, or the one remembered from before. */
+    private fun lastTakeUri(): Uri? =
+        pipeline.lastTakeUri ?: settings.lastTake?.let { Uri.parse(it) }
 
-    private fun pickFile(index: Int) {
-        pendingSlot = index
-        openDocument.launch(arrayOf("*/*"))
-    }
-
-    private val openDocument =
-        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-            val index = pendingSlot
-            pendingSlot = 0
-            if (uri == null || index == 0) return@registerForActivityResult
-            val size = slots.import(index, uri, displayNameOf(uri))
-            if (size == null) say("Slot $index: that file is not a 3D cube")
-            else {
-                say("Slot $index: ${slots.slot(index).label}, $size cubed")
-                activeSlot = index
-                applyLook()
-            }
-            refreshKeys()
+    /** PLAY: the last take in the phone's own player. */
+    private fun playLastTake() {
+        if (pipeline.isRecording) { say("Recording — stop the take first"); return }
+        val uri = lastTakeUri() ?: run { say("No take yet"); return }
+        val view = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "video/mp4")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        if (runCatching { startActivity(view); true }.getOrDefault(false)) {
+            Trace.control("play", uri.toString(), "opened")
+        } else {
+            say("No player on this phone opens the take")
         }
+    }
 
-    private fun displayNameOf(uri: Uri): String? = try {
-        contentResolver.query(uri, null, null, null, null)?.use { c ->
-            val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (i >= 0 && c.moveToFirst()) c.getString(i) else null
+    /**
+     * SHOOT: follow the phone, landscape, or portrait.
+     *
+     * *"A button to change the orientation of the screen and its labels ...
+     * when I rotate the phone I need to read all the labels clearly."* With
+     * the phone's auto-rotate off, this is how the camera is turned: the whole
+     * interface goes with it, so every word stays upright.
+     */
+    private fun nextShoot() {
+        settings.shootMode = Mechanism.nextShoot(settings.shootMode)
+        applyShootMode()
+        refreshKeys()
+        say(when (settings.shootMode) {
+            1 -> "Shooting landscape"
+            2 -> "Shooting portrait"
+            else -> "Following the phone's rotation"
+        })
+    }
+
+    private fun applyShootMode() {
+        requestedOrientation = when (settings.shootMode) {
+            1 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+            2 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+            else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         }
-    } catch (t: Throwable) {
-        null
+    }
+
+    /**
+     * What the curve key calls the camera's own picture, truthfully.
+     *
+     * "Rec.709" was a lie in a ten bit session: with no log curve the picture
+     * is the phone's own HLG, the broadcast HDR curve with the soft highlight
+     * shoulder. HLG when ten bit, STD (the phone's standard SDR curve) when not.
+     */
+    private fun curveLabel(curve: LogCurves.Curve): String =
+        if (curve != LogCurves.Curve.REC709) curve.displayName
+        else if (pipeline.isRunning && pipeline.isTenBit) "HLG" else "STD"
+
+    /**
+     * The storage key: free space on the drive the takes go to, and how long
+     * can still be recorded there at the current bit rate.
+     */
+    private fun refreshStorage() {
+        if (!::storageKey.isInitialized) return
+        val free = Recordings.freeBytes(this, settings.recordFolder)
+        if (free == null) {
+            storageKey.label = "NO DRIVE"
+            storageKey.sub = null
+            storageKey.state = RailButton.State.ARMED
+            return
+        }
+        val left = Mechanism.secondsLeft(free, pipeline.videoBitRate.toLong(), 192_000L)
+        storageKey.label = Mechanism.formatFree(free)
+        storageKey.sub = Mechanism.formatTimeLeft(left)
+        storageKey.state = if (left < 10 * 60) RailButton.State.ARMED else RailButton.State.OFF
+    }
+
+    /** Record-run timecode, ticking ten times a second while a take runs. */
+    private val timecodeTick = object : Runnable {
+        override fun run() {
+            if (pipeline.isRecording) {
+                timecode.text = Mechanism.timecode(
+                    android.os.SystemClock.elapsedRealtime() - recordingSince, pipeline.fps
+                )
+                ui.postDelayed(this, 100)
+            }
+        }
+    }
+
+    private fun showTimecode(recording: Boolean) {
+        timecode.setTextColor(if (recording) android.graphics.Color.rgb(255, 59, 48)
+            else android.graphics.Color.argb(200, 220, 224, 228))
+        if (recording) { ui.removeCallbacks(timecodeTick); ui.post(timecodeTick) }
+        else ui.removeCallbacks(timecodeTick)
     }
 
     /**
@@ -1590,12 +1621,17 @@ class MainActivity : AppCompatActivity() {
             peak = peaking,
             peakColour = settings.peakColour,
             sensitivity = settings.peakSensitivity,
-            uploaded = cube
+            uploaded = cube,
+            falseColour = falseColour,
+            zebra = zebra,
+            zebraLevel = settings.zebraLevel
         )
         if (!ok) {
             say("This phone will not run the preview shader")
             Trace.refused("preview shader", "rejected by the graphics layer")
             peaking = false
+            falseColour = false
+            zebra = false
             activeSlot = 0
         }
     }
@@ -1625,7 +1661,7 @@ class MainActivity : AppCompatActivity() {
         peakKey.state = if (peaking) RailButton.State.ON else RailButton.State.OFF
         snapKey.state =
             if (pipeline.isRunning) RailButton.State.OFF else RailButton.State.DEAD
-        logKey.sub = LogCurves.Curve.entries[curveIndex].displayName.take(5)
+        logKey.sub = curveLabel(LogCurves.Curve.entries[curveIndex]).take(5)
         logKey.state =
             if (LogCurves.Curve.entries[curveIndex] == LogCurves.Curve.REC709)
                 RailButton.State.OFF
@@ -1633,8 +1669,6 @@ class MainActivity : AppCompatActivity() {
         manualKey.state = if (manual) RailButton.State.ON else RailButton.State.OFF
         manualKey.sub = if (manual) "MAN" else "AUTO"
         ctrlKey.state = if (zonesOn) RailButton.State.ON else RailButton.State.OFF
-        rotKey.sub = "${manualQuarterTurns * 90}"
-        rotKey.state = if (manualQuarterTurns == 0) RailButton.State.OFF else RailButton.State.ON
         ndiKey.sub = when (pipeline.mode) {
             CameraPipeline.Mode.HX -> "HX"
             CameraPipeline.Mode.FULL -> "FULL"
@@ -1648,31 +1682,19 @@ class MainActivity : AppCompatActivity() {
         }
         screenKey.state = if (fullScreen) RailButton.State.ON else RailButton.State.OFF
 
-        slotKeys.forEachIndexed { i, key ->
-            val index = slotFor(i + 1)
-            if (index == 0) {
-                // The last page of eleven is one slot and four blanks. Dark
-                // rather than hidden, so the rail keeps its shape.
-                key.label = ""
-                key.sub = null
-                key.state = RailButton.State.DEAD
-                return@forEachIndexed
-            }
-            val slot = slots.slot(index)
-            key.label = index.toString()
-            key.sub = slot.label?.take(4)
-            key.state =
-                if (activeSlot == index) RailButton.State.ON else RailButton.State.OFF
+        // The LUT switcher says which LUT is on, or OFF.
+        lutKey.sub = if (activeSlot > 0) slots.slot(activeSlot).label?.take(5) ?: "$activeSlot" else "OFF"
+        lutKey.state = when {
+            activeSlot > 0 -> RailButton.State.ON
+            slots.loadedCount() == 0 -> RailButton.State.DEAD
+            else -> RailButton.State.OFF
         }
-
-        // The page key carries which page it is on, because a rail showing
-        // 6..10 and a rail showing 1..5 look identical at a glance otherwise.
-        val last = slotPage == pageCount - 1
-        pageKey.glyph = if (last) RailButton.Glyph.UP else RailButton.Glyph.DOWN
-        pageKey.sub = "${slotPage + 1}/$pageCount"
-        pageKey.state =
-            if (activeSlot > 0 && (activeSlot - 1) / PAGE_SIZE != slotPage) RailButton.State.ARMED
-            else RailButton.State.OFF
+        falseKey.state = if (falseColour) RailButton.State.ON else RailButton.State.OFF
+        zebraKey.state = if (zebra) RailButton.State.ON else RailButton.State.OFF
+        zebraKey.sub = if (zebra) "${settings.zebraLevel}%" else null
+        shootKey.sub = when (settings.shootMode) { 1 -> "LAND"; 2 -> "PORT"; else -> "AUTO" }
+        shootKey.state = if (settings.shootMode == 0) RailButton.State.OFF else RailButton.State.ON
+        playKey.state = if (lastTakeUri() != null) RailButton.State.OFF else RailButton.State.DEAD
         gearKey.state = RailButton.State.OFF
 
         recKey.dead = !pipeline.isRunning

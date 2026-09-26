@@ -268,6 +268,7 @@ class CameraPipeline(private val context: Context) {
     ): Boolean {
         if (isRunning) stop()
         this.sourceName = sourceName
+        videoBitRate = bitRate
 
         val characteristics = try {
             characteristicsOf(cameraId, physicalId)
@@ -571,6 +572,15 @@ class CameraPipeline(private val context: Context) {
 
     // --- recording ------------------------------------------------------------
 
+    /** The last take started, for PLAY. */
+    var lastTakeUri: android.net.Uri? = null
+        private set
+
+    /** The bit rate the take is written at, for the time left on the drive. */
+    var videoBitRate: Int = BIT_RATE
+        private set
+
+
     /**
      * Starts a take, and makes the encoder live if the stream was not already.
      *
@@ -579,7 +589,7 @@ class CameraPipeline(private val context: Context) {
      *   and what is in the file cannot disagree.
      * @return where the file is going, or null with the reason traced and said.
      */
-    fun startRecording(context: Context, meter: AudioMeter?): String? {
+    fun startRecording(context: Context, meter: AudioMeter?, folder: String? = null): String? {
         if (isRecording) return takeName
         if (!isRunning) {
             listener?.onError("The camera is not open")
@@ -592,7 +602,7 @@ class CameraPipeline(private val context: Context) {
             return null
         }
 
-        val opened = Recordings.open(context) ?: run {
+        val opened = Recordings.open(context, folder = folder) ?: run {
             listener?.onError("The file could not be created")
             return null
         }
@@ -604,6 +614,7 @@ class CameraPipeline(private val context: Context) {
         }
 
         take = opened
+        lastTakeUri = opened.uri
         recorder = file
         isRecording = true
         takeName = opened.where

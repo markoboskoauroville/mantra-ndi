@@ -1574,6 +1574,69 @@ object Mechanism {
         return ((db - METER_FLOOR_DB) / -METER_FLOOR_DB).coerceIn(0f, 1f)
     }
 
+    // --- the professional readouts (v85) -----------------------------------------
+
+    /**
+     * Record-run timecode, HH:MM:SS:FF, from time since the take started.
+     *
+     * Frames are counted at the take's own rate, so at 25 fps the last field
+     * runs 00..24 and at 30 it runs 00..29, as on any camera's display.
+     */
+    fun timecode(elapsedMs: Long, fps: Int): String {
+        val f = fps.coerceAtLeast(1)
+        val totalFrames = (elapsedMs.coerceAtLeast(0) * f) / 1000
+        val frames = totalFrames % f
+        val seconds = totalFrames / f
+        return String.format(
+            java.util.Locale.ROOT, "%02d:%02d:%02d:%02d",
+            seconds / 3600, (seconds / 60) % 60, seconds % 60, frames
+        )
+    }
+
+    /**
+     * How long can still be recorded, in seconds, on [freeBytes] at the
+     * current video and audio bit rates. A little is kept back (1%, at least
+     * 50 MB) because a card written to its last byte ends a take without its
+     * index, which is a file that opens nowhere.
+     */
+    fun secondsLeft(freeBytes: Long, videoBitsPerSecond: Long, audioBitsPerSecond: Long): Long {
+        val rate = videoBitsPerSecond + audioBitsPerSecond
+        if (rate <= 0 || freeBytes <= 0) return 0
+        val reserve = maxOf(50L * 1024 * 1024, freeBytes / 100)
+        val usable = (freeBytes - reserve).coerceAtLeast(0)
+        return usable * 8 / rate
+    }
+
+    /** "412 GB", "9.4 GB", "780 MB": what fits in a key. */
+    fun formatFree(bytes: Long): String {
+        val mb = bytes / (1024.0 * 1024.0)
+        return when {
+            mb >= 100 * 1024 -> String.format(java.util.Locale.ROOT, "%.0f GB", mb / 1024)
+            mb >= 1024 -> String.format(java.util.Locale.ROOT, "%.1f GB", mb / 1024)
+            else -> String.format(java.util.Locale.ROOT, "%.0f MB", mb.coerceAtLeast(0.0))
+        }
+    }
+
+    /** "3:20 h", "47 min", "0 min": time left, as a camera shows it. */
+    fun formatTimeLeft(seconds: Long): String = when {
+        seconds >= 3600 -> String.format(java.util.Locale.ROOT, "%d:%02d h", seconds / 3600, (seconds / 60) % 60)
+        else -> "${(seconds / 60).coerceAtLeast(0)} min"
+    }
+
+    /**
+     * The LUT key: off, then each loaded LUT in slot order, then off again.
+     * @param loaded the slot numbers that hold a LUT
+     * @return the next slot, 0 for off
+     */
+    fun nextLut(current: Int, loaded: List<Int>): Int {
+        val sorted = loaded.filter { it > 0 }.sorted()
+        if (sorted.isEmpty()) return 0
+        return sorted.firstOrNull { it > current } ?: 0
+    }
+
+    /** SHOOT: 0 follows the phone, 1 landscape, 2 portrait, then back to 0. */
+    fun nextShoot(mode: Int): Int = ((mode % 3) + 3 + 1) % 3
+
     /**
      * CONSTANT FRAME RATE: which slot of an exact 1/fps grid a frame belongs in.
      *

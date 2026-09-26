@@ -53,6 +53,9 @@ object PreviewEffects {
         uniform half threshold;
         uniform half3 peakTint;
         uniform half lutSize;
+        uniform half useFalse;
+        uniform half useZebra;
+        uniform half zebraLevel;
 
 
         half luma(half4 c) {
@@ -96,6 +99,27 @@ object PreviewEffects {
                 half4 s0 = curve.eval(float2(b0 * lutSize + gx, gy));
                 half4 s1 = curve.eval(float2(b1 * lutSize + gx, gy));
                 rgb = mix(s0.rgb, s1.rgb, bf);
+            }
+
+            // FALSE COLOUR, measured on the picture as recorded (before the
+            // monitor LUT): purple crushed, blue near black, green middle
+            // grey, pink a stop over (skin), yellow nearly clipped, red
+            // clipped, everything else grey so the bands stand out.
+            half y = luma(c);
+            if (useFalse > 0.5) {
+                if (y < 0.025) rgb = half3(0.50, 0.00, 0.80);
+                else if (y < 0.10) rgb = half3(0.10, 0.30, 1.00);
+                else if (y > 0.38 && y < 0.42) rgb = half3(0.15, 0.85, 0.25);
+                else if (y > 0.52 && y < 0.56) rgb = half3(1.00, 0.45, 0.70);
+                else if (y > 0.99) rgb = half3(1.00, 0.10, 0.10);
+                else if (y > 0.97) rgb = half3(1.00, 0.90, 0.10);
+                else rgb = half3(y, y, y);
+            }
+
+            // ZEBRA: diagonal stripes over everything at or above the level.
+            if (useZebra > 0.5 && y >= zebraLevel) {
+                half band = fract((coord.x + coord.y) / 14.0);
+                rgb = band < 0.5 ? mix(rgb, half3(1.0), 0.65) : mix(rgb, half3(0.0), 0.65);
             }
 
             if (usePeak > 0.5 && edge > threshold) {
@@ -149,15 +173,18 @@ object PreviewEffects {
         peakColour: PeakColour = PeakColour.RED,
         sensitivity: Int = 50,
 
-        uploaded: CubeLut? = null
+        uploaded: CubeLut? = null,
+        falseColour: Boolean = false,
+        zebra: Boolean = false,
+        zebraLevel: Int = 95
     ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            return !lut && !peak
+            return !lut && !peak && !falseColour && !zebra
         }
         return try {
             // Nothing to correct on a picture that is already Rec.709.
             val wantLut = lut && uploaded != null
-            if (!wantLut && !peak) {
+            if (!wantLut && !peak && !falseColour && !zebra) {
                 view.setRenderEffect(null)
                 return true
             }
@@ -184,6 +211,9 @@ object PreviewEffects {
             shader.setFloatUniform("lutSize", (table?.size ?: 2).toFloat())
             shader.setFloatUniform("useLut", if (wantLut) 1f else 0f)
             shader.setFloatUniform("usePeak", if (peak) 1f else 0f)
+            shader.setFloatUniform("useFalse", if (falseColour) 1f else 0f)
+            shader.setFloatUniform("useZebra", if (zebra) 1f else 0f)
+            shader.setFloatUniform("zebraLevel", zebraLevel.coerceIn(50, 100) / 100f)
             // Higher sensitivity means a lower bar. A Sobel magnitude on
             // normalised luma runs to about 4 at a hard black to white edge,
             // so the usable range sits well below one.
