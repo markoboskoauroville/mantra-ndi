@@ -6,6 +6,48 @@ working state of *this* app.
 
 ---
 
+## 26.9.2026, evening: v83, Mantra Manual Camera, and what his first test found
+
+He tested v82 on the Pixel 7 and the Nothing Phone (2a): peaking works on the Nothing. Then:
+the take's sound is distorted and on the Nothing plays sped up (his file, measured with ffprobe);
+SNAP is nowhere to be found; a log curve freezes the Nothing; record HEVC; rename the app **Mantra
+Manual Camera** for Google Play at €22; the README becomes the store page; research NDI licensing;
+the Pixel is the priority; the webcam becomes a Mac companion because there is no Apple account.
+
+- **The sound.** `AacEncoder.feed` copied one input slot (1024 samples, 21.3 ms) out of each 40 ms
+  microphone read and stamped it on arrival, so half the sound was thrown away and the rest was
+  spread over the take. His file: 386 AAC frames, every one 40 ms after the last, 8.2 s of sound in
+  15.4 s. Now every byte is fed across as many slots as it needs, a slot is waited for rather than
+  skipped, and each is stamped from the sample count on the camera's own clock
+  (`SENSOR_INFO_TIMESTAMP_SOURCE`: the boot clock on the Pixel). Emulator take: 549 intervals, all
+  21.3 ms; 11.73 s of sound in 11.79 s of picture; "nothing dropped".
+- **HEVC for every take.** `preferHevc` was always false, so every 8-bit take was H.264. HEVC now,
+  H.264 only if HEVC refuses the size. One encoder still makes the take and the HX stream, so they
+  have the same bit rate (now 2 to 100 Mbit/s, default 24). The separate recording encoder, straight
+  from the sensor at its own rate, needs the GPU stage: a session has only three processed outputs.
+  That is Phase 4 (v86).
+- **SNAP is a PNG** of the picture at the camera's resolution, the way it is shown, without the
+  interface, in `DCIM/Mantra Manual Camera/` beside the takes.
+- **The log freeze.** A camera may accept a tone curve it cannot run and simply stop sending frames.
+  After a curve change the frames are counted; none within a second puts back the previous request
+  and says "not supported on this lens", and LOG skips that curve on that lens afterwards.
+- **The name.** Launcher, folders, release file and notes. The package id stays
+  `com.mantraproductions.ndi`: changing it makes a different app to Android and to Google Play.
+- **Research**: `NDI_LICENSING_AND_WEBCAM.md`. NDI HX needs a paid Advanced SDK contract with a
+  License ID and volume pricing (no published per-copy price); even the free SDK's license excludes
+  Android without a commercial agreement. The webcam: OBS's signed camera extension accepts frames from
+  any app, so a Swift companion needs no Apple account.
+
+**Tested.** 229 unit tests. CI signed with the pinned key. Emulator: v82 used, then v83 over it, box
+size and ROT kept; a 12 s take measured; SNAP PNG pulled and viewed; all six curves applied with no
+false alarm; monkey seed 83083, 20,000 events: no crash, no ANR, and all five takes it made open,
+HEVC, with no uneven audio frame.
+
+**Not tested.** The freeze fix on the Nothing itself (the emulator runs every curve). The Pixel's real
+microphone and 10-bit HEVC.
+
+---
+
 ## 26.9.2026 — v82, Phase 1 of the big update: the screen
 
 Marko sent fourteen features and fixes in one message. They are split into nine
