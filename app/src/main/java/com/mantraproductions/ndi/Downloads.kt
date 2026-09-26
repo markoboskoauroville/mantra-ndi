@@ -25,7 +25,7 @@ import java.io.OutputStream
  */
 object Downloads {
 
-    private const val FOLDER = "Mantra NDI"
+    private const val FOLDER = "Mantra Manual Camera"
 
     /**
      * Writes text into Downloads/Mantra NDI and answers where it went, or null

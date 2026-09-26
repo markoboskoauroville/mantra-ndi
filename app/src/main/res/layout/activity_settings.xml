@@ -90,7 +90,7 @@
             android:id="@+id/bitRate"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="48" />
+            android:max="98" />
 
         <!--
              Depth and size on one line.

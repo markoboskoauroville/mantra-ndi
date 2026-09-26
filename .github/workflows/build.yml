@@ -134,12 +134,12 @@ jobs:
           echo "PASS  all three numbers read $V"
 
           # versioning.md §2: the number is written at both ends of the filename.
-          cp "$APK" "$V-mantra-ndi-v$V.apk"
+          cp "$APK" "$V-mantra-manual-camera-v$V.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mantra-ndi-v${{ steps.version.outputs.v }}
-          path: ${{ steps.version.outputs.v }}-mantra-ndi-v${{ steps.version.outputs.v }}.apk
+          name: mantra-manual-camera-v${{ steps.version.outputs.v }}
+          path: ${{ steps.version.outputs.v }}-mantra-manual-camera-v${{ steps.version.outputs.v }}.apk
           if-no-files-found: error
 
       # The artefact is not delivered until it is downloadable without a token.
@@ -149,11 +149,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           V=${{ steps.version.outputs.v }}
-          FILE="$V-mantra-ndi-v$V.apk"
+          FILE="$V-mantra-manual-camera-v$V.apk"
           gh release delete "v$V" --yes --cleanup-tag 2>/dev/null || true
           gh release create "v$V" "$FILE" \
             --title "v$V" \
-            --notes "Mantra NDI v$V. Signed with the permanent key, so it updates over any earlier build carrying the same key.
+            --notes "Mantra Manual Camera v$V. Signed with the permanent key, so it updates over any earlier build carrying the same key.
 
           Certificate: $(cat fingerprint.txt)
 

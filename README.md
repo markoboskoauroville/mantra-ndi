@@ -1,11 +1,71 @@
 ### [Download the latest build](https://github.com/markoboskoauroville/mantra-ndi/releases/latest)
 
-# Mantra NDI
+# Mantra Manual Camera
 
-An Android broadcast camera for Baba's own phones over Wi-Fi. 10-bit HDR out of
-the phone's own pipeline, NDI HX or full NDI over the network, eleven LUT slots
-down one side and the camera's controls down the other, and a RAW still to the
-phone whenever the shot is worth keeping.
+**A broadcast camera in your pocket. Real manual control, real log, a clean feed, and NDI out, from
+the phone you already own.**
+
+Most camera apps give you either a pretty automatic picture or a wall of manual sliders. Mantra
+Manual Camera gives you both, parameter by parameter, and then sends the picture where a production
+needs it: to a card, to NDI, to a screen-share, to OBS.
+
+## Why it is worth €22
+
+**Manual where you want it, automatic where you don't.** ISO, shutter, focus and colour temperature
+each run on their own, on big mixer-style faders across the picture. Take one over and leave the rest
+to the camera: half manual. Take them all: full manual. No other phone camera lets you hand
+exposure to the camera while you pull focus yourself, on the same screen, with one thumb. *(Arriving in v84.)*
+
+**Log curves from the cinema cameras you grade alongside.** Sony S-Log3, Panasonic V-Log, ARRI LogC3
+and LogC4, Blackmagic Film Gen5, computed from the manufacturers' published equations, applied in
+the phone's own tone mapper, so they are in the file and on the stream, not just on the monitor.
+*Coming next:* automatic exposure that knows the curve and puts middle grey exactly where each
+manufacturer says it belongs.
+
+**10-bit HLG HEVC, straight from the phone's own silicon.** The ISP demosaics, the hardware encoder
+compresses. Every take is HEVC, which is half the size of H.264 at the same quality.
+
+**NDI HX and full NDI.** The phone appears as a camera in vMix, OBS, Wirecast, NDI Studio Monitor,
+anything that speaks NDI. Over Wi-Fi, or over a USB cable with no network at all.
+
+**A truly clean feed.** One key, FULL, and there is nothing on the glass but the picture: no keys, no
+meters, no system bars, no messages. Mirror the phone to a computer (screen copy, OBS) and the image
+is ready to broadcast as it is.
+
+**Focus you can point at.** Tap anywhere to focus there, even with the focus mark hidden. Pinch the
+focus mark from the size of an eye to the whole frame. A focus director that holds, then racks
+over a beat you choose instead of hunting like a phone.
+
+**Eleven monitor LUT slots and focus peaking.** Load your own .cube files, compare them with a tap,
+peak edges in the colour you choose. Both are drawn by the GPU on the monitor only, so the recording
+keeps its full range.
+
+**White balance like a cinema camera.** Kelvin from tungsten to daylight, anchored to the camera's own
+calibration so it never goes green. Double tap to take the camera's own reading once and keep it.
+*Coming next:* a grey-card sweep that finds the most neutral temperature by itself, and a companion
+app that calibrates the fader to a colour meter.
+
+**Every lens, one key each.** Wide, main, telephoto, selfie: whatever your phone physically has,
+and nothing it doesn't.
+
+**Honest when a phone can't.** A curve the lens cannot run, a size the encoder will not take, a lens
+with no focus motor: the app says so in words on the screen and carries on, instead of freezing or
+pretending.
+
+*Coming:* the phone as a webcam for a Mac (Zoom, Teams, Meet), tracking focus that follows a pattern
+across the frame, and a live settings preview.
+
+## Tested on
+
+**Google Pixel 7** is the reference phone: every feature is developed and tested on it first, and a
+feature is not called done until it works there. It is also tested on the Pixel 7 emulator before
+every release, with 20,000-touch stress runs. **Nothing Phone (2a)** is being tested. Phones differ
+in what their cameras will do, so the store version will have a **free trial**: try every feature on
+your own phone before you pay.
+
+---
+
+## For developers
 
 **Building a different NDI app from these repos?** Start with
 [NDI_ANDROID_GUIDE.md](NDI_ANDROID_GUIDE.md): the SDK, the build, the

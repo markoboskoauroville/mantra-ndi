@@ -14,14 +14,34 @@ import kotlin.concurrent.thread
  * buffers here, so what is metered and what is recorded are the same samples
  * and there is no second capture to go out of step with the first.
  *
- * Timestamps come from `System.nanoTime`, which is the clock a camera surface
- * stamps its frames with. Using the encoder's own arrival time instead is what
- * makes sound drift away from picture over a long take.
+ * **Timestamps are counted, not measured.** v82 stamped each buffer with the
+ * moment it arrived and copied only as much of it as one encoder slot would
+ * hold. The microphone hands over 40 ms at a time and a slot holds 21 ms, so
+ * half of every buffer was thrown away and the half that was kept was stamped
+ * 40 ms after the last: 8.2 s of sound spread over a 15.4 s take, which a
+ * player renders as crackle, or plays straight through as a sped-up voice.
+ * (Measured with ffprobe on his take of 26.9.2026: 386 AAC frames, every one
+ * 40 ms after the one before, each holding 21.3 ms.)
+ *
+ * Now every byte goes in, split across as many slots as it needs, and every
+ * slot is stamped from the number of samples before it: the first sample's
+ * time plus samples / 48000. The first sample's time is read on the clock the
+ * camera stamps its frames with ([clockNs]), so picture and sound agree.
  */
 class AacEncoder(
     private val sampleRate: Int = AudioMeter.SAMPLE_RATE,
-    private val bitRate: Int = 128_000
+    private val bitRate: Int = 192_000,
+    /** Now, in nanoseconds, on the camera's own clock. */
+    private val clockNs: () -> Long = { System.nanoTime() }
 ) {
+    /** Where the next sample falls, counted from the first. */
+    private var samples = 0L
+    private var firstUs = -1L
+
+    /** Bytes the encoder could not take in time. Said at the end of a take. */
+    @Volatile var droppedBytes = 0L
+        private set
+
     var onFormat: ((MediaFormat) -> Unit)? = null
     var onSample: ((ByteBuffer, MediaCodec.BufferInfo) -> Unit)? = null
 
@@ -56,14 +76,30 @@ class AacEncoder(
     fun feed(pcm: ByteArray, bytes: Int) {
         if (!running.get() || bytes <= 0) return
         val c = codec ?: return
+        if (firstUs < 0) {
+            // The buffer ends now; its first sample was its own length ago.
+            firstUs = clockNs() / 1000 - Mechanism.pcmDurationUs(bytes, sampleRate)
+        }
+        var offset = 0
         try {
-            val index = c.dequeueInputBuffer(2_000)
-            if (index < 0) return
-            val input = c.getInputBuffer(index) ?: return
-            input.clear()
-            input.put(pcm, 0, bytes.coerceAtMost(input.capacity()))
-            c.queueInputBuffer(index, 0, bytes.coerceAtMost(input.capacity()),
-                System.nanoTime() / 1000, 0)
+            while (offset < bytes && running.get()) {
+                // Waited for, not skipped: a slot is always free within a few
+                // milliseconds, and a skipped buffer is a hole in the sound.
+                val index = c.dequeueInputBuffer(20_000)
+                if (index < 0) {
+                    droppedBytes += (bytes - offset)
+                    samples += (bytes - offset) / 2
+                    return
+                }
+                val input = c.getInputBuffer(index) ?: return
+                input.clear()
+                val n = minOf(bytes - offset, input.capacity()) and 1.inv()
+                input.put(pcm, offset, n)
+                val ptsUs = firstUs + Mechanism.samplesToUs(samples, sampleRate)
+                c.queueInputBuffer(index, 0, n, ptsUs, 0)
+                samples += n / 2
+                offset += n
+            }
         } catch (t: Throwable) {
             // A codec that has been stopped underneath the reader thread throws
             // here once. It is not worth a trace line per buffer.
@@ -72,6 +108,10 @@ class AacEncoder(
 
     fun stop() {
         if (!running.getAndSet(false)) return
+        Trace.state(
+            "take's sound: " + String.format("%.2f", samples.toDouble() / sampleRate) + " s" +
+                (if (droppedBytes > 0) ", $droppedBytes bytes the encoder could not take" else ", nothing dropped")
+        )
         worker?.join(800)
         worker = null
         runCatching { codec?.stop() }

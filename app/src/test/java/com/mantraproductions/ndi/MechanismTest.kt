@@ -1128,4 +1128,24 @@ class MechanismTest {
         val r = Mechanism.streamRegionToArray(floatArrayOf(0f, 0f, 1f, 1f), 1000, 1000, 4000, 3000)
         assertArrayEquals(floatArrayOf(0.125f, 0f, 0.875f, 1f), r, 0.0001f)
     }
+
+    // --- the take's sound (v83) ------------------------------------------------
+
+    @Test fun oneAacFrameIsTwentyOnePointThreeMilliseconds() {
+        assertEquals(21_333L, Mechanism.samplesToUs(1024, 48_000))
+    }
+
+    @Test fun countedTimestampsNeverDriftOverAnHour() {
+        // An hour of 48 kHz in 1024-sample frames: exact to the microsecond.
+        assertEquals(3_600_000_000L, Mechanism.samplesToUs(48_000L * 3600, 48_000))
+    }
+
+    @Test fun fortyMillisecondBufferIsFortyMilliseconds() {
+        // The microphone's read on his phone: 3840 bytes of 16-bit mono.
+        assertEquals(40_000L, Mechanism.pcmDurationUs(3840, 48_000))
+    }
+
+    @Test fun noSampleRateIsNoTimeRatherThanACrash() {
+        assertEquals(0L, Mechanism.samplesToUs(1000, 0))
+    }
 }

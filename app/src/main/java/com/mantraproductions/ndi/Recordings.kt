@@ -33,7 +33,12 @@ import java.util.Locale
  */
 object Recordings {
 
-    private const val FOLDER = "Mantra NDI"
+    /**
+     * DCIM/Mantra Manual Camera: takes and stills together.
+     *
+     * The app's name since v83. Takes made before it stay in DCIM/Mantra NDI.
+     */
+    private const val FOLDER = "Mantra Manual Camera"
 
     /** An open recording: where it is going, and what to do when it is done. */
     class Take(
@@ -125,4 +130,54 @@ object Recordings {
 
     /** Where a person should look, for showing on screen. */
     fun folder(): String = Environment.DIRECTORY_DCIM + "/" + FOLDER
+
+    /**
+     * A still of the picture as a PNG, in the same folder as the takes.
+     *
+     * *"The file should be a PNG of the current screen inside the same folder
+     * where the video is."* The SNAP key wrote a DNG through the RAW target to
+     * a place nobody could find. It is the picture now, lossless, beside the
+     * takes, with the take's own naming so the two sort together.
+     *
+     * @return where it went, or null with the reason traced
+     */
+    fun savePng(context: Context, bitmap: android.graphics.Bitmap, at: Date = Date()): String? = try {
+        val name = "mantra-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.UK).format(at) + ".png"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = context.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/" + FOLDER)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: run { Trace.refused("still", "MediaStore would not make an entry"); return null }
+            val ok = resolver.openOutputStream(uri)?.use {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            } == true
+            if (!ok) {
+                runCatching { resolver.delete(uri, null, null) }
+                Trace.refused("still", "the PNG could not be written")
+                null
+            } else {
+                resolver.update(uri, ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }, null, null)
+                Environment.DIRECTORY_DCIM + "/" + FOLDER + "/" + name
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            val dir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), FOLDER
+            ).apply { mkdirs() }
+            File(dir, name).outputStream().use {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+            Environment.DIRECTORY_DCIM + "/" + FOLDER + "/" + name
+        }
+    } catch (t: Throwable) {
+        Trace.fault("still", t)
+        null
+    }
 }

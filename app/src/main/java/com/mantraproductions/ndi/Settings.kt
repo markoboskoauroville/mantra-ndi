@@ -61,8 +61,8 @@ class Settings(context: Context) {
      * has little left to gain above it. A dropped frame is worse than a soft one.
      */
     var bitRateMbps: Int
-        get() = prefs.getInt(BITRATE, 12)
-        set(value) = prefs.edit().putInt(BITRATE, value.coerceIn(2, 50)).apply()
+        get() = prefs.getInt(BITRATE, 24)
+        set(value) = prefs.edit().putInt(BITRATE, value.coerceIn(2, 100)).apply()
 
     /**
      * Quarter turns added to the preview by hand, kept between runs.

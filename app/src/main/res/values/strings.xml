@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Mantra NDI</string>
+    <string name="app_name">Mantra Manual Camera</string>
     <string name="starting">opening the camera…</string>
     <string name="ndi_mark">Powered by NDI®  ·  ndi.video  ·  a registered trademark of Vizrt NDI AB</string>
     <string name="settings">SETTINGS</string>
@@ -8,8 +8,8 @@
     <string name="ten_bit">Ten bit</string>
     <string name="ten_bit_hint">HLG10 on every streaming target, asked for before the session exists. If this phone will not give a 10-bit session the app falls back and the status line says so.</string>
     <string name="ten_bit_switch">Ask for 10-bit</string>
-    <string name="bitrate">Stream bitrate</string>
-    <string name="bitrate_hint">What the HX encoder is allowed. Chosen against the wire rather than the picture: a dropped frame is worse than a soft one.</string>
+    <string name="bitrate">Bit rate — the take and the HX stream</string>
+    <string name="bitrate_hint">One HEVC encoder makes both the file and the NDI HX stream, so this is the quality of both. 24 Mbit/s suits 1080p, 50 to 100 suits 4K. Over Wi-Fi keep HX modest; over the USB cable it can go high.</string>
     <string name="focus">Focus</string>
     <string name="focus_hint">How long the director holds before it will consider moving, and how long the move itself takes. Zero rack is a snap, for anybody who wants the phone to behave like a phone.</string>
     <string name="peaking">Peaking</string>

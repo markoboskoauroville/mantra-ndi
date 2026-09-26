@@ -505,6 +505,7 @@ class CaptureEngine(private val context: Context) {
             r: CaptureRequest,
             result: TotalCaptureResult
         ) {
+            framesCompleted++
             lastIso = result.get(CaptureResult.SENSOR_SENSITIVITY)
             lastExposureNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
             lastFocusDistance = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
@@ -613,13 +614,50 @@ class CaptureEngine(private val context: Context) {
      * frame: the camera was already tone mapping, it just uses ours instead.
      */
     fun setLogCurve(curve: LogCurves.Curve): Boolean {
+        val previous = activeCurve
+        val before = lastGood
         activeCurve = curve
         val request = builder ?: return false
         applyToneCurve(request)
         val ok = apply()
         Trace.control("log curve", curve.displayName, if (ok) "applied" else "refused")
+        if (!ok) { activeCurve = previous; return false }
+        watchForFreeze(curve, previous, before)
         return ok
     }
+
+    /**
+     * THE FREEZE ON THE NOTHING PHONE.
+     *
+     * A camera that cannot run a tone curve does not always refuse it. It can
+     * take the request and simply stop producing frames: no exception, no
+     * failed capture, a picture that stands still for ever. So after a curve
+     * change the frames are counted, and if none has arrived within a second
+     * the last working request goes back, the curve with it, and the screen
+     * is told, which is all that "not supported" can honestly mean.
+     */
+    private fun watchForFreeze(curve: LogCurves.Curve, previous: LogCurves.Curve, before: CaptureRequest?) {
+        val h = handler ?: return
+        val at = framesCompleted
+        h.postDelayed({
+            if (framesCompleted != at || session == null) return@postDelayed
+            Trace.refused("log curve", "${curve.displayName}: no frame for a second, put back ${previous.displayName}")
+            activeCurve = previous
+            builder?.let { applyToneCurve(it) }
+            runCatching {
+                val back = before ?: builder?.build()
+                back?.let { session?.setRepeatingRequest(it, captureCallback, handler) }
+                lastGood = back
+            }
+            onCurveRefused?.invoke(curve, previous)
+        }, 1000)
+    }
+
+    /** Frames the camera has delivered, for the freeze watch. */
+    @Volatile private var framesCompleted = 0L
+
+    /** Told when a curve froze the camera and was taken back. */
+    @Volatile var onCurveRefused: ((refused: LogCurves.Curve, back: LogCurves.Curve) -> Unit)? = null
 
     /**
      * The LUT that goes down the wire, or none.
@@ -746,6 +784,14 @@ class CaptureEngine(private val context: Context) {
      * place that knows how the picture is turned.
      */
     @Volatile var focusRegion: FloatArray? = null
+
+    /**
+     * Whether this lens stamps its frames on the boot clock (REALTIME) rather
+     * than the monotonic one. The sound of a take must use the same clock.
+     */
+    val timestampIsRealtime: Boolean
+        get() = characteristics?.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) ==
+            CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME
 
     /** The sensor's active array, in pixels: what a focus region is a fraction of. */
     fun activeArray(): android.graphics.Rect? =

@@ -15,23 +15,28 @@ Every phase below has three parts:
 
 ## The forecast
 
+**Replanned 26.9.2026, after his first test of v82 on the Pixel 7 and the Nothing Phone (2a).** He
+added: the take's sound is broken and plays sped up, SNAP must be a PNG beside the takes, a log curve
+freezes the Nothing, the app is renamed **Mantra Manual Camera** for Google Play at €22, the manual
+faders become thick mixer faders with A/M per parameter (half manual and full manual), the README
+becomes the store's advertisement, NDI licensing for a paid app is researched, the Pixel is the
+priority (never compromise it for another phone), and the webcam becomes a Mac companion app
+because there is no Apple developer account. The order is now:
+
 | Phase | Version | What it is |
 |---|---|---|
-| 1 | **v82** | The screen: pinch the focus box, tap to focus when the box is hidden, the F-stop in full screen, no toast, only real lenses, peaking works, WB double tap reads the camera |
-| 2 | **v83** | Settings with a live floating preview; screen rotation moves into settings |
-| 3 | **v84** | GPU instead of CPU, everywhere it can be |
-| 4 | **v85** | Automatic exposure that knows the log curve (the manufacturers' grey targets) |
-| 5 | **v86** | The WB key: a grey-card sweep across every temperature, snapping to the most neutral |
-| 6 | **v87** | HEVC for every recording, and 10-bit over NDI HX and full NDI |
-| 7 | **v88** | The phone as a webcam for the MacBook Pro, clean, over USB |
-| 8 | **v89** | The sister app (MANTRA_KELVIN v1) calibrates colour temperature; NDI camera imports it |
-| 9 | **v90** | Tracking focus: a pattern and a search zone, on the GPU |
+| 1 | v82 | The screen: pinch box, tap to focus hidden, F-stop, toast, real lenses, peaking, WB probe (**built, tested on the emulator**) |
+| 1b | **v83** | His test's faults: the take's sound, HEVC for every take, SNAP as PNG beside the takes, log freeze → "not supported", bit rate to 100, the rename, the README advertisement, NDI licensing researched |
+| 2 | **v84** | Mixer faders, thick, the number moving with the fader; **A / M per parameter**; modes AUTO, HM (half manual), FM (full manual); no more meaning in a double tap |
+| 3 | **v85** | Settings with a floating live preview; ROT moves there |
+| 4 | **v86** | The GPU stage: one camera output fanned out on the GPU to the monitor, the NDI encoder and **a separate recording HEVC encoder at its own high bit rate** (sensor to storage, not the stream); full NDI packed on the GPU; 10-bit full NDI (P216) |
+| 5 | **v87** | Automatic exposure that knows the log curve |
+| 6 | **v88** | The WB key: a grey-card sweep |
+| 7 | **v89** | The Mac companion app: the phone as a webcam in Zoom, no Apple developer account |
+| 8 | **v90** | MANTRA_KELVIN, the colour-temperature calibration app, and its import |
+| 9 | **v91** | Tracking focus on the GPU |
 
-**Forecast: the last version is v90**, provided every phase passes on the first build. The
-versioning rule (MANTRA_MANIFEST `modules/versioning.md`) gives every change a new number, so a fix
-round inside a phase takes the next number and every later phase moves up by one. Example: if Phase 1
-needs a second build, it becomes v83 and the forecast becomes v91. The table is updated when that
-happens.
+**Forecast: the last version is v91.** Every fix round adds one.
 
 ## The rules every phase follows
 
@@ -97,7 +102,42 @@ full mode.
 
 ---
 
-## Phase 2: settings with a live floating preview, rotation moves there (v83)
+## Phase 1b: what his first test found (v83)
+
+**The prompt** (his words, 26.9.2026, condensed).
+
+> The recording's sound is distorted, bits missing, crackling, and on the Nothing the file plays sped
+> up. SNAP should be a PNG of the picture in the same folder as the video. Record HEVC. On the Nothing,
+> changing log freezes the picture: say "not supported" instead. Rename the app **Mantra Manual
+> Camera**; it will be sold on Google Play for €22, so the README is its advertisement. Research
+> whether NDI can be paid per sold copy. The Pixel is the priority.
+
+**Done means.** A take's sound is continuous, in sync, at normal speed on both phones; `ffprobe` shows
+AAC frames 21.3 ms apart and as many seconds of sound as of picture. Takes are HEVC. SNAP writes
+`mantra-<date>.png` into `DCIM/Mantra Manual Camera`, beside the takes. A curve the lens cannot run
+comes back in about a second with "not supported", and LOG skips it after that. The launcher says
+Mantra Manual Camera.
+
+## Phase 2: mixer faders, A / M per parameter, half and full manual (v84)
+
+**The prompt.**
+
+> MANTRA_NDI Phase 2. Redesign the manual sliders to **look like faders on an audio mixer, very
+> thick**, in their zones, the number updating while the fader moves. Next to each fader an **A / M**
+> switch: that parameter automatic or manual. The global M key becomes a mode: **AUTO** (all
+> automatic), **HM** half manual (each parameter as its own A/M says), **FM** full manual. No gesture
+> may be ambiguous: a single tap focuses, a drag moves a fader, A/M is a button, and a double tap
+> means nothing any more. The WB probe becomes pressing M on WB while it is on A (the camera's
+> reading is taken, then held).
+
+**Done means.** Each fader is thick enough to grab without looking; each A/M switch works alone;
+HM shows exactly which are manual; the numbers move live; nothing happens on a double tap.
+
+**Tested before delivery.** Test 1: the mode rules (AUTO/HM/FM against the four A/M states) as pure
+functions. Emulator: drags on each fader, every A/M switch, modes cycled, screenshots; upgrade from
+v83 keeps each parameter's value; monkey.
+
+## Phase 3: settings with a live floating preview, rotation moves there (v85)
 
 **The prompt.**
 
@@ -123,11 +163,15 @@ never torn down.
 
 ---
 
-## Phase 3: the GPU instead of the CPU (v84)
+## Phase 4: the GPU stage and a separate recording encoder (v86)
 
 **The prompt.**
 
-> MANTRA_NDI Phase 3. **Anything this app does on the CPU that can be done on the GPU moves to the
+> MANTRA_NDI Phase 4. **The take is recorded straight from the sensor to storage by its own HEVC
+> encoder, at its own high bit rate, not copied from the NDI stream.** A camera session has at most
+> three processed outputs (preview, encoder, full-NDI reader), so a second encoder needs one camera
+> output fanned out on the GPU. Keep 10-bit through it (HLG, P010 external texture, RGBA1010102/
+> BT.2020 EGL surfaces, as Media3 does on Android 13+); prove it on the Pixel first. And **anything this app does on the CPU that can be done on the GPU moves to the
 > GPU.** Audit every per-frame path: full NDI frame packing, the sharpness measurement the focus
 > director reads, the histogram and scopes, the LUT and peaking (already a GPU shader), white-balance
 > analysis. Move each one that is per-frame work to shaders (GLES 3 or Vulkan compute, or
@@ -149,7 +193,7 @@ colour from the preview. This phase builds the GPU stage that Phases 5, 6 and 9 
 
 ---
 
-## Phase 4: automatic exposure that knows the log curve (v85)
+## Phase 5: automatic exposure that knows the log curve (v87)
 
 **The prompt.**
 
@@ -174,7 +218,7 @@ too coarse, a closed loop that meters the box and drives manual ISO/shutter to t
 
 ---
 
-## Phase 5: the WB key, a grey-card sweep (v86)
+## Phase 6: the WB key, a grey-card sweep (v88)
 
 **The prompt.**
 
@@ -199,7 +243,7 @@ a fine one takes about two seconds at 30 fps.
 
 ---
 
-## Phase 6: HEVC for every recording, and 10-bit NDI HX and full (v87)
+## Phase 4b: 10-bit NDI HX and full (now part of Phase 4, v86; HEVC for every take moved to v83)
 
 **The prompt.**
 
@@ -222,14 +266,17 @@ second camera output. If the phone still refuses, the phase says so with the tra
 
 ---
 
-## Phase 7: the phone as a webcam for the MacBook Pro (v88)
+## Phase 7: the phone as a webcam for the MacBook Pro (v89)
 
 **The prompt.**
 
-> MANTRA_NDI Phase 7. I want the **clean output of this camera as a webcam on my MacBook Pro** over
-> the USB cable, so I can pick it in Zoom. In settings I enable Webcam, plug in, and the Mac sees it.
-> Build it in the best possible quality, from 10-bit 4K downwards, and tell me every setting I need
-> on the phone and on the Mac.
+> MANTRA_NDI Phase 7. I want the **clean output of this camera as a webcam on my MacBook Pro**, so I
+> can pick it in Zoom. **I have no Apple developer account**, so build a **Swift companion app for the
+> Mac** that finds the phone by itself (NDI discovery, or the USB cable) and hands its picture to a
+> virtual camera that is already signed (NDI Tools' own virtual input, or OBS's virtual camera, used
+> without OBS running if its camera extension accepts frames from another app); reuse OBS's open
+> code where it helps. As few clicks as possible: install once, then plug in and it is there. Best
+> quality from 10-bit 4K downwards. Tell me every setting on the phone and on the Mac.
 
 **Done means.** With the cable in and Webcam on, Zoom on the Mac lists a camera that shows the clean
 feed (no rails, the LUT if chosen), at the best size Zoom accepts, and it survives unplugging and
@@ -252,7 +299,7 @@ phase says this plainly.
 
 ---
 
-## Phase 8: the sister app calibrates colour temperature (MANTRA_KELVIN v1, NDI camera v89)
+## Phase 8: the sister app calibrates colour temperature (MANTRA_KELVIN v1, camera v90)
 
 **The prompt.**
 
@@ -280,7 +327,7 @@ and stores (reference K, the camera's gains, its estimated K). The NDI camera's 
 
 ---
 
-## Phase 9: tracking focus (v90)
+## Phase 9: tracking focus (v91)
 
 **The prompt.**
 
@@ -316,4 +363,5 @@ a small model on the AI cores is the upgrade path, and the doc will say so then.
 | Date | Version | Phase | Result |
 |---|---|---|---|
 | 26.9.2026 | v81 | — | Document written; Phase 1 started |
-| 26.9.2026 | v82 | 1 | Built by CI, tested on the Pixel 7 emulator (four tests, monkey 20,000). **Waiting for Marko's confirmation on his phone** |
+| 26.9.2026 | v82 | 1 | Built by CI, tested on the Pixel 7 emulator (four tests, monkey 20,000) |
+| 26.9.2026 | v83 | 1b | His test: peaking works on the Nothing; the take's sound lost half of every buffer (ffprobe: 386 AAC frames 40 ms apart, 8.2 s of sound in 15.4 s); SNAP unfindable; log froze the Nothing. All fixed in v83 |

@@ -52,10 +52,16 @@ class HdrVideoEncoder(
     @Volatile var onEncodedFormat: ((MediaFormat) -> Unit)? = null
     @Volatile var onEncodedSample: ((ByteBuffer, MediaCodec.BufferInfo) -> Unit)? = null
 
-    /** True once configured: ten bit forces HEVC, since AVC has no Main10 here. */
+    /**
+     * HEVC for every take, eight bit included: the same picture in about half
+     * the bytes of H.264. *"Please enforce HEVC pipelines in my application so
+     * when I record video it is stored in a more efficient codec."* Until v82
+     * this was always false, so every eight bit take was H.264. H.264 is now
+     * only the fallback for a phone whose HEVC encoder refuses the size.
+     */
     val isHevc: Boolean get() = tenBit || preferHevc
 
-    private var preferHevc = false
+    private var preferHevc = supportsHevc()
 
     /**
      * @return the surface the camera session should target, or null if this
@@ -103,6 +109,12 @@ class HdrVideoEncoder(
             surface
         } catch (e: Exception) {
             Log.e(TAG, "Could not start a ${if (tenBit) "10-bit HEVC" else "8-bit"} encoder", e)
+            if (preferHevc && !tenBit) {
+                // Eight bit HEVC refused at this size: H.264, said in the trace.
+                Trace.refused("HEVC encoder", "refused ${width}x$height, falling back to H.264")
+                preferHevc = false
+                return start()
+            }
             null
         }
     }
@@ -208,6 +220,17 @@ class HdrVideoEncoder(
          * session is built, because a refused encoder after the camera is open
          * is a black screen the operator has to diagnose.
          */
+        /** Whether this phone has any HEVC encoder at all. */
+        fun supportsHevc(): Boolean = try {
+            android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+                .codecInfos.any { info ->
+                    info.isEncoder &&
+                        info.supportedTypes.any { it.equals(MediaFormat.MIMETYPE_VIDEO_HEVC, true) }
+                }
+        } catch (e: Exception) {
+            false
+        }
+
         fun supportsTenBit(): Boolean = try {
             val list = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
             list.codecInfos.any { info ->

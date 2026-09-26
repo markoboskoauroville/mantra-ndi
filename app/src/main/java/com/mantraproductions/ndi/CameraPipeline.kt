@@ -65,7 +65,7 @@ class CameraPipeline(private val context: Context) {
     private var encoderSurface: Surface? = null
     private var fullReader: ImageReader? = null
     private var fullThread: HandlerThread? = null
-    private var sourceName: String = "Mantra NDI"
+    private var sourceName: String = "Mantra Manual Camera"
 
     /**
      * The longest side to ask the camera for. 1920 unless settings say else.
@@ -613,7 +613,12 @@ class CameraPipeline(private val context: Context) {
         encodedVideoFormat?.let { file.setVideoFormat(it) }
 
         if (meter != null) {
-            val aac = AacEncoder()
+            // The sound is stamped on the clock the camera stamps its frames
+            // with: the boot clock on most phones, including the Pixel.
+            val realtime = engine.timestampIsRealtime
+            val aac = AacEncoder(clockNs = {
+                if (realtime) SystemClock.elapsedRealtimeNanos() else System.nanoTime()
+            })
             aac.onFormat = { format -> recorder?.setAudioFormat(format) }
             aac.onSample = { buffer, info -> recorder?.writeAudio(buffer, info) }
             if (aac.start()) {

@@ -1574,6 +1574,13 @@ object Mechanism {
         return ((db - METER_FLOOR_DB) / -METER_FLOOR_DB).coerceIn(0f, 1f)
     }
 
+    /** Microseconds of sound in [samples] samples, exact to the microsecond. */
+    fun samplesToUs(samples: Long, sampleRate: Int): Long =
+        if (sampleRate <= 0) 0L else samples * 1_000_000L / sampleRate
+
+    /** Microseconds of 16-bit mono PCM in [bytes]. */
+    fun pcmDurationUs(bytes: Int, sampleRate: Int): Long = samplesToUs(bytes / 2L, sampleRate)
+
     /** RMS of 16 bit little endian PCM, sampling every [stride] bytes. */
     fun rmsOfPcm16(pcm: ByteArray, stride: Int = 4): Float {
         var sumSquares = 0.0

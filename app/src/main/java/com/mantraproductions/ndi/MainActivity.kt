@@ -277,6 +277,15 @@ class MainActivity : AppCompatActivity() {
         // so it is always one long press away rather than behind a menu.
         status.setOnLongClickListener { exportTrace(); true }
 
+        pipeline.engine.onCurveRefused = { refused, back ->
+            ui.post {
+                curveIndex = back.ordinal
+                refusedCurves.add(lensKey() + "/" + refused.name)
+                say("${refused.displayName} is not supported on this lens — back to ${back.displayName}")
+                refreshKeys()
+            }
+        }
+
         pipeline.listener = object : CameraPipeline.Listener {
             override fun onReady(tenBit: Boolean, codec: String, size: Size) {
                 ui.post {
@@ -964,20 +973,46 @@ class MainActivity : AppCompatActivity() {
         refreshKeys()
     }
 
+    /**
+     * SNAP: the picture as a PNG, beside the takes.
+     *
+     * Taken from the preview at the camera's own resolution rather than the
+     * screen's, the right way up, without the rails, the zones, the peaking
+     * or the monitor LUT (those are on the View, not in the texture). The
+     * compression is off the main thread: a 4K PNG takes most of a second.
+     */
     private fun takeSnap() {
-        if (!pipeline.snapAvailable) { say("No RAW target in this session"); return }
+        if (!pipeline.isRunning || !preview.isAvailable) { say("The camera is not open"); return }
+        val vw = preview.width
+        val vh = preview.height
+        if (vw <= 0 || vh <= 0) return
+        val long = maxOf(bufferSize.width, bufferSize.height)
+        val (w, h) = if (vw >= vh) long to (long.toLong() * vh / vw).toInt()
+                     else (long.toLong() * vw / vh).toInt() to long
+        val bitmap = runCatching { preview.getBitmap(w, h) }.getOrNull()
+            ?: run { say("The picture could not be read"); return }
         snapKey.state = RailButton.State.ARMED
-        val rotation = ((pipeline.engine.sensorOrientation) % 360 + 360) % 360
-        pipeline.snap.take(pipeline.engine, rotation) { path ->
+        Thread({
+            val where = Recordings.savePng(this, bitmap)
+            bitmap.recycle()
             ui.post {
                 refreshKeys()
-                say(if (path != null) "snap → $path" else "snap failed, see the trace")
+                say(if (where != null) "Still → $where" else "The still was not written, see the trace")
             }
-        }
+        }, "still-png").start()
+        Trace.control("still", "${w}x$h", "PNG")
     }
 
+    /** Curves a lens froze on, "lens/CURVE": stepped over from then on. */
+    private val refusedCurves = mutableSetOf<String>()
+
     private fun nextCurve() {
-        curveIndex = (curveIndex + 1) % LogCurves.Curve.entries.size
+        val count = LogCurves.Curve.entries.size
+        for (step in 1..count) {
+            curveIndex = (curveIndex + 1) % count
+            val name = LogCurves.Curve.entries[curveIndex].name
+            if (lensKey() + "/" + name !in refusedCurves) break
+        }
         val curve = LogCurves.Curve.entries[curveIndex]
         val ok = pipeline.setLogCurve(curve)
         say(if (ok) "${curve.vendor} ${curve.displayName}" else "${curve.displayName} refused")
@@ -1589,7 +1624,7 @@ class MainActivity : AppCompatActivity() {
             else RailButton.State.OFF
         peakKey.state = if (peaking) RailButton.State.ON else RailButton.State.OFF
         snapKey.state =
-            if (pipeline.snapAvailable) RailButton.State.OFF else RailButton.State.DEAD
+            if (pipeline.isRunning) RailButton.State.OFF else RailButton.State.DEAD
         logKey.sub = LogCurves.Curve.entries[curveIndex].displayName.take(5)
         logKey.state =
             if (LogCurves.Curve.entries[curveIndex] == LogCurves.Curve.REC709)
