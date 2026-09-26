@@ -1495,7 +1495,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun nextLut() {
         val loaded = (1..LutSlots.COUNT).filter { slots.slot(it).loaded }
-        if (loaded.isEmpty()) { say("No LUTs loaded — add them in settings (hold LUT)"); return }
+        // An empty library is not a dead key: it is the way in to filling it.
+        if (loaded.isEmpty()) { say("No LUTs yet — add one in settings"); openSettings(); return }
         activeSlot = Mechanism.nextLut(activeSlot, loaded)
         applyLook()
         refreshKeys()
@@ -1684,11 +1685,8 @@ class MainActivity : AppCompatActivity() {
 
         // The LUT switcher says which LUT is on, or OFF.
         lutKey.sub = if (activeSlot > 0) slots.slot(activeSlot).label?.take(5) ?: "$activeSlot" else "OFF"
-        lutKey.state = when {
-            activeSlot > 0 -> RailButton.State.ON
-            slots.loadedCount() == 0 -> RailButton.State.DEAD
-            else -> RailButton.State.OFF
-        }
+        lutKey.state = if (activeSlot > 0) RailButton.State.ON else RailButton.State.OFF
+        if (activeSlot == 0 && slots.loadedCount() == 0) lutKey.sub = "ADD"
         falseKey.state = if (falseColour) RailButton.State.ON else RailButton.State.OFF
         zebraKey.state = if (zebra) RailButton.State.ON else RailButton.State.OFF
         zebraKey.sub = if (zebra) "${settings.zebraLevel}%" else null

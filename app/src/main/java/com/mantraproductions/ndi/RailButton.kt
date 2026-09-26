@@ -120,6 +120,13 @@ class RailButton @JvmOverloads constructor(
             return
         }
 
+        // SHRINK TO FIT. Eleven keys across a phone held upright left
+        // "SHOOT", "FALSE" and "ZEBRA" clipped at both ends (v85 on the
+        // emulator). A word is drawn at its full size when it fits, and
+        // smaller, never clipped, when it does not.
+        fit(word, label, density(13f))
+        sub?.let { fit(whisper, it, density(9f)) }
+
         val hasSub = !sub.isNullOrBlank()
         val metrics = word.fontMetrics
         val centre = height / 2f
@@ -131,6 +138,13 @@ class RailButton @JvmOverloads constructor(
                 label, width / 2f, centre - (metrics.ascent + metrics.descent) / 2f, word
             )
         }
+    }
+
+    private fun fit(paint: Paint, text: String, full: Float) {
+        paint.textSize = full
+        val room = width - density(3f)
+        val needed = paint.measureText(text)
+        if (needed > room && needed > 0f) paint.textSize = (full * room / needed).coerceAtLeast(density(6f))
     }
 
     private val mark = Paint(Paint.ANTI_ALIAS_FLAG).apply {
