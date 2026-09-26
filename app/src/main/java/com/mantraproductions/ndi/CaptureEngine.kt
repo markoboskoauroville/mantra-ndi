@@ -522,6 +522,22 @@ class CaptureEngine(private val context: Context) {
                     autoTransform = it
                 }
             }
+            // The probe: count the frames down and answer once the camera's
+            // own algorithm has had time to settle on this light.
+            if (probeFrames > 0) {
+                probeFrames -= 1
+                if (probeFrames == 0) {
+                    val waiting = onProbe
+                    onProbe = null
+                    val kelvin = measuredKelvin()
+                    Trace.control(
+                        "white balance probe",
+                        "the camera's own answer",
+                        kelvin?.let { "${it}K" } ?: "this sensor publishes no calibration"
+                    )
+                    waiting?.invoke(kelvin)
+                }
+            }
             // What the camera says it did with the last change, once, so a
             // picture that goes green names which half did it.
             if (reportWhiteBalance) {
@@ -725,6 +741,17 @@ class CaptureEngine(private val context: Context) {
     private var pendingFocus: ((Boolean) -> Unit)? = null
 
     /**
+     * The focus box in the sensor's coordinates, left, top, right, bottom as
+     * fractions of the active array. Set by the screen, which is the only
+     * place that knows how the picture is turned.
+     */
+    @Volatile var focusRegion: FloatArray? = null
+
+    /** The sensor's active array, in pixels: what a focus region is a fraction of. */
+    fun activeArray(): android.graphics.Rect? =
+        characteristics?.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+
+    /**
      * One autofocus search at a point, reported when it settles.
      *
      * The point is a fraction of the frame; the camera wants it in sensor
@@ -737,11 +764,18 @@ class CaptureEngine(private val context: Context) {
         val array = characteristics?.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
             ?: return false
 
-        val half = 0.08f
-        val left = ((x - half).coerceIn(0f, 1f) * array.width()).toInt()
-        val top = ((y - half).coerceIn(0f, 1f) * array.height()).toInt()
-        val right = ((x + half).coerceIn(0f, 1f) * array.width()).toInt()
-        val bottom = ((y + half).coerceIn(0f, 1f) * array.height()).toInt()
+        // The box as drawn, turned into the sensor's own coordinates by the
+        // screen. Until v82 this was a fixed patch of 16% round the point,
+        // taken as if screen and sensor were the same way up, so the box's size
+        // meant nothing and a tap upright focused somewhere else.
+        val r = focusRegion ?: run {
+            val half = 0.08f
+            floatArrayOf(x - half, y - half, x + half, y + half)
+        }
+        val left = (r[0].coerceIn(0f, 1f) * array.width()).toInt()
+        val top = (r[1].coerceIn(0f, 1f) * array.height()).toInt()
+        val right = (r[2].coerceIn(0f, 1f) * array.width()).toInt()
+        val bottom = (r[3].coerceIn(0f, 1f) * array.height()).toInt()
         val region = MeteringRectangle(
             Rect(left, top, maxOf(right, left + 1), maxOf(bottom, top + 1)),
             MeteringRectangle.METERING_WEIGHT_MAX
@@ -1046,6 +1080,52 @@ class CaptureEngine(private val context: Context) {
             colourCharacteristics() != null
 
     /**
+     * **Push-auto white balance: ask the camera what it thinks, then keep the
+     * answer as a number.**
+     *
+     * *"When I double click I don't want it to go to auto mode. I want it to
+     * read the right white balance from auto mode and then move the slider to
+     * that position, so the white balance looks the same — and I can see
+     * exactly how many Kelvin that is."*
+     *
+     * This is what the button marked AWB does on a real camera, and it is not
+     * the same thing as switching auto on. Auto is the camera deciding again
+     * every frame, which is exactly what an operator lighting a scene does not
+     * want. A probe is the camera deciding **once**, at a moment he chooses,
+     * with the result handed over as a temperature that will then sit still.
+     *
+     * The camera's own algorithm has to be running to have an answer, so AWB
+     * goes back on for a few frames and is read out of the capture result the
+     * moment it has settled. The picture may shift slightly for that half
+     * second; it settles exactly where the probe leaves it, because the
+     * temperature that comes back is applied through the anchor and the anchor
+     * is the very measurement just taken.
+     */
+    fun probeWhiteBalance(frames: Int = 20, onResult: (Int?) -> Unit): Boolean {
+        val request = builder ?: run {
+            Trace.refused("white balance probe", "the camera has no request to change")
+            return false
+        }
+        onProbe = onResult
+        probeFrames = frames.coerceIn(3, 90)
+        manualWhiteBalance = false
+        request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+        request.set(
+            CaptureRequest.COLOR_CORRECTION_MODE,
+            CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY
+        )
+        val ok = apply()
+        if (!ok) {
+            onProbe = null
+            probeFrames = 0
+            Trace.refused("white balance probe", "the camera refused to go back to auto")
+        } else {
+            Trace.control("white balance probe", "started", "$probeFrames frames")
+        }
+        return ok
+    }
+
+    /**
      * What the camera's own white balance amounts to, in Kelvin.
      *
      * So that taking white balance over starts from where the camera had got
@@ -1105,6 +1185,10 @@ class CaptureEngine(private val context: Context) {
 
     /** True while the camera's own white balance has been measured at least once. */
     val whiteBalanceAnchored: Boolean get() = autoGains != null
+
+    /** Frames still to wait for while the camera's own answer settles. */
+    @Volatile private var probeFrames = 0
+    @Volatile private var onProbe: ((Int?) -> Unit)? = null
 
     /**
      * A colour temperature, tungsten to daylight.

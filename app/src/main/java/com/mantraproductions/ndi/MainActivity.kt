@@ -228,10 +228,13 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
+        focusSquare.size = settings.focusBoxSize
         focusSquare.onMoved = { x, y ->
             focus.target = x to y
             focus.bounds = focusSquare.normalisedBounds()
+            updateFocusRegion()
         }
+        focusSquare.onResized = { size -> settings.focusBoxSize = size }
         focusSquare.onTapped = { focus.focusHereAndHold() }
 
         onBackPressedDispatcher.addCallback(this, leaveFullScreen)
@@ -242,6 +245,18 @@ class MainActivity : AppCompatActivity() {
             object : android.view.GestureDetector.SimpleOnGestureListener() {
                 override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
                     setFullScreen(false)
+                    return true
+                }
+                // One tap focuses where it lands, box or no box. Confirmed
+                // single, so the first half of the double tap never racks.
+                override fun onSingleTapConfirmed(e: android.view.MotionEvent): Boolean {
+                    val picture = findViewById<View>(R.id.picture)
+                    val at = IntArray(2)
+                    picture.getLocationOnScreen(at)
+                    val x = (e.rawX - at[0]) / picture.width.coerceAtLeast(1)
+                    val y = (e.rawY - at[1]) / picture.height.coerceAtLeast(1)
+                    // The black round the picture is not a place to focus on.
+                    if (x in 0f..1f && y in 0f..1f) focusAt(x, y)
                     return true
                 }
                 override fun onDown(e: android.view.MotionEvent) = true
@@ -255,6 +270,8 @@ class MainActivity : AppCompatActivity() {
         zones.onDrag = { index, delta -> nudge(index, delta) }
         zones.onGrab = { refreshZones() }
         zones.onDoubleTap = { index -> handToCamera(index) }
+        zones.onHold = { index -> handToCameraForGood(index) }
+        zones.onSingleTap = { x, y -> focusAt(x, y) }
 
         // The trace is the only instrument that reaches a phone with no cable,
         // so it is always one long press away rather than behind a menu.
@@ -342,7 +359,10 @@ class MainActivity : AppCompatActivity() {
     // --- the rails -----------------------------------------------------------
 
     private fun buildRails() {
-        for (i in 1..4) {
+        // As many lens keys as this phone has lenses, and no more. Four were
+        // always drawn with the missing ones dark; a key for a lens that does
+        // not exist is not a control.
+        for (i in 1..lenses.size) {
             val key = newKey("L$i") { chooseLens(i - 1) }
             lensKeys.add(key)
             railLeft.addView(key)
@@ -830,6 +850,52 @@ class MainActivity : AppCompatActivity() {
             (if (kotlin.math.abs(squeeze - 1.0) > 0.01) "  STRETCHED" else "")
         geometry.text = line
         Trace.control("preview geometry", line, applied)
+        updateFocusRegion()
+    }
+
+    /**
+     * The focus box, handed to the camera in the sensor's own coordinates.
+     *
+     * Recomputed whenever the box moves or is pinched and whenever the picture
+     * is turned, because those are the three things that change which part of
+     * the sensor is under the box.
+     */
+    private fun updateFocusRegion() {
+        if (!pipeline.isRunning) return
+        val engine = pipeline.engine
+        val displayDegrees = when (
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display?.rotation
+            else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
+        ) {
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+        val front = engine.isFrontFacing
+        val degrees = Mechanism.sensorToViewDegrees(
+            engine.sensorOrientation, displayDegrees, front, manualQuarterTurns
+        )
+        val b = focusSquare.normalisedBounds()
+        val onStream = Mechanism.viewRegionToSensor(b[0], b[1], b[2], b[3], degrees, front)
+        val array = engine.activeArray()
+        engine.focusRegion = if (array == null) onStream else Mechanism.streamRegionToArray(
+            onStream, bufferSize.width, bufferSize.height, array.width(), array.height()
+        )
+    }
+
+    /**
+     * Focus on a point of the picture, whether or not the box is showing.
+     *
+     * The box goes there too, invisibly, so that when it comes back it is on
+     * what was focused on, and its size is the size of the region used.
+     */
+    private fun focusAt(x: Float, y: Float) {
+        if (!pipeline.isRunning) return
+        focusSquare.placeAt(x, y)
+        Trace.control("focus tap", String.format("%.2f,%.2f", x, y),
+            if (fullScreen) "clean feed" else if (zonesOn) "zones up" else "box")
+        focus.focusHereAndHold()
     }
 
     /**
@@ -1053,10 +1119,99 @@ class MainActivity : AppCompatActivity() {
                 }
                 else -> say("Focus: already the camera's own")
             }
+            // White balance is the one that does NOT go back to auto here.
+            3 -> probeWhiteBalance()
+        }
+        refreshZones()
+    }
+
+    /**
+     * **Push-auto white balance.** Ask the camera once, keep the number.
+     *
+     * *"I don't want it to go to auto mode. I want it to read the right white
+     * balance from auto and move the slider to that position, so the white
+     * balance looks the same — and I can see exactly how many Kelvin that is."*
+     *
+     * This is the AWB button on a real camera, and it is not the same thing as
+     * switching auto on: auto is the camera deciding again every frame, which
+     * is what an operator lighting a scene is trying to stop. A probe is the
+     * camera deciding **once**, at a moment he chooses, with the answer left on
+     * the fader as a number that will then sit still.
+     *
+     * The picture does not jump at the end of it, because the temperature that
+     * comes back is applied through the anchor, and the anchor is the very
+     * measurement just taken.
+     */
+    private fun probeWhiteBalance() {
+        if (!pipeline.isRunning) { say("The camera is not open"); return }
+        say("Reading the camera's white balance…")
+        val ticket = ++probeTicket
+        // A deadline, because an answer that never comes (the lens changed,
+        // the session died) would leave "Reading…" on the screen for ever.
+        ui.postDelayed({
+            if (probeTicket == ticket) {
+                probeTicket++
+                say("The camera gave no white balance reading — try again")
+                Trace.refused("white balance probe", "no answer within 3 s")
+            }
+        }, 3000)
+        val started = pipeline.engine.probeWhiteBalance { kelvin ->
+            ui.post {
+                // Late, after the deadline or a newer probe: not this one's answer.
+                if (probeTicket != ticket) return@post
+                probeTicket++
+                if (kelvin == null) {
+                    // No calibration to turn gains into a temperature. The
+                    // camera's own answer is still on the picture, so it is
+                    // left there rather than replaced by a number invented
+                    // here — a fader that lies is worse than one that stops.
+                    wbAuto = true
+                    say("This sensor publishes no calibration — left on the camera's own")
+                } else {
+                    wbKelvin = kelvin
+                    wbAuto = false
+                    pipeline.engine.setWhiteBalanceKelvin(kelvin)
+                    say("White balance measured: ${WhiteBalance.format(kelvin)}, now manual")
+                }
+                refreshZones()
+                refreshKeys()
+            }
+        }
+        if (!started) {
+            probeTicket++
+            say("The camera would not take a white balance reading")
+        }
+    }
+
+    /** Which probe is waiting; anything else arriving is stale. */
+    private var probeTicket = 0
+
+    /**
+     * A zone held down: the camera takes it back and goes on deciding.
+     *
+     * The gesture that cannot happen by accident, for the state an operator
+     * asks for least often. On white balance this is the only route back to
+     * continuous auto, because the double tap now measures instead.
+     */
+    private fun handToCameraForGood(index: Int) {
+        val engine = pipeline.engine
+        when (index) {
+            0, 1 -> {
+                if (manual) toggleManual()
+                say("Exposure: the camera's own, continuously")
+            }
+            2 -> when {
+                !engine.supportsManualFocus() -> sayFixedFocus()
+                focus.mode != FocusDirector.Mode.AUTO -> {
+                    toggleAutoFocus()
+                    say("Focus: the camera's own, continuously")
+                }
+                else -> say("Focus: already the camera's own")
+            }
             3 -> {
                 wbAuto = true
                 engine.setAutoWhiteBalance()
-                say("White balance: the camera's own")
+                say("White balance: the camera's own, continuously")
                 refreshKeys()
             }
         }
@@ -1167,7 +1322,10 @@ class MainActivity : AppCompatActivity() {
         )
 
         iris.text = apertures.firstOrNull()?.let { String.format("IRIS  f/%.2f", it) } ?: ""
-        iris.visibility = if (zonesOn && apertures.isNotEmpty()) View.VISIBLE else View.GONE
+        // Never in the clean feed. This line runs once a second, and it used
+        // to put the F-stop back on a screen that was meant to be empty.
+        iris.visibility =
+            if (zonesOn && !fullScreen && apertures.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
     /**
@@ -1248,11 +1406,8 @@ class MainActivity : AppCompatActivity() {
         fullScreenCatcher.visibility = if (on) View.VISIBLE else View.GONE
         leaveFullScreen.isEnabled = on
 
+        // No toast: he knows the double tap, and a toast is on the wire.
         hideSystemBars(on)
-        if (on) {
-            Toast.makeText(this, "Clean feed — double tap to come back", Toast.LENGTH_SHORT)
-                .show()
-        }
         Trace.control("clean feed", if (on) "on" else "off", if (on) "screen cleared" else "back")
         refreshKeys()
         // The picture has the whole window to itself now, or has given it back.

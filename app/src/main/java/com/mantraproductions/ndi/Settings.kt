@@ -133,6 +133,14 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(VERBOSE, true)
         set(value) = prefs.edit().putBoolean(VERBOSE, value).apply()
 
+    /**
+     * The focus box's size, as it was last pinched: its side as a fraction of
+     * the picture's short side (see Mechanism.focusBoxHalves).
+     */
+    var focusBoxSize: Float
+        get() = prefs.getFloat(BOX, 0.18f)
+        set(value) = prefs.edit().putFloat(BOX, value.coerceIn(Mechanism.BOX_MIN, 4f)).apply()
+
     /** Ten bit is asked for unless somebody has a reason not to. */
     var wantTenBit: Boolean
         get() = prefs.getBoolean(TEN_BIT, true)
@@ -150,5 +158,6 @@ class Settings(context: Context) {
         const val WIDTH = "captureWidth"
         const val VERBOSE = "verboseSettings"
         const val FPS = "framesPerSecond"
+        const val BOX = "focusBoxSize"
     }
 }

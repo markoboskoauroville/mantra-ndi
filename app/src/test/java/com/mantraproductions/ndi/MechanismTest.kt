@@ -1033,4 +1033,99 @@ class MechanismTest {
     fun aCameraThatPublishesNothingOffersNothingRatherThanGuessing() {
         assertTrue(Mechanism.frameRatesFrom(emptyList(), 0L).isEmpty())
     }
+
+    // --- the focus box (v82) --------------------------------------------------
+
+    private fun near(expected: Float, actual: Float, what: String) =
+        assertEquals(what, expected, actual, 0.001f)
+
+    @Test fun smallBoxIsASquareOfTheShortSide() {
+        val h = Mechanism.focusBoxHalves(0.5f, 1600, 900)
+        near(225f, h[0], "half width")
+        near(225f, h[1], "half height")
+    }
+
+    @Test fun largestBoxIsTheWholePictureEitherWayUp() {
+        val land = Mechanism.focusBoxHalves(99f, 1600, 900)
+        near(800f, land[0], "landscape half width"); near(450f, land[1], "landscape half height")
+        val port = Mechanism.focusBoxHalves(99f, 900, 1600)
+        near(450f, port[0], "portrait half width"); near(800f, port[1], "portrait half height")
+        near(1600f / 900f, Mechanism.focusBoxMax(1600, 900), "max size is the aspect")
+    }
+
+    @Test fun pastTheShortSideTheBoxGrowsOnlyAlongTheLongOne() {
+        val h = Mechanism.focusBoxHalves(1.4f, 1600, 900)
+        near(630f, h[0], "long half grows")
+        near(450f, h[1], "short half stays at the edge")
+    }
+
+    @Test fun boxNeverSmallerThanTheFloor() {
+        val h = Mechanism.focusBoxHalves(0f, 1000, 1000)
+        near(Mechanism.BOX_MIN * 500f, h[0], "floor")
+    }
+
+    @Test fun unmeasuredViewDrawsNoBoxRatherThanDividingByZero() {
+        val h = Mechanism.focusBoxHalves(0.5f, 0, 0)
+        near(0f, h[0], "w"); near(0f, h[1], "h")
+    }
+
+    @Test fun boxCentreIsKeptOnThePicture() {
+        near(0.5f, Mechanism.clampBoxCentre(0.1f, 0.5f), "full box is centred")
+        near(0.2f, Mechanism.clampBoxCentre(0.05f, 0.2f), "held in from the edge")
+        near(0.63f, Mechanism.clampBoxCentre(0.63f, 0.1f), "free in the middle")
+    }
+
+    @Test fun landscapeWithTheSensorsOwnMountingIsNoTurn() {
+        // Pixel 7 rear: sensor 90, phone turned to ROTATION_90.
+        assertEquals(0, Mechanism.sensorToViewDegrees(90, 90, front = false))
+        assertEquals(90, Mechanism.sensorToViewDegrees(90, 0, front = false))
+        assertEquals(180, Mechanism.sensorToViewDegrees(90, 270, front = false))
+        assertEquals(270, Mechanism.sensorToViewDegrees(270, 0, front = true))
+        assertEquals(180, Mechanism.sensorToViewDegrees(90, 90, front = false, extraTurns = 2))
+    }
+
+    @Test fun regionIsUntouchedWhenScreenAndSensorAgree() {
+        val r = Mechanism.viewRegionToSensor(0.1f, 0.2f, 0.3f, 0.4f, 0, false)
+        assertArrayEquals(floatArrayOf(0.1f, 0.2f, 0.3f, 0.4f), r, 0.0001f)
+    }
+
+    @Test fun uprightTopOfScreenIsTheSensorsLeftEdge() {
+        // Held upright, a rear sensor's picture is turned 90 clockwise, so the
+        // top strip of the screen came from the sensor's left strip.
+        val r = Mechanism.viewRegionToSensor(0f, 0f, 1f, 0.1f, 90, false)
+        assertArrayEquals(floatArrayOf(0f, 0f, 0.1f, 1f), r, 0.0001f)
+    }
+
+    @Test fun upsideDownLandscapeIsTheOppositeCorner() {
+        val r = Mechanism.viewRegionToSensor(0f, 0f, 0.2f, 0.2f, 180, false)
+        assertArrayEquals(floatArrayOf(0.8f, 0.8f, 1f, 1f), r, 0.0001f)
+    }
+
+    @Test fun twoSeventyIsTheInverseOfNinety() {
+        // A quarter turn anticlockwise puts the sensor's top on the screen's left.
+        val r = Mechanism.viewRegionToSensor(0f, 0f, 0.1f, 1f, 270, false)
+        assertArrayEquals(floatArrayOf(0f, 0f, 1f, 0.1f), r, 0.0001f)
+    }
+
+    @Test fun frontCameraIsAMirror() {
+        val r = Mechanism.viewRegionToSensor(0f, 0f, 0.2f, 0.2f, 0, true)
+        assertArrayEquals(floatArrayOf(0.8f, 0f, 1f, 0.2f), r, 0.0001f)
+    }
+
+    @Test fun sixteenNineStreamIsTheMiddleOfAFourThreeSensor() {
+        val whole = Mechanism.streamRegionToArray(floatArrayOf(0f, 0f, 1f, 1f), 1920, 1080, 4000, 3000)
+        assertArrayEquals(floatArrayOf(0f, 0.125f, 1f, 0.875f), whole, 0.0001f)
+        val top = Mechanism.streamRegionToArray(floatArrayOf(0.4f, 0f, 0.6f, 0.1f), 1920, 1080, 4000, 3000)
+        assertArrayEquals(floatArrayOf(0.4f, 0.125f, 0.6f, 0.2f), top, 0.0001f)
+    }
+
+    @Test fun sameShapeStreamIsTheWholeArray() {
+        val r = Mechanism.streamRegionToArray(floatArrayOf(0.1f, 0.1f, 0.2f, 0.2f), 4000, 3000, 4000, 3000)
+        assertArrayEquals(floatArrayOf(0.1f, 0.1f, 0.2f, 0.2f), r, 0.0001f)
+    }
+
+    @Test fun tallerStreamIsCutFromTheSides() {
+        val r = Mechanism.streamRegionToArray(floatArrayOf(0f, 0f, 1f, 1f), 1000, 1000, 4000, 3000)
+        assertArrayEquals(floatArrayOf(0.125f, 0f, 0.875f, 1f), r, 0.0001f)
+    }
 }

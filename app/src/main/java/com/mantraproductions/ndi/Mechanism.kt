@@ -1443,6 +1443,126 @@ object Mechanism {
 
     const val FOCUS_STEP = 0.01f
 
+    // --- the focus box --------------------------------------------------------
+
+    /** The smallest box, as a fraction of the picture's short side: about an eye. */
+    const val BOX_MIN = 0.06f
+
+    /**
+     * How big the box is drawn, in pixels, for a size [t] and a picture [w] by [h].
+     *
+     * *"Pinch to enlarge or reduce the rectangle for the focus, so it can be
+     * tiny until the full screen."* One number does both ends: [t] is the box's
+     * side as a fraction of the picture's short side. Up to 1 it is a square,
+     * which is what a focus mark on a face should be; past 1 it stops growing
+     * across the short side, which it already fills, and goes on growing along
+     * the long one until it is the whole picture. So the largest [t] is the
+     * picture's own aspect, and there is no size at which the box is anything
+     * but a square or the frame.
+     *
+     * @return half the width and half the height, in pixels
+     */
+    fun focusBoxHalves(t: Float, w: Int, h: Int): FloatArray {
+        if (w <= 0 || h <= 0) return floatArrayOf(0f, 0f)
+        val short = minOf(w, h).toFloat()
+        val long = maxOf(w, h).toFloat()
+        val size = t.coerceIn(BOX_MIN, long / short)
+        val shortHalf = minOf(size, 1f) * short / 2f
+        val longHalf = size * short / 2f
+        return if (w >= h) floatArrayOf(longHalf, shortHalf) else floatArrayOf(shortHalf, longHalf)
+    }
+
+    /** The largest size [focusBoxHalves] will draw: the whole picture. */
+    fun focusBoxMax(w: Int, h: Int): Float =
+        if (w <= 0 || h <= 0) 1f else maxOf(w, h).toFloat() / minOf(w, h)
+
+    /**
+     * Where the box's centre may be, so the box never hangs off the picture.
+     *
+     * A box the size of the frame has one place it can be, the middle; a
+     * small one can go nearly to the edge. Without this the region sent to the
+     * camera is clipped on one side and the camera focuses on a smaller, off
+     * centre patch than the one drawn.
+     */
+    fun clampBoxCentre(c: Float, halfFraction: Float): Float {
+        val h = halfFraction.coerceIn(0f, 0.5f)
+        return c.coerceIn(h, 1f - h)
+    }
+
+    /**
+     * How far the sensor's picture is turned, clockwise, to stand upright on
+     * this screen: Android's own formula for a camera preview, plus the
+     * operator's quarter turns.
+     *
+     * The camera wants its focus region in the **sensor's** coordinates and a
+     * tap arrives in the **screen's**. They are the same only when the phone
+     * is held the one way the sensor is mounted: landscape, camera on the
+     * left. Upright, a tap at the top of the screen is the sensor's left edge;
+     * upside down it is the opposite corner; a front camera is also a mirror.
+     */
+    fun sensorToViewDegrees(sensor: Int, display: Int, front: Boolean, extraTurns: Int = 0): Int {
+        val base = if (front) (sensor + display) % 360 else (sensor - display + 360) % 360
+        return ((base + extraTurns * 90) % 360 + 360) % 360
+    }
+
+    /**
+     * A region on the screen, as fractions, to the same region on the sensor.
+     *
+     * The inverse of turning the sensor's picture [degrees] clockwise (and
+     * mirroring it, for a front camera) to get the screen's. Returned as
+     * left, top, right, bottom, each 0..1 of the sensor's active array.
+     */
+    fun viewRegionToSensor(
+        left: Float, top: Float, right: Float, bottom: Float,
+        degrees: Int, mirrored: Boolean
+    ): FloatArray {
+        fun point(xIn: Float, y: Float): FloatArray {
+            val x = if (mirrored) 1f - xIn else xIn
+            return when (((degrees % 360) + 360) % 360) {
+                90 -> floatArrayOf(y, 1f - x)
+                180 -> floatArrayOf(1f - x, 1f - y)
+                270 -> floatArrayOf(1f - y, x)
+                else -> floatArrayOf(x, y)
+            }
+        }
+        val a = point(left, top)
+        val b = point(right, bottom)
+        return floatArrayOf(
+            minOf(a[0], b[0]).coerceIn(0f, 1f),
+            minOf(a[1], b[1]).coerceIn(0f, 1f),
+            maxOf(a[0], b[0]).coerceIn(0f, 1f),
+            maxOf(a[1], b[1]).coerceIn(0f, 1f)
+        )
+    }
+
+    /**
+     * A region of the picture the camera streams, as fractions, to the same
+     * region of the sensor's whole active array, as fractions.
+     *
+     * The sensor is 4:3 and the picture is a 16:9 cut out of its middle (the
+     * camera crops to the stream's shape, centred), so the top of the picture
+     * is not the top of the sensor. Taken as the same, a box near the top or
+     * bottom of the picture focused on something a good way off it.
+     */
+    fun streamRegionToArray(
+        region: FloatArray, streamW: Int, streamH: Int, arrayW: Int, arrayH: Int
+    ): FloatArray {
+        if (streamW <= 0 || streamH <= 0 || arrayW <= 0 || arrayH <= 0) return region.copyOf()
+        val streamAspect = streamW.toFloat() / streamH
+        val arrayAspect = arrayW.toFloat() / arrayH
+        // The crop as fractions of the array: full along one axis, centred on the other.
+        val (cw, ch) = if (streamAspect >= arrayAspect) 1f to (arrayAspect / streamAspect)
+                       else (streamAspect / arrayAspect) to 1f
+        val ox = (1f - cw) / 2f
+        val oy = (1f - ch) / 2f
+        return floatArrayOf(
+            (ox + region[0] * cw).coerceIn(0f, 1f),
+            (oy + region[1] * ch).coerceIn(0f, 1f),
+            (ox + region[2] * cw).coerceIn(0f, 1f),
+            (oy + region[3] * ch).coerceIn(0f, 1f)
+        )
+    }
+
     // --- metering -----------------------------------------------------------
 
     const val METER_FLOOR_DB = -54f

@@ -167,12 +167,21 @@ object PreviewEffects {
             // stand-in here on purpose: a slot showing a computed curve while
             // claiming to show ARRI's file would be lying about the picture,
             // and the whole reason for eleven slots is to compare real ones.
-            val table = uploaded ?: return run { view.setRenderEffect(null); false }
+            //
+            // PEAKING WITH NO LUT. Every uniform shader in an AGSL program has
+            // to be bound, used or not, or the effect is rejected. This used to
+            // return "refused" whenever no cube was loaded, which is why
+            // peaking said "this phone will not run the preview shader" on a
+            // Pixel 7 and a Nothing Phone alike: it was not the phone, it was
+            // peaking on its own. With no cube the input is one black pixel
+            // that the shader never reads, because useLut is 0.
+            val table = if (wantLut) uploaded else null
+            val strip = table?.let { stripFor(it) } ?: EMPTY_STRIP
             shader.setInputShader(
                 "curve",
-                BitmapShader(stripFor(table), Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                BitmapShader(strip, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
             )
-            shader.setFloatUniform("lutSize", table.size.toFloat())
+            shader.setFloatUniform("lutSize", (table?.size ?: 2).toFloat())
             shader.setFloatUniform("useLut", if (wantLut) 1f else 0f)
             shader.setFloatUniform("usePeak", if (peak) 1f else 0f)
             // Higher sensitivity means a lower bar. A Sobel magnitude on
@@ -204,4 +213,9 @@ object PreviewEffects {
     }
 
     private const val TAG = "PreviewEffects"
+
+    /** The LUT input when there is no LUT: bound, never read. */
+    private val EMPTY_STRIP: Bitmap by lazy {
+        Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+    }
 }

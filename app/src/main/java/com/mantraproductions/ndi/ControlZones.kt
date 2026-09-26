@@ -86,6 +86,37 @@ class ControlZones @JvmOverloads constructor(
      */
     var onDoubleTap: ((index: Int) -> Unit)? = null
 
+    /**
+     * A zone held down: hand it back to the camera to keep deciding.
+     *
+     * Double tap used to mean this, and on white balance it now means "measure
+     * it once and give me the number" — which is a different thing and the one
+     * he wants far more often. Continuous auto is still worth having for a shot
+     * nobody can light, so it moved to the gesture that cannot happen by
+     * accident: a deliberate press and wait.
+     */
+    var onHold: ((index: Int) -> Unit)? = null
+
+    /**
+     * One tap, anywhere on the picture: focus there.
+     *
+     * *"Even if the rectangle for the focus is invisible, tapping on the screen
+     * focuses on that point."* The zones and the focus box used to be
+     * exclusive because one tap could not mean both "focus here" and "start
+     * changing ISO". It does not have to: changing a zone is a drag, handing it
+     * back is two taps, a hold is continuous auto, and the one gesture left
+     * over, a single tap, is focus. It is only known to be single once a
+     * second tap has had its chance, so it fires a double-tap interval late.
+     */
+    var onSingleTap: ((x: Float, y: Float) -> Unit)? = null
+
+    private var singleX = 0f
+    private var singleY = 0f
+    private val singleTap = Runnable { onSingleTap?.invoke(singleX, singleY) }
+
+    /** True for a touch that landed between the bands: it can only be a tap. */
+    private var outside = false
+
     private var held: Int? = null
     private var lastX = 0f
     private var downX = 0f
@@ -94,6 +125,23 @@ class ControlZones @JvmOverloads constructor(
     private var tapped: Int? = null
     private var lastTapAt = 0L
     private var lastTapIndex = -1
+    private var holding: Int? = null
+
+    /** How long a press has to last to mean "you take it". */
+    private val holdMs = 650L
+
+    private val holdRunnable = Runnable {
+        val index = holding
+        holding = null
+        if (index != null && !moved) {
+            // A hold is not also a tap: forget the tap that started it.
+            tapped = null
+            lastTapIndex = -1
+            removeCallbacks(singleTap)
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            onHold?.invoke(index)
+        }
+    }
 
     private val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.LEFT
@@ -212,7 +260,17 @@ class ControlZones @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                val index = rowAt(event.y) ?: return false
+                downX = event.x
+                downY = event.y
+                moved = false
+                val index = rowAt(event.y)
+                if (index == null) {
+                    // Between the bands: nothing to drag, but a tap still focuses.
+                    outside = true
+                    tapped = null
+                    return true
+                }
+                outside = false
                 // A dead band still takes a double tap, because that is what
                 // hands it back to the camera — and AUTO is exactly the state a
                 // band is in when it has nothing for the finger to drag.
@@ -223,6 +281,9 @@ class ControlZones @JvmOverloads constructor(
                 moved = false
                 tapped = index
                 if (held != null) onGrab?.invoke(index)
+                holding = index
+                removeCallbacks(holdRunnable)
+                postDelayed(holdRunnable, holdMs)
                 invalidate()
                 return true
             }
@@ -231,6 +292,9 @@ class ControlZones @JvmOverloads constructor(
                     (kotlin.math.abs(event.x - downX) > slop ||
                         kotlin.math.abs(event.y - downY) > slop)
                 ) moved = true
+                // A drag right after a tap means the tap was finding the band.
+                if (moved) { holding = null; removeCallbacks(holdRunnable); removeCallbacks(singleTap) }
+                if (outside) return true
                 val index = held ?: return true
                 // Relative to the last position rather than to where the finger
                 // landed: a parameter that jumps to an absolute value the moment
@@ -242,6 +306,19 @@ class ControlZones @JvmOverloads constructor(
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                holding = null
+                removeCallbacks(holdRunnable)
+                if (outside) {
+                    outside = false
+                    if (!moved) {
+                        removeCallbacks(singleTap)
+                        lastTapIndex = -1
+                        singleX = event.x / width.coerceAtLeast(1)
+                        singleY = event.y / height.coerceAtLeast(1)
+                        post(singleTap)
+                    }
+                    return true
+                }
                 val index = tapped
                 held = null
                 tapped = null
@@ -252,15 +329,24 @@ class ControlZones @JvmOverloads constructor(
                     if (index == lastTapIndex && now - lastTapAt <= doubleTapMs) {
                         lastTapAt = 0L
                         lastTapIndex = -1
+                        // The first tap was half of this, not a focus.
+                        removeCallbacks(singleTap)
                         onDoubleTap?.invoke(index)
                     } else {
                         lastTapAt = now
                         lastTapIndex = index
+                        singleX = event.x / width.coerceAtLeast(1)
+                        singleY = event.y / height.coerceAtLeast(1)
+                        removeCallbacks(singleTap)
+                        postDelayed(singleTap, doubleTapMs)
                     }
                 }
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                outside = false
+                holding = null
+                removeCallbacks(holdRunnable)
                 held = null
                 tapped = null
                 onGrab?.invoke(null)
