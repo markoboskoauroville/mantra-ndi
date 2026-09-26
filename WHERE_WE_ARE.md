@@ -6,6 +6,42 @@ working state of *this* app.
 
 ---
 
+## 26.9.2026, late: v85 and v86, the interface of a professional camera
+
+*"Right side is record button, preview file button, portrait or landscape shooting, and the LUT
+switcher ... the measuring tools ... peaking, so everything is in one place ... and at the bottom the
+free space and how much time we can still record ... the recording folder is configurable, an
+external drive too ... timecode like a professional camera ... tell the truth about HLG."*
+
+- **Right rail**: REC, PLAY (the last take in the phone's player), SNAP, LGHT, **SHOOT** (follow the
+  phone / landscape / portrait: the whole interface turns, so every label stays upright even with
+  auto-rotate off), **LUT** (off → each LUT in the library → off; long press = settings), PEAK,
+  **FALSE** colour, **ZEBRA**, gear, and a **storage key**: free space on the recording drive and time
+  left at the bit rate (`Mechanism.secondsLeft`, 1% / 50 MB kept back so a take always ends with its
+  index); amber below ten minutes, NO DRIVE when unreachable.
+- **Left rail**: lenses, AF, LOG, M, CTRL, NDI, FULL.
+- **Settings**: record folder through the system folder picker (any drive, USB SSD included; the
+  permission is kept), the LUT library (add .cube, remove, 11 places), ROT for the lens in use, zebra
+  level.
+- **Timecode** HH:MM:SS:FF, record run at the take's rate, red while rolling.
+- **False colour and zebra** in the GPU shader with peaking and the LUT (purple crushed, blue near
+  black, green middle grey, pink a stop over, yellow nearly clipped, red clipped).
+- **LOG says HLG or STD**: with no curve the picture is the phone's own HLG (10-bit) or standard SDR
+  (8-bit), never Rec.709.
+- **v86**: labels shrink to fit their key (eleven keys across an upright phone clipped SHOOT, FALSE,
+  ZEBRA), and the LUT key opens settings when the library is empty instead of being dead.
+
+**Tested.** 242 unit tests. Emulator: v84 used then v85 over it; FALSE and ZEBRA screenshots; SHOOT
+landscape and portrait with auto-rotate off; a take with the timecode running red; PLAY opened the
+take; a LUT added through the phone's file picker and switched on and off with the key; monkey seed
+85085, 20,000 events, no crash (it switched Android's camera privacy block on through quick
+settings, which is the phone, not the app). v86 installed and checked in portrait.
+
+**Not tested.** Recording to a real USB SSD (the emulator has none): pick the folder on the drive in
+settings and record. The waveform and vectorscope tiles are v88.
+
+---
+
 ## 26.9.2026, night: v84, the sound back in sync, constant frame rate, rotation obeys the lock
 
 His test of v83: no crackle any more, but **sound and picture out of sync**. His take: the sound
