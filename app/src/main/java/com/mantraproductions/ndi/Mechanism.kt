@@ -1574,6 +1574,28 @@ object Mechanism {
         return ((db - METER_FLOOR_DB) / -METER_FLOOR_DB).coerceIn(0f, 1f)
     }
 
+    /**
+     * CONSTANT FRAME RATE: which slot of an exact 1/fps grid a frame belongs in.
+     *
+     * *"I want this app to write constant frame rate, not variable, force it."*
+     * The camera delivers frames within a few microseconds of the grid, and
+     * that wobble is enough for an editor to call a file variable. So each
+     * frame is put on the nearest slot of the grid counted from the first
+     * frame, and never on a slot already used, so a late frame cannot land on
+     * top of the one before it. A frame the camera dropped leaves its slot
+     * empty rather than pulling every later frame early, which keeps the
+     * picture on time against the sound.
+     */
+    fun cfrSlot(ptsUs: Long, firstUs: Long, fps: Int, lastSlot: Long): Long {
+        if (fps <= 0) return lastSlot + 1
+        val slot = Math.round((ptsUs - firstUs) * fps / 1_000_000.0)
+        return if (slot <= lastSlot) lastSlot + 1 else slot
+    }
+
+    /** The time of grid slot [slot]: exact, never accumulating rounding. */
+    fun cfrSlotUs(slot: Long, firstUs: Long, fps: Int): Long =
+        if (fps <= 0) firstUs else firstUs + Math.round(slot * 1_000_000.0 / fps)
+
     /** Microseconds of sound in [samples] samples, exact to the microsecond. */
     fun samplesToUs(samples: Long, sampleRate: Int): Long =
         if (sampleRate <= 0) 0L else samples * 1_000_000L / sampleRate

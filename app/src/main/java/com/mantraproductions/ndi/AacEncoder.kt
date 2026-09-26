@@ -25,8 +25,9 @@ import kotlin.concurrent.thread
  *
  * Now every byte goes in, split across as many slots as it needs, and every
  * slot is stamped from the number of samples before it: the first sample's
- * time plus samples / 48000. The first sample's time is read on the clock the
- * camera stamps its frames with ([clockNs]), so picture and sound agree.
+ * time plus samples / 48000. The first sample's time is read on the monotonic
+ * clock ([clockNs], System.nanoTime), which is the clock the camera framework
+ * puts on frames it sends into a video encoder, so picture and sound agree.
  */
 class AacEncoder(
     private val sampleRate: Int = AudioMeter.SAMPLE_RATE,

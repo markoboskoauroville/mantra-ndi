@@ -596,7 +596,7 @@ class CameraPipeline(private val context: Context) {
             listener?.onError("The file could not be created")
             return null
         }
-        val file = Mp4Recorder(opened.fileDescriptor)
+        val file = Mp4Recorder(opened.fileDescriptor, fps)
         if (!file.opened) {
             opened.close(keep = false)
             listener?.onError("The muxer refused the file")
@@ -613,12 +613,13 @@ class CameraPipeline(private val context: Context) {
         encodedVideoFormat?.let { file.setVideoFormat(it) }
 
         if (meter != null) {
-            // The sound is stamped on the clock the camera stamps its frames
-            // with: the boot clock on most phones, including the Pixel.
-            val realtime = engine.timestampIsRealtime
-            val aac = AacEncoder(clockNs = {
-                if (realtime) SystemClock.elapsedRealtimeNanos() else System.nanoTime()
-            })
+            // THE MONOTONIC CLOCK, whatever the sensor says. v83 stamped the
+            // sound on the boot clock because the Pixel's sensor reports
+            // REALTIME, and put it 7664 s (the phone's sleep) after the picture
+            // in his take: frames going into a video encoder are converted to
+            // the monotonic clock by the camera framework, whatever the
+            // sensor's own source. System.nanoTime is that clock.
+            val aac = AacEncoder(clockNs = { System.nanoTime() })
             aac.onFormat = { format -> recorder?.setAudioFormat(format) }
             aac.onSample = { buffer, info -> recorder?.writeAudio(buffer, info) }
             if (aac.start()) {

@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong
  * which is how this project once shipped ten versions believing there was a
  * crash log. [Recordings] hands over the descriptor MediaStore gave it.
  */
-class Mp4Recorder(descriptor: FileDescriptor) {
+class Mp4Recorder(descriptor: FileDescriptor, private val fps: Int = 30) {
 
     private var muxer: MediaMuxer? =
         runCatching { MediaMuxer(descriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4) }
@@ -50,6 +50,10 @@ class Mp4Recorder(descriptor: FileDescriptor) {
      * fraction of a second and it is always the correct fraction.
      */
     private var seenKeyframe = false
+
+    /** The grid the frames are put on: the first frame's time, and the last slot used. */
+    private var firstVideoUs = -1L
+    private var lastSlot = -1L
 
     /** Frames in the file, and frames the muxer would not take. */
     val frames: Long get() = written.get()
@@ -96,6 +100,11 @@ class Mp4Recorder(descriptor: FileDescriptor) {
             if ((info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) == 0) return
             seenKeyframe = true
         }
+        // Constant frame rate: every frame on an exact 1/fps grid.
+        if (firstVideoUs < 0) firstVideoUs = info.presentationTimeUs
+        val slot = Mechanism.cfrSlot(info.presentationTimeUs, firstVideoUs, fps, lastSlot)
+        lastSlot = slot
+        info.presentationTimeUs = Mechanism.cfrSlotUs(slot, firstVideoUs, fps)
         try {
             muxer?.writeSampleData(videoTrack, buffer, info)
             written.incrementAndGet()
@@ -126,6 +135,8 @@ class Mp4Recorder(descriptor: FileDescriptor) {
         muxer = null
         started = false
         seenKeyframe = false
+        firstVideoUs = -1L
+        lastSlot = -1L
         videoTrack = -1
         audioTrack = -1
     }

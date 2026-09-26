@@ -1148,4 +1148,39 @@ class MechanismTest {
     @Test fun noSampleRateIsNoTimeRatherThanACrash() {
         assertEquals(0L, Mechanism.samplesToUs(1000, 0))
     }
+
+    // --- constant frame rate (v84) --------------------------------------------
+
+    @Test fun wobblingFramesLandExactlyOnTheGrid() {
+        // His take: 25 fps, intervals 40.0 to 40.1 ms.
+        val first = 1_000_000L
+        var last = -1L
+        val arrivals = longArrayOf(0, 40_020, 80_090, 119_990, 160_060)
+        val out = arrivals.map { a ->
+            val slot = Mechanism.cfrSlot(first + a, first, 25, last); last = slot
+            Mechanism.cfrSlotUs(slot, first, 25) - first
+        }
+        assertEquals(listOf(0L, 40_000L, 80_000L, 120_000L, 160_000L), out)
+    }
+
+    @Test fun aDroppedFrameLeavesItsSlotEmptyAndKeepsLaterFramesOnTime() {
+        assertEquals(3L, Mechanism.cfrSlot(120_010, 0, 25, 1))
+    }
+
+    @Test fun aLateFrameNeverLandsOnTheSlotBeforeIt() {
+        // Two frames rounding to the same slot: the second goes to the next.
+        assertEquals(2L, Mechanism.cfrSlot(41_000, 0, 25, 1))
+    }
+
+    @Test fun twentyFourFramesAnHourLaterIsStillExact() {
+        val slot = 24L * 3600
+        assertEquals(3_600_000_000L, Mechanism.cfrSlotUs(slot, 0, 24))
+        // and a frame the grid cannot hold exactly is rounded, not accumulated
+        assertEquals(41_667L, Mechanism.cfrSlotUs(1, 0, 24))
+        assertEquals(83_333L, Mechanism.cfrSlotUs(2, 0, 24))
+    }
+
+    @Test fun noFrameRateStillMovesForward() {
+        assertEquals(5L, Mechanism.cfrSlot(123, 0, 0, 4))
+    }
 }

@@ -785,14 +785,6 @@ class CaptureEngine(private val context: Context) {
      */
     @Volatile var focusRegion: FloatArray? = null
 
-    /**
-     * Whether this lens stamps its frames on the boot clock (REALTIME) rather
-     * than the monotonic one. The sound of a take must use the same clock.
-     */
-    val timestampIsRealtime: Boolean
-        get() = characteristics?.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) ==
-            CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME
-
     /** The sensor's active array, in pixels: what a focus region is a fraction of. */
     fun activeArray(): android.graphics.Rect? =
         characteristics?.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
