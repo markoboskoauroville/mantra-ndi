@@ -371,4 +371,5 @@ a small model on the AI cores is the upgrade path, and the doc will say so then.
 | 26.9.2026 | v83 | 1b | His test: peaking works on the Nothing; the take's sound lost half of every buffer (ffprobe: 386 AAC frames 40 ms apart, 8.2 s of sound in 15.4 s); SNAP unfindable; log froze the Nothing. All fixed in v83; tested on the emulator (take measured, PNG, curves, monkey 20,000). tested by him 26.9: no crackle; sound out of sync |
 | 26.9.2026 | v84 | 1c | Sound back on the monotonic clock with counted samples; CFR grid; fullUser rotation. Tested on the emulator (clock proven only on a real phone). His test: in sync |
 | 26.9.2026 | v85 | 1d | Interface reorganised; tested on the emulator: FALSE, ZEBRA, SHOOT, timecode, PLAY, LUT library through the file picker, monkey 20,000 |
-| 26.9.2026 | v86 | 1e | Labels fit, LUT key opens settings when empty. **Waiting for his test** |
+| 26.9.2026 | v86 | 1e | Labels fit, LUT key opens settings when empty |
+| 26.9.2026 | v87 | 2 | Mixer faders, A / M per parameter, AUTO / HM / FM; native priority where the phone has it, the app's loop elsewhere. **Waiting for his test** |

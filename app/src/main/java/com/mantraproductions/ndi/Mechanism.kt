@@ -1574,6 +1574,65 @@ object Mechanism {
         return ((db - METER_FLOOR_DB) / -METER_FLOOR_DB).coerceIn(0f, 1f)
     }
 
+    // --- A / M per parameter: AUTO, HM, FM (v87) ------------------------------------
+
+    /** How exposure is decided, from the two A/M switches. */
+    enum class Exposure { AUTO, ISO_PRIORITY, SHUTTER_PRIORITY, MANUAL }
+
+    fun exposureMode(isoAuto: Boolean, shutterAuto: Boolean): Exposure = when {
+        isoAuto && shutterAuto -> Exposure.AUTO
+        !isoAuto && shutterAuto -> Exposure.ISO_PRIORITY
+        isoAuto && !shutterAuto -> Exposure.SHUTTER_PRIORITY
+        else -> Exposure.MANUAL
+    }
+
+    /**
+     * The camera's mode, read off its four A/M switches: AUTO when all four
+     * are automatic, FM (full manual) when none is, HM (half manual) between.
+     * The mode is a description of the switches, never a second state that
+     * could disagree with them.
+     */
+    fun cameraMode(auto: BooleanArray): String = when {
+        auto.all { it } -> "AUTO"
+        auto.none { it } -> "FM"
+        else -> "HM"
+    }
+
+    /**
+     * The M key: AUTO → HM → FM → AUTO.
+     *
+     * HM puts back the last half-manual set; if there is none, it is manual
+     * exposure with automatic focus and white balance, which is what "half
+     * manual" means on most cameras.
+     * @return the four switches (ISO, shutter, focus, white balance), true = A
+     */
+    fun nextCameraMode(current: BooleanArray, lastHalf: BooleanArray?): BooleanArray {
+        val half = lastHalf?.takeIf { cameraMode(it) == "HM" }
+            ?: booleanArrayOf(false, false, true, true)
+        return when (cameraMode(current)) {
+            "AUTO" -> half.copyOf()
+            "HM" -> BooleanArray(current.size) { false }
+            else -> BooleanArray(current.size) { true }
+        }
+    }
+
+    /**
+     * One step of the half-manual loop: the automatic half of exposure moves
+     * so the picture's brightness stays where the camera's own auto exposure
+     * had put it when the other half was taken over.
+     *
+     * Brightness is read off the preview, which is gamma encoded, so a ratio
+     * of lumas is raised to 2.2 to be a ratio of light. Half the error is
+     * corrected per step and never more than a stop, so the picture eases to
+     * the right exposure rather than pumping.
+     */
+    fun priorityStep(value: Double, measuredLuma: Double, targetLuma: Double, min: Double, max: Double): Double {
+        if (measuredLuma <= 0.001 || targetLuma <= 0.001 || value <= 0.0) return value.coerceIn(min, max)
+        val stops = (2.2 * ln(targetLuma / measuredLuma) / ln(2.0) * 0.5).coerceIn(-1.0, 1.0)
+        if (kotlin.math.abs(stops) < 0.03) return value.coerceIn(min, max)
+        return (value * 2.0.pow(stops)).coerceIn(min, max)
+    }
+
     // --- the professional readouts (v85) -----------------------------------------
 
     /**

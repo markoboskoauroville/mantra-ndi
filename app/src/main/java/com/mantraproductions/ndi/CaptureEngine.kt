@@ -912,6 +912,7 @@ class CaptureEngine(private val context: Context) {
     fun setManualExposure(iso: Int, shutterNs: Long): Boolean {
         val request = builder ?: return false
         manualExposure = true
+        if (hasNativePriority(1) || hasNativePriority(2)) clearPriority(request)
 
         val frameDuration = Mechanism.frameDurationForFps(targetFps)
         val sensitivity = isoRange()?.let { iso.coerceIn(it.lower, it.upper) } ?: iso
@@ -928,9 +929,61 @@ class CaptureEngine(private val context: Context) {
         return ok
     }
 
+    // --- half manual: the camera's own priority modes (Android 16) ----------
+
+    /**
+     * Android 16 added auto exposure that holds one half fixed: ISO priority
+     * (the operator's ISO, the camera's shutter) and shutter priority. It is
+     * looked up by name because this app is compiled against Android 15; a
+     * phone that does not list it gets the app's own loop instead.
+     */
+    private val aePriorityKey: CaptureRequest.Key<Int>? by lazy {
+        if (android.os.Build.VERSION.SDK_INT < 29) null
+        else runCatching { CaptureRequest.Key("android.control.aePriorityMode", Int::class.javaObjectType) }.getOrNull()
+    }
+
+    private fun aePriorityModes(): IntArray {
+        if (android.os.Build.VERSION.SDK_INT < 29) return IntArray(0)
+        val key = runCatching {
+            CameraCharacteristics.Key("android.control.aeAvailablePriorityModes", IntArray::class.java)
+        }.getOrNull() ?: return IntArray(0)
+        return runCatching { lensCharacteristics?.get(key) }.getOrNull() ?: IntArray(0)
+    }
+
+    /** Whether this lens does ISO priority (1) or shutter priority (2) itself. */
+    fun hasNativePriority(mode: Int): Boolean = aePriorityKey != null && mode in aePriorityModes()
+
+    /**
+     * Auto exposure with one half held: [mode] 1 = ISO priority at [iso],
+     * 2 = shutter priority at [shutterNs]. Only on a lens that lists it.
+     */
+    fun setPriorityExposure(mode: Int, iso: Int, shutterNs: Long): Boolean {
+        val request = builder ?: return false
+        val key = aePriorityKey ?: return false
+        manualExposure = false
+        request.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+        request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(targetFps, targetFps))
+        request.set(key, mode)
+        if (mode == 1) request.set(CaptureRequest.SENSOR_SENSITIVITY,
+            isoRange()?.let { iso.coerceIn(it.lower, it.upper) } ?: iso)
+        else request.set(CaptureRequest.SENSOR_EXPOSURE_TIME,
+            minOf(shutterNs, Mechanism.frameDurationForFps(targetFps)))
+        val ok = apply()
+        Trace.control("exposure", if (mode == 1) "ISO priority $iso" else "shutter priority " +
+            Mechanism.formatShutter(shutterNs), if (ok) "the camera's own" else "refused")
+        if (!ok) request.set(key, 0)
+        return ok
+    }
+
+    /** Takes a priority mode off again, before plain auto or plain manual. */
+    private fun clearPriority(request: CaptureRequest.Builder) {
+        aePriorityKey?.let { runCatching { request.set(it, 0) } }
+    }
+
     fun setAutoExposure(): Boolean {
         val request = builder ?: return false
         manualExposure = false
+        if (hasNativePriority(1) || hasNativePriority(2)) clearPriority(request)
         request.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
         request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(targetFps, targetFps))
         val ok = apply()

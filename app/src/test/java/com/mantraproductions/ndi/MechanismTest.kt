@@ -1239,4 +1239,57 @@ class MechanismTest {
         assertEquals(0, Mechanism.nextShoot(2))
         assertEquals(1, Mechanism.nextShoot(-3))
     }
+
+    // --- A / M, AUTO / HM / FM (v87) ------------------------------------------------
+
+    @Test fun exposureFollowsTheTwoSwitches() {
+        assertEquals(Mechanism.Exposure.AUTO, Mechanism.exposureMode(true, true))
+        assertEquals(Mechanism.Exposure.ISO_PRIORITY, Mechanism.exposureMode(false, true))
+        assertEquals(Mechanism.Exposure.SHUTTER_PRIORITY, Mechanism.exposureMode(true, false))
+        assertEquals(Mechanism.Exposure.MANUAL, Mechanism.exposureMode(false, false))
+    }
+
+    @Test fun modeIsReadOffTheSwitches() {
+        assertEquals("AUTO", Mechanism.cameraMode(booleanArrayOf(true, true, true, true)))
+        assertEquals("FM", Mechanism.cameraMode(booleanArrayOf(false, false, false, false)))
+        assertEquals("HM", Mechanism.cameraMode(booleanArrayOf(false, true, true, true)))
+        assertEquals("HM", Mechanism.cameraMode(booleanArrayOf(true, true, true, false)))
+    }
+
+    @Test fun mKeyCyclesAutoHalfFull() {
+        val auto = booleanArrayOf(true, true, true, true)
+        val hm = Mechanism.nextCameraMode(auto, null)
+        assertEquals("HM", Mechanism.cameraMode(hm))
+        assertArrayEquals(booleanArrayOf(false, false, true, true), hm)
+        val fm = Mechanism.nextCameraMode(hm, hm)
+        assertEquals("FM", Mechanism.cameraMode(fm))
+        assertEquals("AUTO", Mechanism.cameraMode(Mechanism.nextCameraMode(fm, hm)))
+    }
+
+    @Test fun halfManualComesBackAsItWasLeft() {
+        val mine = booleanArrayOf(false, true, false, true)
+        assertArrayEquals(mine, Mechanism.nextCameraMode(booleanArrayOf(true, true, true, true), mine))
+        // a remembered set that is not half manual is not a half-manual set
+        val bogus = booleanArrayOf(true, true, true, true)
+        assertArrayEquals(booleanArrayOf(false, false, true, true),
+            Mechanism.nextCameraMode(booleanArrayOf(true, true, true, true), bogus))
+    }
+
+    @Test fun priorityLoopOpensUpWhenTheSceneDarkens() {
+        // picture half as bright as the target: the auto half goes longer/higher
+        val next = Mechanism.priorityStep(1000.0, 0.25, 0.5, 100.0, 100_000.0)
+        assertTrue(next > 1000.0)
+        // at most one stop per step
+        assertTrue(next <= 2000.0 + 1e-6)
+    }
+
+    @Test fun priorityLoopClosesDownWhenTheSceneBrightensAndRespectsLimits() {
+        assertTrue(Mechanism.priorityStep(1000.0, 0.9, 0.45, 100.0, 100_000.0) < 1000.0)
+        assertEquals(100.0, Mechanism.priorityStep(100.0, 0.9, 0.1, 100.0, 100_000.0), 1e-9)
+    }
+
+    @Test fun priorityLoopHoldsStillWhenCloseAndOnBlack() {
+        assertEquals(1000.0, Mechanism.priorityStep(1000.0, 0.501, 0.5, 1.0, 1e9), 1e-9)
+        assertEquals(1000.0, Mechanism.priorityStep(1000.0, 0.0, 0.5, 1.0, 1e9), 1e-9)
+    }
 }

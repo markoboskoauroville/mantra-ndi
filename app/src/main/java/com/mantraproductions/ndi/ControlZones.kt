@@ -33,11 +33,11 @@ import android.view.View
  * picture is a parameter that jumps the moment it is touched, which on a live
  * camera is a ruined take.
  *
- * **A double tap hands the zone back to the camera.** Once was a single tap,
- * and a single tap is what a thumb does by accident while it is looking for a
- * band — losing manual exposure mid-shot because a finger brushed the glass is
- * not a control, it is a hazard. Two taps in a third of a second is a thing
- * only intent does.
+ * **v87: mixer faders with an A / M switch each.** A double tap and a hold
+ * used to hand a zone back to the camera, and nobody could remember which did
+ * what. Now a switch at the head of each fader says A or M and is pressed to
+ * change it; a drag moves the fader (and takes it to M); a single tap anywhere
+ * else focuses there; a double tap means nothing.
  *
  * Still exclusive with the focus box, and that is still the reason the rail has
  * a key to put it away: a tap that could mean "focus here" and could mean
@@ -78,119 +78,77 @@ class ControlZones @JvmOverloads constructor(
     var onGrab: ((index: Int?) -> Unit)? = null
 
     /**
-     * Two taps on a zone: give that parameter back to the camera.
-     *
-     * There is no room on the rail for a key per parameter, and there should
-     * not be one: the place to say "you take this" about white balance is the
-     * white balance zone.
+     * The A / M switch at the head of a fader: that parameter automatic or
+     * manual. *"Next to each slider should be A and M ... avoid confusion with
+     * what is double tap, what is single tap."* A double tap and a hold used to
+     * carry these meanings; now a switch that says which it is carries them,
+     * and a double tap means nothing at all.
      */
-    var onDoubleTap: ((index: Int) -> Unit)? = null
+    var onToggle: ((index: Int) -> Unit)? = null
 
     /**
-     * A zone held down: hand it back to the camera to keep deciding.
-     *
-     * Double tap used to mean this, and on white balance it now means "measure
-     * it once and give me the number" — which is a different thing and the one
-     * he wants far more often. Continuous auto is still worth having for a shot
-     * nobody can light, so it moved to the gesture that cannot happen by
-     * accident: a deliberate press and wait.
-     */
-    var onHold: ((index: Int) -> Unit)? = null
-
-    /**
-     * One tap, anywhere on the picture: focus there.
-     *
-     * *"Even if the rectangle for the focus is invisible, tapping on the screen
-     * focuses on that point."* The zones and the focus box used to be
-     * exclusive because one tap could not mean both "focus here" and "start
-     * changing ISO". It does not have to: changing a zone is a drag, handing it
-     * back is two taps, a hold is continuous auto, and the one gesture left
-     * over, a single tap, is focus. It is only known to be single once a
-     * second tap has had its chance, so it fires a double-tap interval late.
+     * One tap anywhere that is not the switch: focus there. With nothing else
+     * meaning a tap, it fires at once rather than a double-tap interval late.
      */
     var onSingleTap: ((x: Float, y: Float) -> Unit)? = null
 
-    private var singleX = 0f
-    private var singleY = 0f
-    private val singleTap = Runnable { onSingleTap?.invoke(singleX, singleY) }
-
-    /** True for a touch that landed between the bands: it can only be a tap. */
-    private var outside = false
-
     private var held: Int? = null
+    private var onSwitch: Int? = null
     private var lastX = 0f
     private var downX = 0f
     private var downY = 0f
     private var moved = false
-    private var tapped: Int? = null
-    private var lastTapAt = 0L
-    private var lastTapIndex = -1
-    private var holding: Int? = null
-
-    /** How long a press has to last to mean "you take it". */
-    private val holdMs = 650L
-
-    private val holdRunnable = Runnable {
-        val index = holding
-        holding = null
-        if (index != null && !moved) {
-            // A hold is not also a tap: forget the tap that started it.
-            tapped = null
-            lastTapIndex = -1
-            removeCallbacks(singleTap)
-            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-            onHold?.invoke(index)
-        }
-    }
 
     private val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.LEFT
         typeface = Typeface.MONOSPACE
-        textSize = density(9f)
+        textSize = density(10f)
         letterSpacing = 0.12f
     }
     private val value = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.LEFT
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        textSize = density(11f)
+        textSize = density(15f)
     }
-    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val switchText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        textSize = density(16f)
+    }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
+        strokeCap = Paint.Cap.BUTT
     }
-    private val knob = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val box = android.graphics.RectF()
 
     private fun density(dp: Float) = dp * resources.displayMetrics.density
 
     /** How far a finger may wander and still have meant a tap. */
     private val slop get() = density(8f)
 
-    /** Two taps this far apart in time are one gesture. */
-    private val doubleTapMs = 320L
-
     /** Below the status line, which is pinned to the top edge. */
     private val topInset get() = density(24f)
 
     /**
-     * Tall enough to hit, short enough that five of them clear the picture.
-     *
-     * A band is a word and a track, so it needs about half as much again as a
-     * line of text. Five at a fixed height is fine on this phone and is not on
-     * a small one, so it is whatever fits in the top two thirds of the frame
-     * and never more than a comfortable thumb's worth.
+     * Thick: a fader is grabbed without looking. As tall as the picture allows
+     * for four of them in the top three quarters, and never thinner than a
+     * thumb.
      */
     private val rowHeight: Float
         get() {
             val count = zones.size.coerceAtLeast(1)
-            val room = (height - topInset) * 0.66f
-            return (room / count).coerceIn(density(28f), density(40f))
+            val room = (height - topInset) * 0.78f
+            return (room / count).coerceIn(density(44f), density(68f))
         }
 
     private val sideGap get() = density(8f)
 
-    /** Edge to edge, which is the whole point of this version. */
-    private val trackLeft get() = sideGap
-    private val trackRight get() = width - sideGap
+    /** The A / M switch, a square at the head of each fader. */
+    private val switchSize get() = (rowHeight * 0.62f).coerceAtMost(density(40f))
+
+    private val trackLeft get() = sideGap + switchSize + density(12f)
+    private val trackRight get() = width - sideGap - density(14f)
 
     private fun rowTop(index: Int) = topInset + rowHeight * index
 
@@ -198,8 +156,10 @@ class ControlZones @JvmOverloads constructor(
     private fun rowAt(y: Float): Int? {
         if (zones.isEmpty()) return null
         val index = ((y - topInset) / rowHeight).toInt()
-        return if (index in zones.indices) index else null
+        return if (y >= topInset && index in zones.indices) index else null
     }
+
+    private fun onSwitchAt(x: Float): Boolean = x <= sideGap + switchSize + density(6f)
 
     override fun onDraw(canvas: Canvas) {
         if (zones.isEmpty() || width == 0) return
@@ -207,51 +167,75 @@ class ControlZones @JvmOverloads constructor(
         for (i in zones.indices) {
             val zone = zones[i]
             val top = rowTop(i)
-            // The word sits above the track, at the left, where the eye starts.
-            val words = top + rowHeight * 0.42f
-            val line = top + rowHeight * 0.78f
+            val mid = top + rowHeight * 0.62f
 
+            // THE A / M SWITCH: amber A while the camera decides, white M
+            // while the operator does. A lens that does not have the
+            // parameter (a fixed focus, an iris) shows neither.
+            val s = switchSize
+            box.set(sideGap, mid - s / 2f, sideGap + s, mid + s / 2f)
+            if (zone.live) {
+                fill.color = if (zone.auto) Color.argb(200, 232, 163, 61) else Color.argb(215, 245, 247, 248)
+                fill.setShadowLayer(density(3f), 0f, 0f, Color.BLACK)
+                canvas.drawRoundRect(box, density(4f), density(4f), fill)
+                fill.clearShadowLayer()
+                switchText.color = Color.BLACK
+                val m = switchText.fontMetrics
+                canvas.drawText(if (zone.auto) "A" else "M", box.centerX(),
+                    box.centerY() - (m.ascent + m.descent) / 2f, switchText)
+            }
+
+            // The name and the number, above the track, the number big: it is
+            // what the eye comes for, and it moves as the fader moves.
             val tint = when {
                 !zone.live -> Color.argb(120, 122, 128, 135)
                 held == i -> RailButton.GREEN
-                zone.auto -> Color.argb(210, 232, 163, 61)
-                else -> Color.argb(225, 235, 238, 240)
+                zone.auto -> Color.argb(225, 232, 163, 61)
+                else -> Color.argb(235, 245, 247, 248)
             }
-            title.color = Color.argb(
-                if (zone.live) 170 else 90, Color.red(tint), Color.green(tint), Color.blue(tint)
-            )
+            title.color = Color.argb(if (zone.live) 190 else 90, 235, 238, 240)
             value.color = tint
-            // Drawn with a shadow because it sits on a picture, and a picture
-            // can be any colour at all.
             title.setShadowLayer(density(2.5f), 0f, 0f, Color.BLACK)
             value.setShadowLayer(density(2.5f), 0f, 0f, Color.BLACK)
-
-            canvas.drawText(zone.title, sideGap, words, title)
-            canvas.drawText(
-                zone.value,
-                sideGap + title.measureText(zone.title) + density(8f),
-                words,
-                value
-            )
+            val words = top + rowHeight * 0.30f
+            canvas.drawText(zone.title, trackLeft, words, title)
+            canvas.drawText(zone.value, trackLeft + title.measureText(zone.title) + density(10f), words, value)
 
             if (!zone.live) continue
-
             val left = trackLeft
             val right = trackRight
             if (right <= left) continue
 
-            // The travel behind, the part used in front, and the knob on top.
-            track.strokeWidth = density(2f)
-            track.color = Color.argb(70, 255, 255, 255)
-            canvas.drawLine(left, line, right, line, track)
+            // THE GROOVE: a thick dark slot with ticks every tenth, like the
+            // slot a mixer's fader runs in.
+            line.strokeWidth = density(7f)
+            line.color = Color.argb(150, 0, 0, 0)
+            canvas.drawLine(left, mid, right, mid, line)
+            line.strokeWidth = density(1f)
+            line.color = Color.argb(110, 255, 255, 255)
+            for (t in 0..10) {
+                val x = left + (right - left) * t / 10f
+                val h = if (t % 5 == 0) density(9f) else density(5f)
+                canvas.drawLine(x, mid + density(6f), x, mid + density(6f) + h, line)
+            }
 
+            // THE CAP: a wide flat block with a line across its middle, the
+            // way an audio fader's cap is made to be read at a glance.
             val at = left + (right - left) * zone.position.coerceIn(0f, 1f)
-            track.color = if (held == i) RailButton.GREEN else Color.argb(150, 235, 238, 240)
-            canvas.drawLine(left, line, at, line, track)
-
-            knob.color = if (held == i) RailButton.GREEN else Color.argb(235, 245, 247, 248)
-            knob.setShadowLayer(density(3f), 0f, 0f, Color.BLACK)
-            canvas.drawCircle(at, line, density(if (held == i) 7f else 5.5f), knob)
+            val capW = density(18f)
+            val capH = (rowHeight * 0.62f).coerceAtMost(density(42f))
+            box.set(at - capW / 2f, mid - capH / 2f, at + capW / 2f, mid + capH / 2f)
+            fill.color = when {
+                held == i -> RailButton.GREEN
+                zone.auto -> Color.argb(200, 200, 190, 170)
+                else -> Color.argb(240, 230, 232, 235)
+            }
+            fill.setShadowLayer(density(4f), 0f, 0f, Color.BLACK)
+            canvas.drawRoundRect(box, density(3f), density(3f), fill)
+            fill.clearShadowLayer()
+            line.strokeWidth = density(2f)
+            line.color = Color.argb(220, 20, 20, 20)
+            canvas.drawLine(box.left + density(2f), mid, box.right - density(2f), mid, line)
         }
     }
 
@@ -262,28 +246,12 @@ class ControlZones @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
                 downY = event.y
+                lastX = event.x
                 moved = false
                 val index = rowAt(event.y)
-                if (index == null) {
-                    // Between the bands: nothing to drag, but a tap still focuses.
-                    outside = true
-                    tapped = null
-                    return true
-                }
-                outside = false
-                // A dead band still takes a double tap, because that is what
-                // hands it back to the camera — and AUTO is exactly the state a
-                // band is in when it has nothing for the finger to drag.
-                held = if (zones.getOrNull(index)?.live == true) index else null
-                lastX = event.x
-                downX = event.x
-                downY = event.y
-                moved = false
-                tapped = index
-                if (held != null) onGrab?.invoke(index)
-                holding = index
-                removeCallbacks(holdRunnable)
-                postDelayed(holdRunnable, holdMs)
+                onSwitch = if (index != null && onSwitchAt(event.x) && zones[index].live) index else null
+                held = if (index != null && onSwitch == null && zones[index].live) index else null
+                if (held != null) onGrab?.invoke(held)
                 invalidate()
                 return true
             }
@@ -292,13 +260,10 @@ class ControlZones @JvmOverloads constructor(
                     (kotlin.math.abs(event.x - downX) > slop ||
                         kotlin.math.abs(event.y - downY) > slop)
                 ) moved = true
-                // A drag right after a tap means the tap was finding the band.
-                if (moved) { holding = null; removeCallbacks(holdRunnable); removeCallbacks(singleTap) }
-                if (outside) return true
                 val index = held ?: return true
-                // Relative to the last position rather than to where the finger
-                // landed: a parameter that jumps to an absolute value the moment
-                // it is touched is a parameter that cannot be nudged.
+                if (!moved) return true
+                // Relative to the last position: a fader that jumps to where
+                // the finger landed is a picture that jumps when it is touched.
                 val span = (trackRight - trackLeft).coerceAtLeast(1f)
                 val delta = (event.x - lastX) / span
                 lastX = event.x
@@ -306,49 +271,25 @@ class ControlZones @JvmOverloads constructor(
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                holding = null
-                removeCallbacks(holdRunnable)
-                if (outside) {
-                    outside = false
-                    if (!moved) {
-                        removeCallbacks(singleTap)
-                        lastTapIndex = -1
-                        singleX = event.x / width.coerceAtLeast(1)
-                        singleY = event.y / height.coerceAtLeast(1)
-                        post(singleTap)
-                    }
-                    return true
-                }
-                val index = tapped
+                val sw = onSwitch
+                val wasHeld = held
                 held = null
-                tapped = null
-                onGrab?.invoke(null)
+                onSwitch = null
+                if (wasHeld != null) onGrab?.invoke(null)
                 invalidate()
-                if (!moved && index != null) {
-                    val now = SystemClock.uptimeMillis()
-                    if (index == lastTapIndex && now - lastTapAt <= doubleTapMs) {
-                        lastTapAt = 0L
-                        lastTapIndex = -1
-                        // The first tap was half of this, not a focus.
-                        removeCallbacks(singleTap)
-                        onDoubleTap?.invoke(index)
+                if (!moved) {
+                    if (sw != null) {
+                        performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                        onToggle?.invoke(sw)
                     } else {
-                        lastTapAt = now
-                        lastTapIndex = index
-                        singleX = event.x / width.coerceAtLeast(1)
-                        singleY = event.y / height.coerceAtLeast(1)
-                        removeCallbacks(singleTap)
-                        postDelayed(singleTap, doubleTapMs)
+                        onSingleTap?.invoke(event.x / width.coerceAtLeast(1), event.y / height.coerceAtLeast(1))
                     }
                 }
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
-                outside = false
-                holding = null
-                removeCallbacks(holdRunnable)
                 held = null
-                tapped = null
+                onSwitch = null
                 onGrab?.invoke(null)
                 invalidate()
                 return true

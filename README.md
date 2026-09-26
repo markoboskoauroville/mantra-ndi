@@ -12,9 +12,10 @@ needs it: to a card, to NDI, to a screen-share, to OBS.
 ## Why it is worth €22
 
 **Manual where you want it, automatic where you don't.** ISO, shutter, focus and colour temperature
-each run on their own, on big mixer-style faders across the picture. Take one over and leave the rest
-to the camera: half manual. Take them all: full manual. No other phone camera lets you hand
-exposure to the camera while you pull focus yourself, on the same screen, with one thumb. *(Arriving in v84.)*
+each run on their own, on thick mixer-style faders across the picture, each with its own A / M switch.
+Take one over and leave the rest to the camera: half manual (HM), with the phone's own ISO or shutter
+priority where it has one. Take them all: full manual. No other phone camera lets you hand
+exposure to the camera while you pull focus yourself, on the same screen, with one thumb.
 
 **Log curves from the cinema cameras you grade alongside.** Sony S-Log3, Panasonic V-Log, ARRI LogC3
 and LogC4, Blackmagic Film Gen5, computed from the manufacturers' published equations, applied in

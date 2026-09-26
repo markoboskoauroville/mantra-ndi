@@ -95,7 +95,20 @@ class MainActivity : AppCompatActivity() {
     private var bufferSize = Size(1920, 1080)
 
     /** Manual exposure, and whether the zones on the picture are listening. */
-    private var manual = false
+    /**
+     * A / M per parameter (v87). ISO and shutter each have their own switch;
+     * focus is the focus director's mode and white balance is [wbAuto]. The
+     * M key's AUTO / HM / FM is read off these four, never stored beside them.
+     */
+    private var isoAuto = true
+    private var shutterAuto = true
+
+    /** The last half-manual set, for the M key to put back. */
+    private var lastHalf: BooleanArray? = null
+
+    /** The brightness the half-manual loop holds, and whether the camera does it itself. */
+    private var loopTarget = 0.0
+    private var loopNative = false
     private var zonesOn = false
 
     /**
@@ -271,8 +284,7 @@ class MainActivity : AppCompatActivity() {
 
         zones.onDrag = { index, delta -> nudge(index, delta) }
         zones.onGrab = { refreshZones() }
-        zones.onDoubleTap = { index -> handToCamera(index) }
-        zones.onHold = { index -> handToCameraForGood(index) }
+        zones.onToggle = { index -> toggleParam(index) }
         zones.onSingleTap = { x, y -> focusAt(x, y) }
 
         // The trace is the only instrument that reaches a phone with no cable,
@@ -300,6 +312,10 @@ class MainActivity : AppCompatActivity() {
                         restoreMode = CameraPipeline.Mode.OFF
                         pipeline.setMode(want)
                     }
+                    // A new session starts from the template, which is all
+                    // automatic: his A / M switches are put back on it.
+                    if (!isoAuto || !shutterAuto) applyExposure()
+                    refreshZones()
                     refreshKeys()
                 }
             }
@@ -380,7 +396,7 @@ class MainActivity : AppCompatActivity() {
         }
         focusKey = newKey("AF") { toggleAutoFocus() }.also { railLeft.addView(it) }
         logKey = newKey("LOG") { nextCurve() }.also { railLeft.addView(it) }
-        manualKey = newKey("M") { toggleManual() }.also { railLeft.addView(it) }
+        manualKey = newKey("M") { nextCameraMode() }.also { railLeft.addView(it) }
         ctrlKey = newKey("CTRL") { toggleZones() }.also { railLeft.addView(it) }
         // One key for NDI: off, HX, full, off. An NDI source is one stream.
         ndiKey = newKey("NDI") { nextNdiMode() }.also { railLeft.addView(it) }
@@ -1003,28 +1019,158 @@ class MainActivity : AppCompatActivity() {
         refreshKeys()
     }
 
+    /** The four switches: ISO, shutter, focus, white balance; true = A. */
+    private fun switches(): BooleanArray = booleanArrayOf(
+        isoAuto, shutterAuto, focus.mode == FocusDirector.Mode.AUTO, wbAuto
+    )
+
     /**
-     * Manual exposure, or the phone's own.
+     * M: AUTO → HM → FM → AUTO.
      *
-     * Leaving auto starts from the values auto had already settled on rather
-     * than from a number written here, so the picture does not jump the moment
-     * the key is pressed — which is the whole reason an operator distrusts a
-     * manual switch.
+     * *"Now we have modes: full manual, half manual."* HM puts back the last
+     * half-manual set he made with the switches (or manual exposure with
+     * automatic focus and white balance, the first time).
      */
-    private fun toggleManual() {
-        manual = !manual
-        if (manual) {
-            iso = pipeline.engine.lastIso ?: iso
-            shutterNs = pipeline.engine.lastExposureNs ?: shutterNs
-            // The knobs go where the camera already is, before the first drag
-            // can move them from somewhere else.
-            seedZonePositions()
-            pipeline.engine.setManualExposure(iso, shutterNs)
-        } else {
-            pipeline.engine.setAutoExposure()
-        }
+    private fun nextCameraMode() {
+        val now = switches()
+        if (Mechanism.cameraMode(now) == "HM") lastHalf = now.copyOf()
+        val next = Mechanism.nextCameraMode(now, lastHalf)
+        for (i in 0..3) if (next[i] != now[i]) setParamAuto(i, next[i], quiet = true)
+        say("Mode " + Mechanism.cameraMode(switches()))
         refreshZones()
         refreshKeys()
+    }
+
+    /** The A / M switch at the head of a fader. */
+    private fun toggleParam(index: Int) {
+        val now = switches()
+        setParamAuto(index, !now[index], quiet = false)
+        if (Mechanism.cameraMode(switches()) == "HM") lastHalf = switches()
+        refreshZones()
+        refreshKeys()
+    }
+
+    /**
+     * One parameter to automatic or manual.
+     *
+     * Leaving auto starts from the value auto had settled on, so the picture
+     * does not jump; white balance from A to M reads the camera's own answer
+     * once and keeps it (the probe), which is what the old double tap did.
+     */
+    private fun setParamAuto(index: Int, auto: Boolean, quiet: Boolean) {
+        val engine = pipeline.engine
+        when (index) {
+            0, 1 -> {
+                if (!auto) {
+                    iso = engine.lastIso ?: iso
+                    shutterNs = engine.lastExposureNs ?: shutterNs
+                    seedZonePositions()
+                }
+                if (index == 0) isoAuto = auto else shutterAuto = auto
+                applyExposure()
+                if (!quiet) say((if (index == 0) "ISO " else "Shutter ") + if (auto) "automatic" else "manual")
+            }
+            2 -> when {
+                !engine.supportsManualFocus() -> if (!quiet) sayFixedFocus()
+                (focus.mode == FocusDirector.Mode.AUTO) != auto -> {
+                    toggleAutoFocus()
+                    if (!quiet) say("Focus " + if (auto) "automatic" else "manual")
+                }
+            }
+            3 -> if (auto) {
+                wbAuto = true
+                engine.setAutoWhiteBalance()
+                if (!quiet) say("White balance automatic")
+            } else if (wbAuto) {
+                probeWhiteBalance()
+            }
+        }
+    }
+
+    /**
+     * Exposure from the two switches.
+     *
+     * Both A is the camera's auto exposure; both M is the operator's. One of
+     * each is half manual: the phone's own ISO or shutter priority where the
+     * lens offers it (Android 16), otherwise this app's loop, which moves the
+     * automatic half to hold the brightness auto exposure had reached.
+     */
+    private fun applyExposure() {
+        val engine = pipeline.engine
+        ui.removeCallbacks(priorityLoop)
+        loopNative = false
+        when (Mechanism.exposureMode(isoAuto, shutterAuto)) {
+            Mechanism.Exposure.AUTO -> engine.setAutoExposure()
+            Mechanism.Exposure.MANUAL -> engine.setManualExposure(iso, shutterNs)
+            Mechanism.Exposure.ISO_PRIORITY, Mechanism.Exposure.SHUTTER_PRIORITY -> {
+                val mode = if (!isoAuto) 1 else 2
+                if (engine.hasNativePriority(mode) && engine.setPriorityExposure(mode, iso, shutterNs)) {
+                    loopNative = true
+                } else {
+                    engine.setManualExposure(iso, shutterNs)
+                    loopTarget = sampleBrightness() ?: 0.0
+                    Trace.control(
+                        "exposure", if (mode == 1) "ISO priority" else "shutter priority",
+                        "the app's loop, holding brightness " + String.format("%.3f", loopTarget)
+                    )
+                    ui.postDelayed(priorityLoop, 300)
+                }
+            }
+        }
+    }
+
+    /**
+     * The half-manual loop, four times a second: read the picture's middle,
+     * move the automatic half a fraction of a stop towards the target.
+     */
+    private val priorityLoop = object : Runnable {
+        override fun run() {
+            val mode = Mechanism.exposureMode(isoAuto, shutterAuto)
+            if (loopNative || !pipeline.isRunning ||
+                (mode != Mechanism.Exposure.ISO_PRIORITY && mode != Mechanism.Exposure.SHUTTER_PRIORITY)
+            ) return
+            val measured = sampleBrightness()
+            if (measured != null && loopTarget <= 0.0) loopTarget = measured
+            if (measured != null && loopTarget > 0.0) {
+                val engine = pipeline.engine
+                if (mode == Mechanism.Exposure.ISO_PRIORITY) {
+                    shutterBounds()?.let { (low, high) ->
+                        shutterNs = Mechanism.priorityStep(
+                            shutterNs.toDouble(), measured, loopTarget, low.toDouble(), high.toDouble()
+                        ).toLong()
+                    }
+                } else {
+                    engine.isoRange()?.let {
+                        iso = Mechanism.priorityStep(
+                            iso.toDouble(), measured, loopTarget, it.lower.toDouble(), it.upper.toDouble()
+                        ).toInt()
+                    }
+                }
+                engine.setManualExposure(iso, shutterNs)
+                refreshZones()
+            }
+            ui.postDelayed(this, 250)
+        }
+    }
+
+    /**
+     * The picture's brightness in the middle, 0..1, from a 24x14 read of the
+     * preview: the scaling is done by the GPU, a few dozen pixels are averaged
+     * here.
+     */
+    private fun sampleBrightness(): Double? {
+        if (!preview.isAvailable) return null
+        val bmp = runCatching { preview.getBitmap(24, 14) }.getOrNull() ?: return null
+        var sum = 0.0
+        var n = 0
+        for (y in 4 until 10) for (x in 8 until 16) {
+            val c = bmp.getPixel(x, y)
+            sum += (0.299 * android.graphics.Color.red(c) + 0.587 * android.graphics.Color.green(c) +
+                0.114 * android.graphics.Color.blue(c)) / 255.0
+            n++
+        }
+        bmp.recycle()
+        return if (n == 0) null else sum / n
     }
 
     /**
@@ -1062,22 +1208,22 @@ class MainActivity : AppCompatActivity() {
         val engine = pipeline.engine
         when (index) {
             0 -> {
-                if (!manual) { toggleManual(); if (!manual) return }
+                if (isoAuto) setParamAuto(0, false, quiet = true)
                 val range = engine.isoRange() ?: return
                 isoPosition = (isoPosition + delta).coerceIn(0f, 1f)
                 iso = Mechanism.valueAtPosition(
                     isoPosition, range.lower.toDouble(), range.upper.toDouble()
                 ).toInt().coerceIn(range.lower, range.upper)
-                engine.setManualExposure(iso, shutterNs)
+                applyDragExposure()
             }
             1 -> {
-                if (!manual) { toggleManual(); if (!manual) return }
+                if (shutterAuto) setParamAuto(1, false, quiet = true)
                 val (low, high) = shutterBounds() ?: return
                 shutterPosition = (shutterPosition + delta).coerceIn(0f, 1f)
                 shutterNs = Mechanism.valueAtPosition(
                     shutterPosition, low.toDouble(), high.toDouble()
                 ).toLong().coerceIn(low, high)
-                engine.setManualExposure(iso, shutterNs)
+                applyDragExposure()
             }
             2 -> {
                 // A lens with no focus motor is said outright rather than
@@ -1110,36 +1256,6 @@ class MainActivity : AppCompatActivity() {
                 wbKelvin = WhiteBalance.kelvinAt(at)
                 engine.setWhiteBalanceKelvin(wbKelvin)
             }
-        }
-        refreshZones()
-    }
-
-    /**
-     * Two taps on a zone: the camera takes that parameter back.
-     *
-     * It used to be one tap, and one tap is what a thumb does by accident
-     * while it is finding the band it wants — losing manual exposure in the
-     * middle of a shot because a finger brushed the glass is not a control. A
-     * double tap always means *auto*, never "the other one": a gesture that
-     * toggles is a gesture whose result has to be checked afterwards.
-     */
-    private fun handToCamera(index: Int) {
-        val engine = pipeline.engine
-        when (index) {
-            0, 1 -> {
-                if (manual) toggleManual()
-                say("Exposure: the camera's own")
-            }
-            2 -> when {
-                !engine.supportsManualFocus() -> sayFixedFocus()
-                focus.mode != FocusDirector.Mode.AUTO -> {
-                    toggleAutoFocus()
-                    say("Focus: the camera's own")
-                }
-                else -> say("Focus: already the camera's own")
-            }
-            // White balance is the one that does NOT go back to auto here.
-            3 -> probeWhiteBalance()
         }
         refreshZones()
     }
@@ -1206,35 +1322,14 @@ class MainActivity : AppCompatActivity() {
     private var probeTicket = 0
 
     /**
-     * A zone held down: the camera takes it back and goes on deciding.
-     *
-     * The gesture that cannot happen by accident, for the state an operator
-     * asks for least often. On white balance this is the only route back to
-     * continuous auto, because the double tap now measures instead.
+     * A drag on ISO or shutter: in full manual both go to the camera; in a
+     * native priority mode only the held half is sent and the camera keeps
+     * the other; in the app's loop the loop goes on from the new value.
      */
-    private fun handToCameraForGood(index: Int) {
+    private fun applyDragExposure() {
         val engine = pipeline.engine
-        when (index) {
-            0, 1 -> {
-                if (manual) toggleManual()
-                say("Exposure: the camera's own, continuously")
-            }
-            2 -> when {
-                !engine.supportsManualFocus() -> sayFixedFocus()
-                focus.mode != FocusDirector.Mode.AUTO -> {
-                    toggleAutoFocus()
-                    say("Focus: the camera's own, continuously")
-                }
-                else -> say("Focus: already the camera's own")
-            }
-            3 -> {
-                wbAuto = true
-                engine.setAutoWhiteBalance()
-                say("White balance: the camera's own, continuously")
-                refreshKeys()
-            }
-        }
-        refreshZones()
+        if (loopNative) engine.setPriorityExposure(if (!isoAuto) 1 else 2, iso, shutterNs)
+        else engine.setManualExposure(iso, shutterNs)
     }
 
     /** Said once per lens: a fixed lens is a fact, not an error to repeat. */
@@ -1311,22 +1406,25 @@ class MainActivity : AppCompatActivity() {
         }
 
         val isoPositionShown = engine.isoRange()?.let {
-            if (manual) isoPosition
+            if (!isoAuto) isoPosition
             else Mechanism.positionOfValue(
                 liveIso.toDouble(), it.lower.toDouble(), it.upper.toDouble()
             )
         } ?: isoPosition
         val shutterPositionShown = shutterBounds()?.let { (low, high) ->
-            if (manual) shutterPosition
+            if (!shutterAuto) shutterPosition
             else Mechanism.positionOfValue(
                 liveShutter.toDouble(), low.toDouble(), high.toDouble()
             )
         } ?: shutterPosition
 
         zones.zones = listOf(
-            ControlZones.Zone("ISO", liveIso.toString(), true, isoPositionShown, !manual),
+            // While a fader is his, the number is what he set, so it moves
+            // with his thumb rather than a frame behind the camera.
+            ControlZones.Zone("ISO", (if (isoAuto) liveIso else iso).toString(), true, isoPositionShown, isoAuto),
             ControlZones.Zone(
-                "SHTR", Mechanism.formatShutter(liveShutter), true, shutterPositionShown, !manual
+                "SHTR", Mechanism.formatShutter(if (shutterAuto) liveShutter else shutterNs), true,
+                shutterPositionShown, shutterAuto
             ),
             ControlZones.Zone("FOCUS", focusText, canFocus, focusPosition, autoFocus),
             // Tungsten on the left, daylight on the right. Dragging it takes
@@ -1667,8 +1765,9 @@ class MainActivity : AppCompatActivity() {
             if (LogCurves.Curve.entries[curveIndex] == LogCurves.Curve.REC709)
                 RailButton.State.OFF
             else RailButton.State.ON
-        manualKey.state = if (manual) RailButton.State.ON else RailButton.State.OFF
-        manualKey.sub = if (manual) "MAN" else "AUTO"
+        val mode = Mechanism.cameraMode(switches())
+        manualKey.state = if (mode == "AUTO") RailButton.State.OFF else RailButton.State.ON
+        manualKey.sub = mode
         ctrlKey.state = if (zonesOn) RailButton.State.ON else RailButton.State.OFF
         ndiKey.sub = when (pipeline.mode) {
             CameraPipeline.Mode.HX -> "HX"
