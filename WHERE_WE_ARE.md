@@ -6,6 +6,30 @@ working state of *this* app.
 
 ---
 
+## 26.9.2026, night: v84, the sound back in sync, constant frame rate, rotation obeys the lock
+
+His test of v83: no crackle any more, but **sound and picture out of sync**. His take: the sound
+starts **7664 s after the picture**. v83 stamped the sound on the boot clock because the Pixel's
+sensor reports REALTIME; the camera framework converts frames going into a video encoder to the
+monotonic clock, so the two tracks were apart by the phone's sleep. Back on `System.nanoTime`, still
+sample-counted. The emulator could not catch it, because its camera already uses the monotonic
+clock (LESSONS.md §1).
+
+**Constant frame rate, forced**: every frame goes onto an exact 1/fps grid counted from the first
+(`Mechanism.cfrSlot`). His v83 take already wobbled only between 40.0 and 40.1 ms; now the file
+is exact. A frame the camera never delivered leaves its slot empty, so the frames after it stay in
+sync with the sound. The emulator's fake camera missed 7 frames in 15 s; his Pixel take missed none.
+
+**Rotation**: `fullUser` instead of `fullSensor`. With auto-rotate off the phone was turned twice
+and the screen stayed; with it on, the screen followed.
+
+**Tested.** 234 unit tests (the rule broken on purpose: 1 red, restored). Emulator: v83 → v84 with
+settings kept; 15 s take: video intervals all 1/30 s except 7 empty slots, audio 690 frames all
+21.3 ms, start within 2 ms; monkey seed 84084, 20,000 events, no crash, 25 takes all with even audio
+(two are single-frame takes with no sound, which is right). LESSONS.md written.
+
+---
+
 ## 26.9.2026, evening: v83, Mantra Manual Camera, and what his first test found
 
 He tested v82 on the Pixel 7 and the Nothing Phone (2a): peaking works on the Nothing. Then:

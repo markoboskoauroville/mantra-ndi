@@ -366,4 +366,4 @@ a small model on the AI cores is the upgrade path, and the doc will say so then.
 | 26.9.2026 | v81 | — | Document written; Phase 1 started |
 | 26.9.2026 | v82 | 1 | Built by CI, tested on the Pixel 7 emulator (four tests, monkey 20,000) |
 | 26.9.2026 | v83 | 1b | His test: peaking works on the Nothing; the take's sound lost half of every buffer (ffprobe: 386 AAC frames 40 ms apart, 8.2 s of sound in 15.4 s); SNAP unfindable; log froze the Nothing. All fixed in v83; tested on the emulator (take measured, PNG, curves, monkey 20,000). tested by him 26.9: no crackle; sound out of sync |
-| 26.9.2026 | v84 | 1c | Sound back on the monotonic clock with counted samples; CFR grid; fullUser rotation. **Waiting for his test** |
+| 26.9.2026 | v84 | 1c | Sound back on the monotonic clock with counted samples; CFR grid; fullUser rotation. Tested on the emulator (clock proven only on a real phone). **Waiting for his test** |
