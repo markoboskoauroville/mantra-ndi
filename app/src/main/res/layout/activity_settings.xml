@@ -417,6 +417,40 @@
             android:layout_height="wrap_content"
             android:max="100" />
 
+        <!-- v99: tracking focus, every parameter -->
+        <TextView style="@style/MantraLabel" android:text="@string/tracking" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/tracking_hint" />
+        <TextView android:id="@+id/trackSearchValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="25" />
+        <TextView android:id="@+id/trackEveryValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackEvery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="9" />
+        <TextView android:id="@+id/trackConfidenceValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackConfidence"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="75" />
+        <TextView android:id="@+id/trackToleranceValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackTolerance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="24" />
+        <TextView android:id="@+id/trackFollowValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackFollow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="90" />
+
         <!-- Peaking -->
         <TextView style="@style/MantraLabel" android:text="@string/peaking" />
         <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/peaking_hint" />

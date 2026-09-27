@@ -76,6 +76,20 @@ class CameraPipeline(private val context: Context) {
     /** Which path the picture takes, for the trace and settings. */
     val usesGpuStage: Boolean get() = gpu != null
 
+    /** Tracking focus (v99) runs on the GPU stage; this hears where the mark went. */
+    var trackListener: GpuStage.TrackListener? = null
+        set(value) { field = value; gpu?.trackListener = value }
+
+    /** @return false without the GPU stage, which is where the tracker lives. */
+    fun startTracking(x: Float, y: Float, w: Float, h: Float, every: Int, search: Float, confidence: Float): Boolean {
+        val stage = gpu ?: return false
+        stage.trackListener = trackListener
+        stage.startTracking(x, y, w, h, every, search, confidence)
+        return true
+    }
+
+    fun stopTracking() { gpu?.stopTracking() }
+
     /** The stream's bit rate when the GPU stage gives it its own encoder. */
     var streamBitRate: Int = BIT_RATE
     private var fullReader: ImageReader? = null

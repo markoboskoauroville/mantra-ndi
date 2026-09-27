@@ -43,6 +43,8 @@
     <string name="rot">Turn the preview</string>
     <string name="rot_hint">Quarter turns for a lens that is mounted unusually, kept per lens. Most phones never need it.</string>
     <string name="zebra">Zebra level</string>
+    <string name="tracking">Tracking focus</string>
+    <string name="tracking_hint">The AF key cycles AF, TRK, MF. In TRK the focus box is the pattern (pinch it to size) and a tap sets it on a subject; the mark follows inside the outer square, the search zone, and focus is asked again once it has moved past the tolerance. Below the confidence it says LOST and waits where it was. Runs on the GPU stage.</string>
     <string name="outputs">Outputs</string>
     <string name="outputs_hint">Arm a destination here; nothing leaves the phone until the record key on the camera, and then every armed one starts together and stops together. Mix any of them.</string>
     <string name="ndi_kind">Kind of NDI</string>

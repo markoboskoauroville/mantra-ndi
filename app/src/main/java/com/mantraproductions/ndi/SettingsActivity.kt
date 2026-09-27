@@ -272,6 +272,21 @@ class SettingsActivity : AppCompatActivity() {
             })
         }
         path.setOnCheckedChangeListener { _, id -> settings.gpuStage = id == 301 }
+        slider(R.id.trackSearch, R.id.trackSearchValue, value = settings.trackSearch - 15,
+            label = { String.format(java.util.Locale.ROOT, "search zone  %.1f x the box", (it + 15) / 10.0) },
+            onSet = { settings.trackSearch = it + 15 })
+        slider(R.id.trackEvery, R.id.trackEveryValue, value = settings.trackEvery - 1,
+            label = { if (it == 0) "search every frame" else "search every ${it + 1} frames" },
+            onSet = { settings.trackEvery = it + 1 })
+        slider(R.id.trackConfidence, R.id.trackConfidenceValue, value = settings.trackConfidence - 20,
+            label = { "LOST below ${it + 20}% match" },
+            onSet = { settings.trackConfidence = it + 20 })
+        slider(R.id.trackTolerance, R.id.trackToleranceValue, value = settings.trackTolerance - 1,
+            label = { "refocus after moving ${it + 1}% of the frame" },
+            onSet = { settings.trackTolerance = it + 1 })
+        slider(R.id.trackFollow, R.id.trackFollowValue, value = settings.trackFollow - 10,
+            label = { "mark follows ${it + 10}% of the way per search" },
+            onSet = { settings.trackFollow = it + 10 })
         slider(
             R.id.hold, R.id.holdValue,
             value = (settings.focusHoldMs / 100).toInt(),

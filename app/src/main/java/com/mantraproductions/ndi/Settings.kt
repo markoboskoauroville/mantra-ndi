@@ -195,6 +195,33 @@ class Settings(context: Context) {
         get() = prefs.getInt(STREAM_MBPS, 16)
         set(value) = prefs.edit().putInt(STREAM_MBPS, value.coerceIn(2, 50)).apply()
 
+    // --- tracking focus (v99): every parameter, so he can experiment ---------------
+
+    /** The search zone, as a multiple of the pattern (the pinched box), x10: 15..40. */
+    var trackSearch: Int
+        get() = prefs.getInt("trackSearch", 25)
+        set(value) = prefs.edit().putInt("trackSearch", value.coerceIn(15, 40)).apply()
+
+    /** Frames between searches: 1 is every frame, more spares the phone's heat. */
+    var trackEvery: Int
+        get() = prefs.getInt("trackEvery", 2)
+        set(value) = prefs.edit().putInt("trackEvery", value.coerceIn(1, 10)).apply()
+
+    /** Match confidence below which the mark says LOST, percent. */
+    var trackConfidence: Int
+        get() = prefs.getInt("trackConfidence", 60)
+        set(value) = prefs.edit().putInt("trackConfidence", value.coerceIn(20, 95)).apply()
+
+    /** How far the mark moves before focus is asked again, percent of the frame. */
+    var trackTolerance: Int
+        get() = prefs.getInt("trackTolerance", 4)
+        set(value) = prefs.edit().putInt("trackTolerance", value.coerceIn(1, 25)).apply()
+
+    /** How fast the mark follows the match, percent of the way per search. */
+    var trackFollow: Int
+        get() = prefs.getInt("trackFollow", 60)
+        set(value) = prefs.edit().putInt("trackFollow", value.coerceIn(10, 100)).apply()
+
     private companion object {
         const val SOURCE = "sourceName"
         const val HOLD = "focusHoldMs"

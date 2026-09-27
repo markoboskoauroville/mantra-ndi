@@ -1596,6 +1596,94 @@ object Mechanism {
         return ((db - METER_FLOOR_DB) / -METER_FLOOR_DB).coerceIn(0f, 1f)
     }
 
+    // --- tracking focus (v99, Phase 9) ------------------------------------------------
+
+    /** Where a pattern matched: its top-left inside the search zone, and how well (-1..1). */
+    data class Match(val dx: Double, val dy: Double, val score: Double)
+
+    /**
+     * Normalised cross-correlation of [pattern] (pw x ph) at every place in the
+     * search zone of [image] (iw wide) whose top-left is (ox, oy) and which is
+     * sw x sh: the method the trackers in After Effects, Resolve and Avid use.
+     * It is blind to brightness and contrast (the mean and the spread are taken
+     * out), so a cloud passing or auto exposure moving does not lose the mark.
+     *
+     * **This is the reference the GPU shader follows** (GpuStage's NCC
+     * program computes exactly these five sums per place); the phone never
+     * runs it, the tests do.
+     */
+    fun nccBest(
+        pattern: FloatArray, pw: Int, ph: Int,
+        image: FloatArray, iw: Int, ox: Int, oy: Int, sw: Int, sh: Int
+    ): Match {
+        val cw = sw - pw + 1
+        val ch = sh - ph + 1
+        val scores = DoubleArray(maxOf(cw, 0) * maxOf(ch, 0))
+        var best = -1
+        for (y in 0 until ch) for (x in 0 until cw) {
+            var sp = 0.0; var sp2 = 0.0; var sw_ = 0.0; var sw2 = 0.0; var spw = 0.0
+            for (j in 0 until ph) for (i in 0 until pw) {
+                val p = pattern[j * pw + i].toDouble()
+                val w = image[(oy + y + j) * iw + (ox + x + i)].toDouble()
+                sp += p; sp2 += p * p; sw_ += w; sw2 += w * w; spw += p * w
+            }
+            scores[y * cw + x] = nccFromSums(sp, sp2, sw_, sw2, spw, pw * ph)
+            if (best < 0 || scores[y * cw + x] > scores[best]) best = y * cw + x
+        }
+        if (best < 0) return Match(0.0, 0.0, 0.0)
+        val bx = best % cw
+        val by = best / cw
+        fun at(x: Int, y: Int) = scores[y.coerceIn(0, ch - 1) * cw + x.coerceIn(0, cw - 1)]
+        val fx = if (bx in 1 until cw - 1) subPixel(at(bx - 1, by), at(bx, by), at(bx + 1, by)) else 0.0
+        val fy = if (by in 1 until ch - 1) subPixel(at(bx, by - 1), at(bx, by), at(bx, by + 1)) else 0.0
+        return Match(bx + fx, by + fy, scores[best])
+    }
+
+    /** NCC from the five sums; a flat patch (no spread) matches nothing. */
+    fun nccFromSums(sp: Double, sp2: Double, sw: Double, sw2: Double, spw: Double, n: Int): Double {
+        val cov = spw - sp * sw / n
+        val vp = sp2 - sp * sp / n
+        val vw = sw2 - sw * sw / n
+        if (vp <= 1e-9 || vw <= 1e-9) return 0.0
+        return (cov / kotlin.math.sqrt(vp * vw)).coerceIn(-1.0, 1.0)
+    }
+
+    /** The peak between three neighbouring scores, as an offset of -0.5..0.5 (a parabola through them). */
+    fun subPixel(left: Double, centre: Double, right: Double): Double {
+        val d = left - 2 * centre + right
+        if (d >= -1e-12) return 0.0
+        return (0.5 * (left - right) / d).coerceIn(-0.5, 0.5)
+    }
+
+    /**
+     * A score read back from the GPU: packed into two 8-bit channels, high and
+     * low, of (score + 1) / 2, so it survives an RGBA8 target on every phone.
+     */
+    fun decodeScore(hi: Int, lo: Int): Double = ((hi + lo / 255.0) / 255.0) * 2.0 - 1.0
+
+    /**
+     * A point on the stream (the sensor's buffer, 0..1 from the top left) to
+     * the screen: the inverse of [viewRegionToSensor]'s point, so the mark
+     * lands where the matcher found the subject.
+     */
+    fun streamPointToView(x: Float, y: Float, degrees: Int, mirrored: Boolean): FloatArray {
+        val (vx, vy) = when (((degrees % 360) + 360) % 360) {
+            90 -> (1f - y) to x
+            180 -> (1f - x) to (1f - y)
+            270 -> y to (1f - x)
+            else -> x to y
+        }
+        return floatArrayOf(if (mirrored) 1f - vx else vx, vy)
+    }
+
+    /** Refocus only once the mark has moved past the tolerance (a fraction of the frame) since the last focus. */
+    fun trackRefocus(lastX: Float, lastY: Float, x: Float, y: Float, tolerance: Float): Boolean =
+        kotlin.math.hypot((x - lastX).toDouble(), (y - lastY).toDouble()) > tolerance
+
+    /** How fast the mark follows: this fraction of the way to the match per search. */
+    fun follow(current: Float, target: Float, speed: Float): Float =
+        current + (target - current) * speed.coerceIn(0.05f, 1f)
+
     // --- automatic exposure that knows the log curve (v98, Phase 5) ------------------
 
     /**

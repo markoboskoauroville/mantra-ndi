@@ -61,6 +61,25 @@ class FocusSquareView @JvmOverloads constructor(
             invalidate()
         }
 
+    /**
+     * The tracking mark (v99): the box is the pattern, a thin outer square is
+     * the search zone ([searchFactor] times it), and LOST is written under it
+     * when the match falls below the confidence.
+     */
+    var tracking = false
+        set(value) { if (field != value) { field = value; invalidate() } }
+    var lost = false
+        set(value) { if (field != value) { field = value; invalidate() } }
+    var searchFactor = 2.5f
+        set(value) { field = value; invalidate() }
+
+    private val lostText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF2D1F")
+        textAlign = Paint.Align.CENTER
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+        setShadowLayer(3f, 0f, 0f, Color.BLACK)
+    }
+
     /** Fired when a pinch ends, with the new size, so it can be remembered. */
     var onResized: ((Float) -> Unit)? = null
 
@@ -128,11 +147,15 @@ class FocusSquareView @JvmOverloads constructor(
         val (hw, hh) = halves().let { it[0] to it[1] }
         rect.set(cx - hw, cy - hh, cx + hw, cy + hh)
 
-        paint.color = when (state) {
+        paint.color = when {
+            tracking && lost -> Color.parseColor("#FF2D1F")
+            tracking -> Color.parseColor("#33D17A")
+            else -> when (state) {
             State.IDLE -> Color.parseColor("#CCFFFFFF")
             State.SEEKING -> Color.parseColor("#FFD400")
             State.LOCKED -> Color.parseColor("#12C46A")
             State.FAILED -> Color.parseColor("#FF2D1F")
+            }
         }
         // Half the weight it was. A focus box is a reference, not a graphic,
         // and a heavy one hides the very detail being judged.
@@ -150,6 +173,18 @@ class FocusSquareView @JvmOverloads constructor(
             drawLine(rect.left, rect.bottom, rect.left, rect.bottom - arm, paint)
             drawLine(rect.right, rect.bottom, rect.right - arm, rect.bottom, paint)
             drawLine(rect.right, rect.bottom, rect.right, rect.bottom - arm, paint)
+        }
+        if (tracking) {
+            // The search zone: a thin full square, faint, so the subject shows through.
+            val alpha = paint.alpha
+            paint.alpha = 110
+            canvas.drawRect(cx - hw * searchFactor, cy - hh * searchFactor,
+                cx + hw * searchFactor, cy + hh * searchFactor, paint)
+            paint.alpha = alpha
+            if (lost) {
+                lostText.textSize = 13f * density
+                canvas.drawText("LOST", cx, rect.bottom + 16f * density, lostText)
+            }
         }
     }
 

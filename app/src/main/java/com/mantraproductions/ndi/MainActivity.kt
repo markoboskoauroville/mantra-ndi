@@ -91,6 +91,19 @@ class MainActivity : AppCompatActivity() {
 
     /** The camera's own turn, as last decoded from the texture matrix. */
     private var lastProducerDegrees = -1
+
+    /**
+     * Whether the monitor shows the picture mirrored (the camera's producer
+     * transform on the direct path; never on the GPU stage, which draws the
+     * raw buffer). Screen and sensor are mapped through this, not through
+     * "front camera", which v97 made two different questions.
+     */
+    private var previewMirrored = false
+
+    /** TRK (v99): the focus box is a tracking mark. */
+    private var tracking = false
+    private var lastFocusX = 0.5f
+    private var lastFocusY = 0.5f
     private var peaking = false
     private var bufferSize = Size(1920, 1080)
 
@@ -250,8 +263,14 @@ class MainActivity : AppCompatActivity() {
             focus.target = x to y
             focus.bounds = focusSquare.normalisedBounds()
             updateFocusRegion()
+            // A tap or a drag in TRK is a new subject: the box becomes the new pattern.
+            if (tracking) startTrack()
         }
-        focusSquare.onResized = { size -> settings.focusBoxSize = size }
+        focusSquare.onResized = { size ->
+            settings.focusBoxSize = size
+            if (tracking) startTrack()
+        }
+        pipeline.trackListener = GpuStage.TrackListener { x, y, score -> ui.post { onTracked(x, y, score) } }
         focusSquare.onTapped = { focus.focusHereAndHold() }
 
         onBackPressedDispatcher.addCallback(this, leaveFullScreen)
@@ -319,6 +338,8 @@ class MainActivity : AppCompatActivity() {
                     // automatic: his A / M switches are put back on it.
                     if (!isoAuto || !shutterAuto) applyExposure()
                     focus.resume()
+                    // A new session is a new GPU stage: the mark is set again where it is.
+                    if (tracking) ui.postDelayed({ if (tracking) startTrack() }, 400)
                     if (!wbMeasuredOnce) probeWhiteBalance()
                     refreshZones()
                     refreshKeys()
@@ -860,6 +881,7 @@ class MainActivity : AppCompatActivity() {
         val producerDegrees = Mechanism.producerRotation(producer)
         val producerMirrored = Mechanism.producerMirrored(producer)
         lastProducerDegrees = producerDegrees
+        previewMirrored = producerMirrored
 
         val auto = Mechanism.previewRotation(sensor, displayDegrees, front, producerDegrees)
         val applied = ((auto + manualQuarterTurns * 90) % 360 + 360) % 360
@@ -939,7 +961,7 @@ class MainActivity : AppCompatActivity() {
             engine.sensorOrientation, displayDegrees, front, manualQuarterTurns
         )
         val b = focusSquare.normalisedBounds()
-        val onStream = Mechanism.viewRegionToSensor(b[0], b[1], b[2], b[3], degrees, front)
+        val onStream = Mechanism.viewRegionToSensor(b[0], b[1], b[2], b[3], degrees, previewMirrored)
         val array = engine.activeArray()
         engine.focusRegion = if (array == null) onStream else Mechanism.streamRegionToArray(
             onStream, bufferSize.width, bufferSize.height, array.width(), array.height()
@@ -1006,12 +1028,100 @@ class MainActivity : AppCompatActivity() {
     /** The mode to put back once the new lens is live. */
     private var restoreMode: CameraPipeline.Mode = CameraPipeline.Mode.OFF
 
+    /**
+     * The focus key: AF → TRK → MF → AF (v99). TRK is automatic focus whose
+     * box follows a subject; it needs the GPU stage, and without it the key
+     * steps straight from AF to MF and says why.
+     */
     private fun toggleAutoFocus() {
-        val next = if (focus.mode == FocusDirector.Mode.AUTO) FocusDirector.Mode.MANUAL
-        else FocusDirector.Mode.AUTO
-        focus.setMode(next)
-        Trace.control("focus mode", next.name, next.name)
+        when {
+            focus.mode == FocusDirector.Mode.AUTO && !tracking -> {
+                if (pipeline.usesGpuStage) {
+                    startTrack()
+                    refreshKeys()
+                    return
+                }
+                say("Tracking needs the GPU stage — Settings, Picture path")
+                focus.setMode(FocusDirector.Mode.MANUAL)
+            }
+            tracking -> {
+                stopTrack()
+                focus.setMode(FocusDirector.Mode.MANUAL)
+            }
+            else -> focus.setMode(FocusDirector.Mode.AUTO)
+        }
+        Trace.control("focus mode", focus.mode.name, focus.mode.name)
         refreshKeys()
+    }
+
+    // --- tracking focus (v99) ---------------------------------------------------------
+
+    /** The stream's degrees from the screen, the same sum [updateFocusRegion] uses. */
+    private fun viewDegrees(): Int {
+        val engine = pipeline.engine
+        return Mechanism.sensorToViewDegrees(
+            engine.sensorOrientation, displayDegrees(), engine.isFrontFacing, manualQuarterTurns
+        )
+    }
+
+    /** The box, as it is now, becomes the pattern; the GPU stage starts looking for it. */
+    private fun startTrack() {
+        if (!pipeline.isRunning) return
+        if (focus.mode != FocusDirector.Mode.AUTO) focus.setMode(FocusDirector.Mode.AUTO)
+        val b = focusSquare.normalisedBounds()
+        val s = Mechanism.viewRegionToSensor(b[0], b[1], b[2], b[3], viewDegrees(), previewMirrored)
+        val cx = (s[0] + s[2]) / 2f
+        val cy = (s[1] + s[3]) / 2f
+        val search = settings.trackSearch / 10f
+        if (!pipeline.startTracking(
+                cx, cy, kotlin.math.abs(s[2] - s[0]), kotlin.math.abs(s[3] - s[1]),
+                settings.trackEvery, search, settings.trackConfidence / 100f
+            )
+        ) {
+            say("Tracking needs the GPU stage — Settings, Picture path")
+            return
+        }
+        tracking = true
+        focusSquare.searchFactor = search
+        focusSquare.lost = false
+        focusSquare.tracking = true
+        lastFocusX = focusSquare.centreX
+        lastFocusY = focusSquare.centreY
+        focus.focusHereAndHold()
+        say("Tracking")
+    }
+
+    private fun stopTrack() {
+        if (!tracking) return
+        tracking = false
+        pipeline.stopTracking()
+        focusSquare.tracking = false
+        focusSquare.lost = false
+    }
+
+    /**
+     * Where the GPU found the pattern. Below the confidence the mark says
+     * LOST and stays; above it the mark follows by the set fraction, focus is
+     * told where the subject is, and asked again only past the tolerance.
+     */
+    private fun onTracked(x: Float, y: Float, score: Float) {
+        if (!tracking) return
+        val lost = score < settings.trackConfidence / 100f
+        focusSquare.lost = lost
+        if (lost) return
+        val v = Mechanism.streamPointToView(x, y, viewDegrees(), previewMirrored)
+        val speed = settings.trackFollow / 100f
+        val nx = Mechanism.follow(focusSquare.centreX, v[0], speed)
+        val ny = Mechanism.follow(focusSquare.centreY, v[1], speed)
+        focusSquare.moveTo(nx, ny)
+        focus.target = nx to ny
+        focus.bounds = focusSquare.normalisedBounds()
+        updateFocusRegion()
+        if (Mechanism.trackRefocus(lastFocusX, lastFocusY, nx, ny, settings.trackTolerance / 100f)) {
+            lastFocusX = nx
+            lastFocusY = ny
+            focus.focusHereAndHold()
+        }
     }
 
     private fun togglePeaking() {
@@ -1124,8 +1234,11 @@ class MainActivity : AppCompatActivity() {
             }
             2 -> when {
                 !engine.supportsManualFocus() -> if (!quiet) sayFixedFocus()
-                (focus.mode == FocusDirector.Mode.AUTO) != auto -> {
-                    toggleAutoFocus()
+                (focus.mode == FocusDirector.Mode.AUTO) != auto || (!auto && tracking) -> {
+                    // Straight to A or M: the rail key's cycle passes through TRK.
+                    if (!auto) stopTrack()
+                    focus.setMode(if (auto) FocusDirector.Mode.AUTO else FocusDirector.Mode.MANUAL)
+                    Trace.control("focus mode", focus.mode.name, focus.mode.name)
                     if (!quiet) say("Focus " + if (auto) "automatic" else "manual")
                 }
             }
@@ -1375,6 +1488,7 @@ class MainActivity : AppCompatActivity() {
                 // looks like from the outside.
                 if (!engine.supportsManualFocus()) { sayFixedFocus(); return }
                 focusFraction = (focusFraction + delta).coerceIn(0f, 1f)
+                stopTrack()
                 if (focus.mode == FocusDirector.Mode.AUTO) {
                     focus.setMode(FocusDirector.Mode.MANUAL)
                     refreshKeys()
@@ -1986,7 +2100,11 @@ class MainActivity : AppCompatActivity() {
             key.sub = lens?.equivalentMm?.takeIf { it > 0 }?.let { "${it}mm" }
         }
 
-        focusKey.label = if (focus.mode == FocusDirector.Mode.AUTO) "AF" else "MF"
+        focusKey.label = when {
+            tracking -> "TRK"
+            focus.mode == FocusDirector.Mode.AUTO -> "AF"
+            else -> "MF"
+        }
         focusKey.state =
             if (focus.mode == FocusDirector.Mode.AUTO) RailButton.State.ON
             else RailButton.State.OFF

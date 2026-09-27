@@ -1430,4 +1430,76 @@ class MechanismTest {
         assertEquals(-3, Mechanism.nextCompensation(-3, -0.12, 0.6, -12, 12))
         assertEquals(-3, Mechanism.nextCompensation(-2, -0.56, 0.6, -12, 12))
     }
+
+    // --- v99: tracking focus ------------------------------------------------------
+
+    /** A textured test scene: smooth blobs, so a patch has a real peak. */
+    private fun scene(w: Int, h: Int, shiftX: Double = 0.0, shiftY: Double = 0.0, gain: Double = 1.0, offset: Double = 0.0, noise: Double = 0.0, seed: Int = 1): FloatArray {
+        val r = java.util.Random(seed.toLong())
+        return FloatArray(w * h) { i ->
+            val x = (i % w) - shiftX
+            val y = (i / w) - shiftY
+            val v = 0.5 + 0.2 * kotlin.math.sin(x * 0.31) * kotlin.math.cos(y * 0.23) +
+                0.15 * kotlin.math.sin((x + 2 * y) * 0.17) + 0.1 * kotlin.math.cos(x * y * 0.003)
+            (v * gain + offset + noise * r.nextGaussian()).toFloat()
+        }
+    }
+
+    private fun cut(img: FloatArray, iw: Int, x0: Int, y0: Int, pw: Int, ph: Int) =
+        FloatArray(pw * ph) { img[(y0 + it / pw) * iw + x0 + it % pw] }
+
+    @Test fun trackerFindsAKnownShift() {
+        val w = 120; val h = 80
+        val first = scene(w, h)
+        val pattern = cut(first, w, 50, 30, 16, 16)
+        // The subject moved 5 right and 3 down.
+        val moved = scene(w, h, 5.0, 3.0)
+        val m = Mechanism.nccBest(pattern, 16, 16, moved, w, 38, 18, 40, 40)
+        assertEquals(50 + 5 - 38.0, m.dx, 0.35)
+        assertEquals(30 + 3 - 18.0, m.dy, 0.35)
+        assertTrue(m.score > 0.95)
+    }
+
+    @Test fun trackerIgnoresExposureAndSurvivesNoise() {
+        val w = 120; val h = 80
+        val pattern = cut(scene(w, h), w, 50, 30, 16, 16)
+        // Auto exposure halved the picture and lifted the blacks; sensor noise on top.
+        val m = Mechanism.nccBest(pattern, 16, 16, scene(w, h, 2.0, -2.0, 0.5, 0.1, 0.02), w, 38, 18, 40, 40)
+        assertEquals(14.0, m.dx, 0.6)
+        assertEquals(10.0, m.dy, 0.6)
+        assertTrue(m.score > 0.8)
+    }
+
+    @Test fun aFlatOrMissingSubjectIsLost() {
+        val w = 120; val h = 80
+        val pattern = cut(scene(w, h), w, 50, 30, 16, 16)
+        val flat = FloatArray(w * h) { 0.4f }
+        assertEquals(0.0, Mechanism.nccBest(pattern, 16, 16, flat, w, 38, 18, 40, 40).score, 1e-9)
+        // Another scene entirely: the best place is a poor match.
+        val other = scene(w, h, noise = 0.3, seed = 7).map { (it * 0.1f + 0.4f) }.toFloatArray()
+        val random = FloatArray(w * h) { java.util.Random(3L + it).nextFloat() }
+        assertTrue(Mechanism.nccBest(pattern, 16, 16, random, w, 38, 18, 40, 40).score < 0.6)
+        assertTrue(other.isNotEmpty())
+    }
+
+    @Test fun scorePackingAndSubPixel() {
+        assertEquals(1.0, Mechanism.decodeScore(255, 0), 1e-9)
+        assertEquals(-1.0, Mechanism.decodeScore(0, 0), 1e-9)
+        assertEquals(0.0, Mechanism.decodeScore(127, 128), 0.001)
+        assertEquals(0.0, Mechanism.subPixel(0.5, 0.9, 0.5), 1e-9)
+        assertTrue(Mechanism.subPixel(0.5, 0.9, 0.8) > 0.0)
+        assertTrue(Mechanism.subPixel(0.8, 0.9, 0.5) < 0.0)
+    }
+
+    @Test fun streamAndViewAreInverses() {
+        for (deg in listOf(0, 90, 180, 270)) for (mir in listOf(false, true)) {
+            val v = Mechanism.streamPointToView(0.2f, 0.7f, deg, mir)
+            val back = Mechanism.viewRegionToSensor(v[0], v[1], v[0], v[1], deg, mir)
+            assertEquals("deg $deg mir $mir x", 0.2f, back[0], 1e-5f)
+            assertEquals("deg $deg mir $mir y", 0.7f, back[1], 1e-5f)
+        }
+        assertTrue(Mechanism.trackRefocus(0.5f, 0.5f, 0.56f, 0.5f, 0.05f))
+        assertFalse(Mechanism.trackRefocus(0.5f, 0.5f, 0.53f, 0.5f, 0.05f))
+        assertEquals(0.6f, Mechanism.follow(0.5f, 0.7f, 0.5f), 1e-6f)
+    }
 }
