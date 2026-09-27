@@ -165,12 +165,15 @@ His text, kept whole so nothing is lost:
 | Version | What | Status |
 |---|---|---|
 | **v90** | Items 4, 5, 6, 7 (and 1–4 of the first message, which are the same things): shutter-angle presets, BASE / HIGH ISO presets, one-shot WB, the orientation written right into the MP4, the icon with the orange outlines | **released 27.9.2026, tested on the emulator** (monkey 90091 20,000 clean). One display fault (M key after a preset) fixed for v91 |
-| **v91** | The switchboard in settings (File, USB, NDI, YouTube, each a switch that expands its panel; NDI HX / Full inside it); the NDI key leaves the main screen; the record key becomes the master trigger for every armed destination; a telemetry line at the top naming what is being sent. File and NDI wired first | to do |
+| **v91** | The switchboard in settings (File, USB, NDI, YouTube, each a switch that expands its panel; NDI HX / Full inside it); the NDI key leaves the main screen; the record key becomes the master trigger for every armed destination; a telemetry line at the top naming what is being sent. File and NDI wired first | **released 27.9.2026, tested on the emulator in portrait**: switchboard and panels; FILE + NDI HX started in one call and stopped together (118 frames saved); NDI alone; nothing armed says so; telemetry dim / white / red dot with numbers; monkey 91091 20,000 clean. FILE is armed by default so the key still records after the upgrade. Found and fixed for the next build: the status line said 0.0 fps when idle, and it now sits on a dark band too |
 | **v92** | **USB (OBS camera)**: the picture to OBS on the Mac over the USB cable. Open question for him: which route OBS should receive (NDI over the USB tether already works; a plain SRT/RTMP feed into OBS's Media Source needs no plug-in; a true "OBS camera" source is the Mac companion of the old v97 plan) | to do, ask |
 | **v93** | **YouTube**: RTMPS to YouTube's ingest with the stream key; "authenticate from the app" = Google sign-in with the YouTube Data API to create the broadcast and fetch the key. That needs a Google Cloud OAuth client for the app, which Marko has to create (a step for him) | to do, needs his OAuth client |
 | v94 … | the in-app player, scopes, settings preview, the GPU stage, log AE, grey-card WB, KELVIN, tracking (the phase document, each moved on by the new versions) | later |
 
-**Status of this second message:** saved 27.9.2026; v90 released the same day; v91 (switchboard) next.
+**Status of this second message:** saved 27.9.2026; v90 and v91 released the same day. **Next:
+v92 USB and v93 YouTube, both waiting on a choice of his** (see the table): which route USB takes to
+OBS, and whether YouTube starts with the stream key alone (no Google sign-in, works at once) or waits
+for a Google Cloud OAuth client he creates for the sign-in.
 
 **The icon (item 7):** the v88 drawing unchanged, plus two #FF9800 strokes, 2 units wide, one unit
 inside the body's outer edge and the lens circle's outer edge (r 10.5), so the outline's outer side

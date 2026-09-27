@@ -1944,7 +1944,8 @@ class MainActivity : AppCompatActivity() {
         lastMbps = mbps
         lastWatching = connections
         val depth = if (pipeline.isTenBit) "10-bit" else "8-bit"
-        status.text = String.format(java.util.Locale.ROOT, "%s · %.1f fps · %s", depth, fps, lastSaid)
+        status.text = if (fps > 0.5) String.format(java.util.Locale.ROOT, "%s · %.1f fps · %s", depth, fps, lastSaid)
+            else "$depth · $lastSaid"
         refreshTelemetry()
     }
 
