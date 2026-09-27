@@ -526,8 +526,11 @@ class CaptureEngine(private val context: Context) {
             // The probe: count the frames down and answer once the camera's
             // own algorithm has had time to settle on this light.
             if (probeFrames > 0) {
-                probeFrames -= 1
-                if (probeFrames == 0) {
+                probeSeen += 1
+                val converged = result.get(CaptureResult.CONTROL_AWB_STATE) ==
+                    CaptureResult.CONTROL_AWB_STATE_CONVERGED
+                if (Mechanism.probeDone(probeSeen, PROBE_MIN_FRAMES, probeFrames, converged)) {
+                    probeFrames = 0
                     val waiting = onProbe
                     onProbe = null
                     val kelvin = measuredKelvin()
@@ -994,6 +997,10 @@ class CaptureEngine(private val context: Context) {
     fun isoRange(): Range<Int>? =
         lensCharacteristics?.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
 
+    /** The top of this sensor's analog gain; above it the gain is digital (v90, the HIGH preset). */
+    fun maxAnalogIso(): Int? =
+        lensCharacteristics?.get(CameraCharacteristics.SENSOR_MAX_ANALOG_SENSITIVITY)
+
     fun exposureRange(): Range<Long>? =
         lensCharacteristics?.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
 
@@ -1192,13 +1199,17 @@ class CaptureEngine(private val context: Context) {
      * temperature that comes back is applied through the anchor and the anchor
      * is the very measurement just taken.
      */
-    fun probeWhiteBalance(frames: Int = 20, onResult: (Int?) -> Unit): Boolean {
+    fun probeWhiteBalance(frames: Int = 90, onResult: (Int?) -> Unit): Boolean {
         val request = builder ?: run {
             Trace.refused("white balance probe", "the camera has no request to change")
             return false
         }
         onProbe = onResult
-        probeFrames = frames.coerceIn(3, 90)
+        // v90: at most [frames], but answered as soon as the camera says its
+        // white balance has converged (after a short minimum), so a scene that
+        // takes the camera a few seconds is given them.
+        probeFrames = frames.coerceIn(PROBE_MIN_FRAMES, 150)
+        probeSeen = 0
         manualWhiteBalance = false
         request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
         request.set(
@@ -1279,6 +1290,7 @@ class CaptureEngine(private val context: Context) {
 
     /** Frames still to wait for while the camera's own answer settles. */
     @Volatile private var probeFrames = 0
+    @Volatile private var probeSeen = 0
     @Volatile private var onProbe: ((Int?) -> Unit)? = null
 
     /**
@@ -1497,4 +1509,9 @@ class CaptureEngine(private val context: Context) {
     fun characteristicsOrNull(): CameraCharacteristics? = characteristics
 
     val isTenBit: Boolean get() = tenBitActive
+
+    private companion object {
+        /** A white balance probe never answers before this many frames. */
+        const val PROBE_MIN_FRAMES = 20
+    }
 }

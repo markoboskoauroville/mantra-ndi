@@ -861,6 +861,28 @@ object Mechanism {
     }
 
     /**
+     * The turn written into a take's MP4 (the display matrix), v90.
+     *
+     * The encoder is fed the sensor's own buffer, and until v90 nothing told
+     * the file how to stand it up: his selfie take in portrait played on its
+     * side / upside down. A player turns the picture clockwise by this angle.
+     * It is the classic sum from the sensor to the way the phone is held —
+     * back lens: sensor − display, front lens: sensor + display (the front
+     * sensor faces the other way, so the phone's turn adds) — plus ROT's
+     * quarter turns, because a phone mounted sideways is corrected there.
+     * No mirror: the file holds the scene as it is, not the selfie mirror.
+     */
+    fun recordingRotation(
+        sensorOrientation: Int,
+        displayRotation: Int,
+        frontFacing: Boolean,
+        manualQuarterTurns: Int = 0
+    ): Int {
+        val base = previewRotation(sensorOrientation, displayRotation, frontFacing)
+        return ((base + manualQuarterTurns * 90) % 360 + 360) % 360
+    }
+
+    /**
      * What the *camera* already did to the frame, before we were handed it.
      *
      * **This is the rotation bug, and it is why seven attempts at the angle all
@@ -1574,6 +1596,52 @@ object Mechanism {
         return ((db - METER_FLOOR_DB) / -METER_FLOOR_DB).coerceIn(0f, 1f)
     }
 
+    // --- presets under the faders (v90) ---------------------------------------------
+
+    /** The shutter presets, in degrees, as he listed them. */
+    val SHUTTER_ANGLES = intArrayOf(0, 90, 180, 270, 360)
+
+    /**
+     * A shutter angle as an exposure time, the way a film camera's rotating
+     * shutter works: angle / 360 of one frame. 180° at 25 fps is 1/50.
+     *
+     * 0° lets no light in, so it is read as the shortest exposure the sensor
+     * allows. Everything is clamped to what the sensor can do and to one frame
+     * interval (a longer exposure would drop the frame rate), so 360° is
+     * exactly one frame.
+     */
+    fun shutterForAngle(angle: Int, fps: Int, sensorMinNs: Long, sensorMaxNs: Long): Long {
+        val frameNs = 1_000_000_000L / fps.coerceAtLeast(1)
+        val ceiling = minOf(sensorMaxNs, frameNs).coerceAtLeast(sensorMinNs)
+        if (angle <= 0) return sensorMinNs
+        val ns = Math.round(angle.coerceAtMost(360) / 360.0 * frameNs)
+        return ns.coerceIn(sensorMinNs, ceiling)
+    }
+
+    /**
+     * The ISO presets for this lens (v90): BASE, the bottom of the sensor's
+     * range — its cleanest ISO — and HIGH, the top of its analog gain, above
+     * which the gain is digital: more noise and no more information. Android
+     * publishes no dual native ISO, so these two are what it does publish.
+     * HIGH is left out when the lens does not say, or says nothing above BASE.
+     */
+    fun isoPresets(rangeLow: Int, rangeHigh: Int, maxAnalog: Int?): List<Pair<String, Int>> {
+        val base = "BASE" to rangeLow
+        val high = maxAnalog?.coerceAtMost(rangeHigh)?.takeIf { it > rangeLow } ?: return listOf(base)
+        return listOf(base, "HIGH" to high)
+    }
+
+    /** Which preset the fader is on, or -1 (within 1 %, so rounding does not unlight it). */
+    fun presetLit(value: Double, presets: List<Double>): Int =
+        presets.indexOfFirst { it > 0.0 && kotlin.math.abs(value - it) <= it * 0.01 }
+
+    /**
+     * The white balance probe is done (v90): past its minimum and the camera
+     * says it has converged, or out of time whatever it says.
+     */
+    fun probeDone(seen: Int, minFrames: Int, maxFrames: Int, converged: Boolean): Boolean =
+        seen >= maxFrames || (seen >= minFrames && converged)
+
     // --- A / M per parameter: AUTO, HM, FM (v87) ------------------------------------
 
     /** How exposure is decided, from the two A/M switches. */
@@ -1604,11 +1672,12 @@ object Mechanism {
      * HM puts back the last half-manual set; if there is none, it is manual
      * exposure with automatic focus and white balance, which is what "half
      * manual" means on most cameras.
-     * @return the four switches (ISO, shutter, focus, white balance), true = A
+     * @return the switches (ISO, shutter, focus; white balance left out since
+     *   v90, when it became a measurement), true = A
      */
     fun nextCameraMode(current: BooleanArray, lastHalf: BooleanArray?): BooleanArray {
-        val half = lastHalf?.takeIf { cameraMode(it) == "HM" }
-            ?: booleanArrayOf(false, false, true, true)
+        val half = lastHalf?.takeIf { cameraMode(it) == "HM" && it.size == current.size }
+            ?: BooleanArray(current.size) { it >= 2 }
         return when (cameraMode(current)) {
             "AUTO" -> half.copyOf()
             "HM" -> BooleanArray(current.size) { false }

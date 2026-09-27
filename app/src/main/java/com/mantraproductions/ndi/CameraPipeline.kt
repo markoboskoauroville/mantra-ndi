@@ -589,7 +589,12 @@ class CameraPipeline(private val context: Context) {
      *   and what is in the file cannot disagree.
      * @return where the file is going, or null with the reason traced and said.
      */
-    fun startRecording(context: Context, meter: AudioMeter?, folder: String? = null): String? {
+    fun startRecording(
+        context: Context,
+        meter: AudioMeter?,
+        folder: String? = null,
+        rotationDegrees: Int = 0
+    ): String? {
         if (isRecording) return takeName
         if (!isRunning) {
             listener?.onError("The camera is not open")
@@ -606,7 +611,8 @@ class CameraPipeline(private val context: Context) {
             listener?.onError("The file could not be created")
             return null
         }
-        val file = Mp4Recorder(opened.fileDescriptor, fps)
+        val file = Mp4Recorder(opened.fileDescriptor, fps, rotationDegrees)
+        Trace.control("take rotation", "$rotationDegrees°", "written into the MP4")
         if (!file.opened) {
             opened.close(keep = false)
             listener?.onError("The muxer refused the file")

@@ -65,7 +65,11 @@ class ControlZones @JvmOverloads constructor(
         var live: Boolean = true,
         var position: Float = 0f,
         /** True while the camera is deciding this one, so the word can say so. */
-        var auto: Boolean = false
+        var auto: Boolean = false,
+        /** Preset keys under the fader (v90): 0° … 360° under SHTR, BASE / HIGH under ISO. */
+        var presets: List<String> = emptyList(),
+        /** The preset the fader sits on, lit; -1 for none. */
+        var presetLit: Int = -1
     )
 
     var zones: List<Zone> = emptyList()
@@ -92,8 +96,12 @@ class ControlZones @JvmOverloads constructor(
      */
     var onSingleTap: ((x: Float, y: Float) -> Unit)? = null
 
+    /** A preset key under a fader: which zone, which preset. */
+    var onPreset: ((index: Int, preset: Int) -> Unit)? = null
+
     private var held: Int? = null
     private var onSwitch: Int? = null
+    private var onPresetKey: Pair<Int, Int>? = null
     private var lastX = 0f
     private var downX = 0f
     private var downY = 0f
@@ -144,9 +152,16 @@ class ControlZones @JvmOverloads constructor(
     private val rowHeight: Float
         get() {
             val count = zones.size.coerceAtLeast(1)
-            val room = (height - topInset) * 0.78f
+            val strips = zones.count { it.presets.isNotEmpty() } * stripHeight
+            val room = (height - topInset) * 0.78f - strips
             return (room / count).coerceIn(density(44f), density(68f))
         }
+
+    /** The row of preset keys under a fader that has them. */
+    private val stripHeight get() = density(34f)
+
+    private fun heightOf(index: Int) =
+        rowHeight + if (zones[index].presets.isNotEmpty()) stripHeight else 0f
 
     private val sideGap get() = density(8f)
 
@@ -156,13 +171,39 @@ class ControlZones @JvmOverloads constructor(
     private val trackLeft get() = sideGap + switchSize + density(12f)
     private val trackRight get() = width - sideGap - density(14f)
 
-    private fun rowTop(index: Int) = topInset + rowHeight * index
+    private fun rowTop(index: Int): Float {
+        var top = topInset
+        for (i in 0 until index) top += heightOf(i)
+        return top
+    }
 
     /** Which band a finger at [y] landed on, or null. */
     private fun rowAt(y: Float): Int? {
-        if (zones.isEmpty()) return null
-        val index = ((y - topInset) / rowHeight).toInt()
-        return if (y >= topInset && index in zones.indices) index else null
+        if (zones.isEmpty() || y < topInset) return null
+        var top = topInset
+        for (i in zones.indices) {
+            val bottom = top + heightOf(i)
+            if (y < bottom) return i
+            top = bottom
+        }
+        return null
+    }
+
+    /** The preset key under a finger at ([x], [y]) in zone [index], or null. */
+    private fun presetAt(index: Int, x: Float, y: Float): Int? {
+        val zone = zones[index]
+        if (zone.presets.isEmpty()) return null
+        val stripTop = rowTop(index) + rowHeight
+        if (y < stripTop || y > stripTop + stripHeight) return null
+        val left = trackLeft
+        val w = (trackRight - left) / zone.presets.size
+        val k = ((x - left) / w).toInt()
+        return if (x >= left && k in zone.presets.indices) k else null
+    }
+
+    private val presetText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }
 
     private fun onSwitchAt(x: Float): Boolean = x <= sideGap + switchSize + density(6f)
@@ -219,6 +260,35 @@ class ControlZones @JvmOverloads constructor(
             val right = trackRight
             if (right <= left) continue
 
+            // THE PRESETS (v90): a row of keys under the groove, equal widths
+            // across the fader's own length. Dark keys with white words, the
+            // one the fader sits on lit green; a key being pressed amber.
+            if (zone.presets.isNotEmpty()) {
+                val stripTop = top + rowHeight + density(3f)
+                val w = (right - left) / zone.presets.size
+                presetText.textSize = density(12f)
+                for (k in zone.presets.indices) {
+                    box.set(left + w * k + density(2f), stripTop, left + w * (k + 1) - density(2f),
+                        stripTop + stripHeight - density(8f))
+                    val pressed = onPresetKey == (i to k)
+                    fill.color = when {
+                        pressed -> Color.argb(230, 232, 163, 61)
+                        k == zone.presetLit -> Color.argb(210, 51, 209, 122)
+                        else -> Color.argb(150, 0, 0, 0)
+                    }
+                    canvas.drawRoundRect(box, density(4f), density(4f), fill)
+                    presetText.color = if (pressed || k == zone.presetLit) Color.BLACK else Color.WHITE
+                    val label = zone.presets[k]
+                    val room = box.width() - density(4f)
+                    if (presetText.measureText(label) > room) {
+                        presetText.textSize = density(12f) * room / presetText.measureText(label)
+                    }
+                    val m = presetText.fontMetrics
+                    canvas.drawText(label, box.centerX(), box.centerY() - (m.ascent + m.descent) / 2f, presetText)
+                    presetText.textSize = density(12f)
+                }
+            }
+
             // THE GROOVE: a thick dark slot with ticks every tenth, like the
             // slot a mixer's fader runs in.
             line.strokeWidth = density(7f)
@@ -262,8 +332,12 @@ class ControlZones @JvmOverloads constructor(
                 lastX = event.x
                 moved = false
                 val index = rowAt(event.y)
-                onSwitch = if (index != null && onSwitchAt(event.x) && zones[index].live) index else null
-                held = if (index != null && onSwitch == null && zones[index].live) index else null
+                onPresetKey = index?.takeIf { zones[it].live }
+                    ?.let { i -> presetAt(i, event.x, event.y)?.let { k -> i to k } }
+                onSwitch = if (index != null && onPresetKey == null && onSwitchAt(event.x) &&
+                    event.y < rowTop(index) + rowHeight && zones[index].live) index else null
+                held = if (index != null && onSwitch == null && onPresetKey == null &&
+                    event.y < rowTop(index) + rowHeight && zones[index].live) index else null
                 if (held != null) onGrab?.invoke(held)
                 invalidate()
                 return true
@@ -286,12 +360,17 @@ class ControlZones @JvmOverloads constructor(
             MotionEvent.ACTION_UP -> {
                 val sw = onSwitch
                 val wasHeld = held
+                val preset = onPresetKey
                 held = null
                 onSwitch = null
+                onPresetKey = null
                 if (wasHeld != null) onGrab?.invoke(null)
                 invalidate()
                 if (!moved) {
-                    if (sw != null) {
+                    if (preset != null) {
+                        performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                        onPreset?.invoke(preset.first, preset.second)
+                    } else if (sw != null) {
                         performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                         onToggle?.invoke(sw)
                     } else {
@@ -303,6 +382,7 @@ class ControlZones @JvmOverloads constructor(
             MotionEvent.ACTION_CANCEL -> {
                 held = null
                 onSwitch = null
+                onPresetKey = null
                 onGrab?.invoke(null)
                 invalidate()
                 return true

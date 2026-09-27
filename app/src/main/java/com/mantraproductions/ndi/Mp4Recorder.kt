@@ -26,10 +26,20 @@ import java.util.concurrent.atomic.AtomicLong
  * which is how this project once shipped ten versions believing there was a
  * crash log. [Recordings] hands over the descriptor MediaStore gave it.
  */
-class Mp4Recorder(descriptor: FileDescriptor, private val fps: Int = 30) {
+class Mp4Recorder(
+    descriptor: FileDescriptor,
+    private val fps: Int = 30,
+    /** How a player must turn the picture to stand it up (v90, [Mechanism.recordingRotation]). */
+    rotationDegrees: Int = 0
+) {
 
     private var muxer: MediaMuxer? =
-        runCatching { MediaMuxer(descriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4) }
+        runCatching {
+            MediaMuxer(descriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4).also {
+                // Before start(), or the muxer ignores it.
+                it.setOrientationHint(rotationDegrees)
+            }
+        }
             .onFailure { Trace.fault("muxer open", it) }
             .getOrNull()
 

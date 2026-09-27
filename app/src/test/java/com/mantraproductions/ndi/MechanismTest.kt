@@ -1301,4 +1301,71 @@ class MechanismTest {
         assertEquals(1000.0, Mechanism.priorityStep(1000.0, 0.501, 0.5, 1.0, 1e9), 1e-9)
         assertEquals(1000.0, Mechanism.priorityStep(1000.0, 0.0, 0.5, 1.0, 1e9), 1e-9)
     }
+
+    // --- v90: the turn written into the take ----------------------------------
+
+    @Test fun recordingRotationStandsEveryTakeUp() {
+        // Pixel: back sensor 90, front sensor 270.
+        // Portrait (display 0): back 90, selfie 270 — his upside-down take was the 270 case.
+        assertEquals(90, Mechanism.recordingRotation(90, 0, frontFacing = false))
+        assertEquals(270, Mechanism.recordingRotation(270, 0, frontFacing = true))
+        // Landscape, top to the left (display 90): both need nothing.
+        assertEquals(0, Mechanism.recordingRotation(90, 90, frontFacing = false))
+        assertEquals(0, Mechanism.recordingRotation(270, 90, frontFacing = true))
+        // Landscape the other way (display 270): both a half turn.
+        assertEquals(180, Mechanism.recordingRotation(90, 270, frontFacing = false))
+        assertEquals(180, Mechanism.recordingRotation(270, 270, frontFacing = true))
+        // Upside-down portrait.
+        assertEquals(270, Mechanism.recordingRotation(90, 180, frontFacing = false))
+        assertEquals(90, Mechanism.recordingRotation(270, 180, frontFacing = true))
+        // ROT's quarter turns go into the file too, and the sum stays in 0..359.
+        assertEquals(180, Mechanism.recordingRotation(90, 0, false, manualQuarterTurns = 1))
+        assertEquals(0, Mechanism.recordingRotation(90, 0, false, manualQuarterTurns = -1))
+        for (s in listOf(0, 90, 180, 270)) for (d in listOf(0, 90, 180, 270)) for (f in listOf(true, false)) {
+            val r = Mechanism.recordingRotation(s, d, f, 3)
+            assertTrue(r in listOf(0, 90, 180, 270))
+        }
+    }
+
+    @Test fun shutterAnglesAreFractionsOfAFrame() {
+        val min = 11_000L          // the sensor's 11 µs
+        val max = 1_000_000_000L   // a second
+        assertEquals(20_000_000L, Mechanism.shutterForAngle(180, 25, min, max))   // 1/50
+        assertEquals(10_000_000L, Mechanism.shutterForAngle(90, 25, min, max))    // 1/100
+        assertEquals(30_000_000L, Mechanism.shutterForAngle(270, 25, min, max))
+        assertEquals(40_000_000L, Mechanism.shutterForAngle(360, 25, min, max))   // one frame
+        assertEquals(min, Mechanism.shutterForAngle(0, 25, min, max))             // 0° = shortest
+        assertEquals(16_666_667L, Mechanism.shutterForAngle(180, 30, min, max))   // 1/60
+        // a sensor that cannot go as long as a frame: clamped to what it can
+        assertEquals(25_000_000L, Mechanism.shutterForAngle(360, 25, min, 25_000_000L))
+        // nothing longer than a frame, whatever the angle
+        assertEquals(40_000_000L, Mechanism.shutterForAngle(720, 25, min, max))
+    }
+
+    @Test fun isoPresetsAreBaseAndTopOfAnalogGain() {
+        assertEquals(listOf("BASE" to 41, "HIGH" to 1000), Mechanism.isoPresets(41, 5000, 1000))
+        assertEquals(listOf("BASE" to 100), Mechanism.isoPresets(100, 3200, null))
+        assertEquals(listOf("BASE" to 100), Mechanism.isoPresets(100, 3200, 100))
+        // analog above the published range is clamped to the range
+        assertEquals(listOf("BASE" to 50, "HIGH" to 800), Mechanism.isoPresets(50, 800, 1600))
+        assertEquals(1, Mechanism.presetLit(20_100_000.0, listOf(10e6, 20e6, 30e6)))
+        assertEquals(-1, Mechanism.presetLit(25e6, listOf(10e6, 20e6, 30e6)))
+    }
+
+    @Test fun whiteBalanceProbeWaitsForTheCamera() {
+        assertFalse(Mechanism.probeDone(10, 20, 90, converged = true))   // too soon
+        assertFalse(Mechanism.probeDone(30, 20, 90, converged = false))  // still looking
+        assertTrue(Mechanism.probeDone(30, 20, 90, converged = true))
+        assertTrue(Mechanism.probeDone(90, 20, 90, converged = false))   // out of time
+    }
+
+    @Test fun mKeyWithThreeSwitchesLeavesWhiteBalanceOut() {
+        val auto = booleanArrayOf(true, true, true)
+        val hm = Mechanism.nextCameraMode(auto, null)
+        assertArrayEquals(booleanArrayOf(false, false, true), hm)
+        assertEquals("FM", Mechanism.cameraMode(Mechanism.nextCameraMode(hm, hm)))
+        // a four-switch memory from before v90 is not put onto three switches
+        assertArrayEquals(booleanArrayOf(false, false, true),
+            Mechanism.nextCameraMode(auto, booleanArrayOf(false, true, true, true)))
+    }
 }

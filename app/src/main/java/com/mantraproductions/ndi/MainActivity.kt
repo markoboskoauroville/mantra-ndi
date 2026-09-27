@@ -96,8 +96,9 @@ class MainActivity : AppCompatActivity() {
     /** Manual exposure, and whether the zones on the picture are listening. */
     /**
      * A / M per parameter (v87). ISO and shutter each have their own switch;
-     * focus is the focus director's mode and white balance is [wbAuto]. The
-     * M key's AUTO / HM / FM is read off these four, never stored beside them.
+     * focus is the focus director's mode. The M key's AUTO / HM / FM is read
+     * off these three, never stored beside them. White balance is not one of
+     * them since v90: it is always a held number, and its A is a measurement.
      */
     private var isoAuto = true
     private var shutterAuto = true
@@ -285,6 +286,7 @@ class MainActivity : AppCompatActivity() {
         zones.onDrag = { index, delta -> nudge(index, delta) }
         zones.onGrab = { refreshZones() }
         zones.onToggle = { index -> toggleParam(index) }
+        zones.onPreset = { index, preset -> applyPreset(index, preset) }
         zones.onSingleTap = { x, y -> focusAt(x, y) }
 
         // The trace is the only instrument that reaches a phone with no cable,
@@ -316,6 +318,7 @@ class MainActivity : AppCompatActivity() {
                     // automatic: his A / M switches are put back on it.
                     if (!isoAuto || !shutterAuto) applyExposure()
                     focus.resume()
+                    if (!wbMeasuredOnce) probeWhiteBalance()
                     refreshZones()
                     refreshKeys()
                 }
@@ -711,6 +714,17 @@ class MainActivity : AppCompatActivity() {
      * encoder is in the session whether or not anything is being sent, so the
      * file costs a write and the same frames go to the wire and to the card.
      */
+    /** Which way the screen is turned, in degrees (Surface.ROTATION_*). */
+    private fun displayDegrees(): Int = when (
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display?.rotation
+        else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
+    ) {
+        Surface.ROTATION_90 -> 90
+        Surface.ROTATION_180 -> 180
+        Surface.ROTATION_270 -> 270
+        else -> 0
+    }
+
     private fun toggleRecording() {
         if (pipeline.isRecording) stopRecording() else startRecording()
     }
@@ -718,7 +732,13 @@ class MainActivity : AppCompatActivity() {
     private fun startRecording() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
         if (meter == null) say("No microphone: this take will have no sound")
-        val where = pipeline.startRecording(this, meter, settings.recordFolder)
+        val where = pipeline.startRecording(
+            this, meter, settings.recordFolder,
+            Mechanism.recordingRotation(
+                pipeline.engine.sensorOrientation, displayDegrees(),
+                pipeline.engine.isFrontFacing, manualQuarterTurns
+            )
+        )
             ?: run { refreshKeys(); return }
         pipeline.lastTakeUri?.let { settings.lastTake = it.toString() }
         recordingSince = android.os.SystemClock.elapsedRealtime()
@@ -770,15 +790,7 @@ class MainActivity : AppCompatActivity() {
         val vh = preview.height
         if (vw <= 0 || vh <= 0) return
 
-        val displayDegrees = when (
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display?.rotation
-            else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
-        ) {
-            Surface.ROTATION_90 -> 90
-            Surface.ROTATION_180 -> 180
-            Surface.ROTATION_270 -> 270
-            else -> 0
-        }
+        val displayDegrees = displayDegrees()
         val sensor = if (pipeline.isRunning) pipeline.engine.sensorOrientation else 90
         val front = pipeline.isRunning && pipeline.engine.isFrontFacing
 
@@ -868,15 +880,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateFocusRegion() {
         if (!pipeline.isRunning) return
         val engine = pipeline.engine
-        val displayDegrees = when (
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display?.rotation
-            else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
-        ) {
-            Surface.ROTATION_90 -> 90
-            Surface.ROTATION_180 -> 180
-            Surface.ROTATION_270 -> 270
-            else -> 0
-        }
+        val displayDegrees = displayDegrees()
         val front = engine.isFrontFacing
         val degrees = Mechanism.sensorToViewDegrees(
             engine.sensorOrientation, displayDegrees, front, manualQuarterTurns
@@ -1012,7 +1016,7 @@ class MainActivity : AppCompatActivity() {
 
     /** The four switches: ISO, shutter, focus, white balance; true = A. */
     private fun switches(): BooleanArray = booleanArrayOf(
-        isoAuto, shutterAuto, focus.mode == FocusDirector.Mode.AUTO, wbAuto
+        isoAuto, shutterAuto, focus.mode == FocusDirector.Mode.AUTO
     )
 
     /**
@@ -1020,13 +1024,15 @@ class MainActivity : AppCompatActivity() {
      *
      * *"Now we have modes: full manual, half manual."* HM puts back the last
      * half-manual set he made with the switches (or manual exposure with
-     * automatic focus and white balance, the first time).
+     * automatic focus, the first time). Into AUTO, white balance is measured
+     * once, the way pressing its A does.
      */
     private fun nextCameraMode() {
         val now = switches()
         if (Mechanism.cameraMode(now) == "HM") lastHalf = now.copyOf()
         val next = Mechanism.nextCameraMode(now, lastHalf)
-        for (i in 0..3) if (next[i] != now[i]) setParamAuto(i, next[i], quiet = true)
+        for (i in next.indices) if (next[i] != now[i]) setParamAuto(i, next[i], quiet = true)
+        if (Mechanism.cameraMode(next) == "AUTO" && !wbAuto) probeWhiteBalance()
         say("Mode " + Mechanism.cameraMode(switches()))
         refreshZones()
         refreshKeys()
@@ -1034,6 +1040,8 @@ class MainActivity : AppCompatActivity() {
 
     /** The A / M switch at the head of a fader. */
     private fun toggleParam(index: Int) {
+        // WB's switch is a button (v90): A measures once and comes back to M.
+        if (index == 3) { if (!wbAuto) probeWhiteBalance(); return }
         val now = switches()
         setParamAuto(index, !now[index], quiet = false)
         if (Mechanism.cameraMode(switches()) == "HM") lastHalf = switches()
@@ -1068,13 +1076,7 @@ class MainActivity : AppCompatActivity() {
                     if (!quiet) say("Focus " + if (auto) "automatic" else "manual")
                 }
             }
-            3 -> if (auto) {
-                wbAuto = true
-                engine.setAutoWhiteBalance()
-                if (!quiet) say("White balance automatic")
-            } else if (wbAuto) {
-                probeWhiteBalance()
-            }
+            3 -> if (auto && !wbAuto) probeWhiteBalance()
         }
     }
 
@@ -1246,6 +1248,8 @@ class MainActivity : AppCompatActivity() {
                 // made is laid out. Taking it over starts from what the camera
                 // had settled on, so the colour does not jump.
                 if (wbAuto) {
+                    // A drag during a measurement ends it where the camera had got to.
+                    probeTicket++
                     wbKelvin = engine.measuredKelvin() ?: wbKelvin
                     wbAuto = false
                 }
@@ -1276,17 +1280,30 @@ class MainActivity : AppCompatActivity() {
      */
     private fun probeWhiteBalance() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
-        say("Reading the camera's white balance…")
+        say("Measuring white balance…")
+        // v90: A on WB is a measurement, not a mode. *"When I press auto, it
+        // will just stay auto for a few seconds until it finds the white
+        // balance from the camera, and then it will switch back to manual
+        // automatically."* A shows while the camera looks; nothing tracks
+        // the light afterwards and no earlier manual value comes back.
+        wbAuto = true
+        wbMeasuredOnce = true
+        refreshZones()
         val ticket = ++probeTicket
         // A deadline, because an answer that never comes (the lens changed,
-        // the session died) would leave "Reading…" on the screen for ever.
+        // the session died) would leave the camera tracking for ever.
         ui.postDelayed({
             if (probeTicket == ticket) {
                 probeTicket++
-                say("The camera gave no white balance reading — try again")
-                Trace.refused("white balance probe", "no answer within 3 s")
+                wbKelvin = pipeline.engine.measuredKelvin() ?: wbKelvin
+                wbAuto = false
+                if (pipeline.isRunning) pipeline.engine.setWhiteBalanceKelvin(wbKelvin)
+                say("White balance held at ${WhiteBalance.format(wbKelvin)} (the camera did not settle)")
+                Trace.refused("white balance probe", "no answer within 6 s")
+                refreshZones()
+                refreshKeys()
             }
-        }, 3000)
+        }, 6000)
         val started = pipeline.engine.probeWhiteBalance { kelvin ->
             ui.post {
                 // Late, after the deadline or a newer probe: not this one's answer.
@@ -1315,8 +1332,87 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** The ISO presets of the open lens: BASE and, where it says, HIGH. */
+    private fun isoPresets(): List<Pair<String, Int>> {
+        val engine = pipeline.engine
+        if (!pipeline.isRunning) return emptyList()
+        val range = engine.isoRange() ?: return emptyList()
+        return Mechanism.isoPresets(range.lower, range.upper, engine.maxAnalogIso())
+    }
+
+    /** The five shutter presets at this frame rate, as exposure times. */
+    private fun shutterPresets(): List<Long> {
+        val range = pipeline.engine.exposureRange() ?: return emptyList()
+        return Mechanism.SHUTTER_ANGLES.map {
+            Mechanism.shutterForAngle(it, pipeline.fps, range.lower, range.upper)
+        }
+    }
+
+    /**
+     * A preset under a fader (v90). *"These presets are nudging the slider of
+     * shutter speed to the right shutter speed."* The parameter goes to M and
+     * the fader glides there over a quarter of a second, the picture following,
+     * then lands on the exact value.
+     */
+    private fun applyPreset(index: Int, preset: Int) {
+        if (!pipeline.isRunning) return
+        when (index) {
+            0 -> {
+                val (name, target) = isoPresets().getOrNull(preset) ?: return
+                val range = pipeline.engine.isoRange() ?: return
+                if (isoAuto) setParamAuto(0, false, quiet = true)
+                glide(isoPosition, Mechanism.positionOfValue(
+                    target.toDouble(), range.lower.toDouble(), range.upper.toDouble()
+                ), { p ->
+                    isoPosition = p
+                    iso = Mechanism.valueAtPosition(p, range.lower.toDouble(), range.upper.toDouble())
+                        .toInt().coerceIn(range.lower, range.upper)
+                }) { iso = target }
+                say("ISO $target ($name)")
+            }
+            1 -> {
+                val target = shutterPresets().getOrNull(preset) ?: return
+                val (low, high) = shutterBounds() ?: return
+                if (shutterAuto) setParamAuto(1, false, quiet = true)
+                glide(shutterPosition, Mechanism.positionOfValue(
+                    target.toDouble(), low.toDouble(), high.toDouble()
+                ), { p ->
+                    shutterPosition = p
+                    shutterNs = Mechanism.valueAtPosition(p, low.toDouble(), high.toDouble()).toLong()
+                }) { shutterNs = target }
+                say("${Mechanism.SHUTTER_ANGLES[preset]}° = ${Mechanism.formatShutter(target)}")
+            }
+        }
+    }
+
+    private var glider: android.animation.ValueAnimator? = null
+
+    /** Moves a fader from [from] to [to], applying exposure on the way, then [land]s exactly. */
+    private fun glide(from: Float, to: Float, step: (Float) -> Unit, land: () -> Unit) {
+        glider?.cancel()
+        glider = android.animation.ValueAnimator.ofFloat(from, to.coerceIn(0f, 1f)).apply {
+            duration = 250
+            addUpdateListener {
+                step(it.animatedValue as Float)
+                applyDragExposure()
+                refreshZones()
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    land()
+                    applyDragExposure()
+                    refreshZones()
+                }
+            })
+            start()
+        }
+    }
+
     /** Which probe is waiting; anything else arriving is stale. */
     private var probeTicket = 0
+
+    /** The first camera session measures white once, so WB starts as a number. */
+    private var wbMeasuredOnce = false
 
     /**
      * A drag on ISO or shutter: in full manual both go to the camera; in a
@@ -1402,6 +1498,8 @@ class MainActivity : AppCompatActivity() {
             else -> focusFraction
         }
 
+        val isoPresetList = isoPresets()
+        val shutterPresetList = if (running) shutterPresets() else emptyList()
         val isoPositionShown = engine.isoRange()?.let {
             if (!isoAuto) isoPosition
             else Mechanism.positionOfValue(
@@ -1418,17 +1516,26 @@ class MainActivity : AppCompatActivity() {
         zones.zones = listOf(
             // While a fader is his, the number is what he set, so it moves
             // with his thumb rather than a frame behind the camera.
-            ControlZones.Zone("ISO", (if (isoAuto) liveIso else iso).toString(), true, isoPositionShown, isoAuto),
+            ControlZones.Zone(
+                "ISO", (if (isoAuto) liveIso else iso).toString(), true, isoPositionShown, isoAuto,
+                presets = isoPresetList.map { (name, value) -> "$name $value" },
+                presetLit = if (isoAuto) -1
+                    else Mechanism.presetLit(iso.toDouble(), isoPresetList.map { it.second.toDouble() })
+            ),
             ControlZones.Zone(
                 "SHTR", Mechanism.formatShutter(if (shutterAuto) liveShutter else shutterNs), true,
-                shutterPositionShown, shutterAuto
+                shutterPositionShown, shutterAuto,
+                presets = if (shutterPresetList.isEmpty()) emptyList()
+                    else Mechanism.SHUTTER_ANGLES.map { "$it°" },
+                presetLit = if (shutterAuto) -1
+                    else Mechanism.presetLit(shutterNs.toDouble(), shutterPresetList.map { it.toDouble() })
             ),
             ControlZones.Zone("FOCUS", focusText, canFocus, focusPosition, autoFocus),
             // Tungsten on the left, daylight on the right. Dragging it takes
             // it off auto; two taps hand it back.
             ControlZones.Zone(
                 "WB",
-                if (wbAuto) "AUTO" else WhiteBalance.format(wbKelvin),
+                if (wbAuto) "MEASURING" else WhiteBalance.format(wbKelvin),
                 running,
                 WhiteBalance.travel(wbKelvin),
                 wbAuto
