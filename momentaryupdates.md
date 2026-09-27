@@ -289,3 +289,10 @@ and the fader switches to the camera's own presets instead of moving a number an
 Emulator: the check says "followed", no false alarm; monkey 96096 20,000 clean. **His test:** L1, L2
 and L3 on the Pixel, WB from 3200 K to 6500 K; the trace's `white balance check` lines say which lens
 followed.
+
+## Seventh message, 27.9.2026, evening: "GPU stage and log exposure"
+
+Asked "what is next upgrade" (answer: YouTube by stream key), he chose instead: **the GPU stage and log
+exposure**. Order now: **v97 the GPU stage** (phase 4 of the phase document), **v98 automatic exposure
+that knows the log curve** (phase 5); YouTube, the Mac companion and the rest move after them.
+**Status:** v97 started.
