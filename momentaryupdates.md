@@ -204,3 +204,6 @@ phone-only and finishes first; the Mac app is the longer road.
    balance in these images after I'm moving the slider."* Screenshots on the Mac at
    `~/.claude/uploads/e6c861f6-db96-40aa-8b9c-c88d869cc059/573d21fa-image.png`, `e4713b3d-image.png`,
    `aa18b794-image.png`. **Status:** being analysed (the answer and any fix are written below).
+3. **"From now on, under the camera, write the version number in the icon, so in the icon I can already
+   see what my version is."** A rule for every build: the build generates the icon with `vNN` painted
+   under the camera from `appVersion`. **Status:** to do, next build (with the grey body).
