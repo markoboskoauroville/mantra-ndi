@@ -185,6 +185,16 @@ class Settings(context: Context) {
         get() = prefs.getInt(NDI_KIND, 1)
         set(value) = prefs.edit().putInt(NDI_KIND, if (value == 2) 2 else 1).apply()
 
+    /** v97: the picture goes through the GPU stage (true) or the direct path. */
+    var gpuStage: Boolean
+        get() = prefs.getBoolean(GPU_STAGE, true)
+        set(value) = prefs.edit().putBoolean(GPU_STAGE, value).apply()
+
+    /** v97: the stream's own bit rate when the GPU stage gives it an encoder. */
+    var streamMbps: Int
+        get() = prefs.getInt(STREAM_MBPS, 16)
+        set(value) = prefs.edit().putInt(STREAM_MBPS, value.coerceIn(2, 50)).apply()
+
     private companion object {
         const val SOURCE = "sourceName"
         const val HOLD = "focusHoldMs"
@@ -205,5 +215,7 @@ class Settings(context: Context) {
         const val ARM_FILE = "armFile"
         const val ARM_NDI = "armNdi"
         const val NDI_KIND = "ndiKind"
+        const val GPU_STAGE = "gpuStage"
+        const val STREAM_MBPS = "streamMbps"
     }
 }

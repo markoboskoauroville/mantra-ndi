@@ -257,6 +257,22 @@ class SettingsActivity : AppCompatActivity() {
             onSet = { settings.bitRateMbps = it + 2 }
         )
         slider(
+            R.id.streamBitRate, R.id.streamBitRateValue,
+            value = settings.streamMbps - 2,
+            label = { "${it + 2} Mbit/s" },
+            onSet = { settings.streamMbps = it + 2 }
+        )
+        val path = findViewById<RadioGroup>(R.id.picturePath)
+        listOf(true to "GPU STAGE", false to "DIRECT").forEach { (gpu, name) ->
+            path.addView(RadioButton(this).apply {
+                id = if (gpu) 301 else 302
+                text = name
+                textSize = 13f
+                isChecked = settings.gpuStage == gpu
+            })
+        }
+        path.setOnCheckedChangeListener { _, id -> settings.gpuStage = id == 301 }
+        slider(
             R.id.hold, R.id.holdValue,
             value = (settings.focusHoldMs / 100).toInt(),
             label = { "hold  ${seconds(it)}" },

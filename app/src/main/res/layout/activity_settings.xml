@@ -309,6 +309,24 @@
             android:layout_height="wrap_content"
             android:max="98" />
 
+        <!-- v97: the picture path, and the stream's own bit rate on the GPU stage -->
+        <TextView style="@style/MantraLabel" android:text="@string/picture_path" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/picture_path_hint" />
+        <RadioGroup
+            android:id="@+id/picturePath"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+        <TextView style="@style/MantraLabel" android:text="@string/stream_bitrate" />
+        <TextView
+            android:id="@+id/streamBitRateValue"
+            style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/streamBitRate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="48" />
+
         <!--
              Depth and size on one line.
 

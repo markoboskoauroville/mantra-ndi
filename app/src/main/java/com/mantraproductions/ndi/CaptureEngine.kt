@@ -137,9 +137,12 @@ class CaptureEngine(private val context: Context) {
         standard: List<Surface>,
         fps: Int,
         wantTenBit: Boolean,
-        curve: LogCurves.Curve
+        curve: LogCurves.Curve,
+        /** False when the GPU stage feeds the encoders: deferred is then only the full-NDI reader. */
+        deferredHasEncoder: Boolean = true
     ) {
         close()
+        this.deferredHasEncoder = deferredHasEncoder
         this.cameraId = cameraId
         this.physicalId = physicalId
         this.lensCharacteristics = null
@@ -257,6 +260,7 @@ class CaptureEngine(private val context: Context) {
 
     private var wantedRepeating: List<Surface> = emptyList()
     private var wantedDeferred: List<Surface> = emptyList()
+    private var deferredHasEncoder = true
     private var wantedStandard: List<Surface> = emptyList()
     private var attempts: List<Attempt> = emptyList()
     private var attemptIndex = 0
@@ -284,8 +288,8 @@ class CaptureEngine(private val context: Context) {
      * guess, and what survived decides which keys are lit.
      */
     private fun planAttempts(wantTenBit: Boolean): List<Attempt> {
-        val encoder = wantedDeferred.take(1)
-        val full = wantedDeferred.drop(1)
+        val encoder = if (deferredHasEncoder) wantedDeferred.take(1) else emptyList()
+        val full = if (deferredHasEncoder) wantedDeferred.drop(1) else wantedDeferred
         val raw = wantedStandard
 
         val shapes = buildList {

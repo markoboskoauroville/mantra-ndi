@@ -8,7 +8,10 @@
     <string name="ten_bit">Ten bit</string>
     <string name="ten_bit_hint">HLG10 on every streaming target, asked for before the session exists. If this phone will not give a 10-bit session the app falls back and the status line says so.</string>
     <string name="ten_bit_switch">Ask for 10-bit</string>
-    <string name="bitrate">Bit rate — the take and the HX stream</string>
+    <string name="bitrate">Bit rate — the take</string>
+    <string name="picture_path">Picture path</string>
+    <string name="picture_path_hint">GPU STAGE: the camera writes once and the GPU copies each frame to the monitor, the take\'s encoder and the stream\'s, so the take has its own bit rate. DIRECT: the path of every version before v97, one encoder for both. Takes effect when the camera reopens.</string>
+    <string name="stream_bitrate">Bit rate — the stream (GPU stage)</string>
     <string name="bitrate_hint">One HEVC encoder makes both the file and the NDI HX stream, so this is the quality of both. 24 Mbit/s suits 1080p, 50 to 100 suits 4K. Over Wi-Fi keep HX modest; over the USB cable it can go high.</string>
     <string name="focus">Focus</string>
     <string name="focus_hint">How long the director holds before it will consider moving, and how long the move itself takes. Zero rack is a snap, for anybody who wants the phone to behave like a phone.</string>

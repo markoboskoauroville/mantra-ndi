@@ -589,6 +589,7 @@ class MainActivity : AppCompatActivity() {
         val curve = LogCurves.Curve.entries[curveIndex]
         focus.holdMs = settings.focusHoldMs
         focus.rampMs = settings.focusRackMs
+        pipeline.streamBitRate = settings.streamMbps * 1_000_000
         pipeline.start(
             cameraId = lens.id,
             physicalId = lens.physicalId,
@@ -596,7 +597,8 @@ class MainActivity : AppCompatActivity() {
             sourceName = Mechanism.sanitizeSourceName(settings.sourceName),
             curve = curve,
             wantTenBit = settings.wantTenBit,
-            bitRate = settings.bitRateMbps * 1_000_000
+            bitRate = settings.bitRateMbps * 1_000_000,
+            useGpuStage = settings.gpuStage
         )
         applyLook()
         refreshKeys()

@@ -31,7 +31,7 @@ class HdrVideoEncoder(
     private val width: Int,
     private val height: Int,
     private val fps: Int,
-    private val bitRate: Int,
+    private var bitRate: Int,
     private val tenBit: Boolean,
     private val onFormat: (sps: ByteArray, pps: ByteArray?, vps: ByteArray?) -> Unit,
     private val onFrame: (data: ByteArray, isKeyframe: Boolean, ptsUs: Long, isHevc: Boolean) -> Unit
@@ -130,6 +130,18 @@ class HdrVideoEncoder(
         }
         codec?.release()
         codec = null
+    }
+
+    /**
+     * The bit rate, before [start] or live (v97: the GPU stage gives the stream
+     * its own rate, apart from the take's).
+     */
+    fun setBitRate(bps: Int) {
+        bitRate = bps
+        val c = codec ?: return
+        runCatching {
+            c.setParameters(android.os.Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, bps) })
+        }.onFailure { Trace.fault("encoder bit rate", it) }
     }
 
     fun requestKeyframe() {

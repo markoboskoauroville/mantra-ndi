@@ -61,8 +61,23 @@ class CameraPipeline(private val context: Context) {
         private set
     val isTenBit: Boolean get() = engine.isTenBit
 
+    /** The stream's encoder (NDI HX); in the direct path it also feeds the take. */
     private var encoder: HdrVideoEncoder? = null
     private var encoderSurface: Surface? = null
+
+    /**
+     * v97, THE GPU STAGE: the camera writes one texture and the GPU draws it to
+     * the monitor, [recordEncoder] (the take, at its own bit rate) and
+     * [encoder] (the stream). Null is the direct path of every version before.
+     */
+    private var gpu: GpuStage? = null
+    private var recordEncoder: HdrVideoEncoder? = null
+
+    /** Which path the picture takes, for the trace and settings. */
+    val usesGpuStage: Boolean get() = gpu != null
+
+    /** The stream's bit rate when the GPU stage gives it its own encoder. */
+    var streamBitRate: Int = BIT_RATE
     private var fullReader: ImageReader? = null
     private var fullThread: HandlerThread? = null
     private var sourceName: String = "Mantra Manual Camera"
@@ -264,7 +279,8 @@ class CameraPipeline(private val context: Context) {
         sourceName: String,
         curve: LogCurves.Curve,
         wantTenBit: Boolean = true,
-        bitRate: Int = BIT_RATE
+        bitRate: Int = BIT_RATE,
+        useGpuStage: Boolean = true
     ): Boolean {
         if (isRunning) stop()
         this.sourceName = sourceName
@@ -311,19 +327,69 @@ class CameraPipeline(private val context: Context) {
         )
         // The muxer needs the encoder's own format, and the encoder announces
         // it exactly once, long before anybody presses record. So it is kept.
-        codec.onEncodedFormat = { format ->
-            encodedVideoFormat = format
-            recorder?.setVideoFormat(format)
-        }
-        codec.onEncodedSample = { buffer, info -> recorder?.writeVideo(buffer, info) }
+        // THE GPU STAGE, tried first unless settings say direct. Built before
+        // the camera opens, so the session is given either its one surface or
+        // the old ones, never a mixture.
+        val stage = if (useGpuStage) GpuStage.create(size.width, size.height, tenBit) else null
+        gpu = stage
 
+        if (stage == null) {
+            // The direct path: one encoder, fed by the camera, for the take
+            // and the stream alike.
+            codec.onEncodedFormat = { format ->
+                encodedVideoFormat = format
+                recorder?.setVideoFormat(format)
+            }
+            codec.onEncodedSample = { buffer, info -> recorder?.writeVideo(buffer, info) }
+        }
+        if (stage != null) codec.setBitRate(streamBitRate)
         val surface = codec.start()
         if (surface == null) {
             listener?.onError("This phone will not encode ${size.width}x${size.height}")
+            stage?.release()
+            gpu = null
             return false
         }
         encoder = codec
         encoderSurface = surface
+
+        if (stage != null) {
+            // The take's own encoder, at the recording bit rate; the stream's
+            // one above is re-rated to the stream's. Frames are copied by the
+            // GPU, never through the CPU.
+            val take = HdrVideoEncoder(
+                width = size.width, height = size.height, fps = fps,
+                bitRate = bitRate, tenBit = tenBit,
+                onFormat = { _, _, _ -> }, onFrame = { _, _, _, _ -> }
+            )
+            take.onEncodedFormat = { format ->
+                encodedVideoFormat = format
+                recorder?.setVideoFormat(format)
+            }
+            take.onEncodedSample = { buffer, info -> recorder?.writeVideo(buffer, info) }
+            val takeSurface = take.start()
+            if (takeSurface == null) {
+                Trace.refused("gpu stage", "no second encoder at this size — the direct path is used")
+                stage.release()
+                gpu = null
+                codec.setBitRate(bitRate)
+                codec.onEncodedFormat = { format ->
+                    encodedVideoFormat = format
+                    recorder?.setVideoFormat(format)
+                }
+                codec.onEncodedSample = { buffer, info -> recorder?.writeVideo(buffer, info) }
+            } else {
+                recordEncoder = take
+                stage.setOutput(GpuStage.Output.PREVIEW, previewSurface, enabled = true)
+                stage.setOutput(GpuStage.Output.RECORD, takeSurface, enabled = false)
+                stage.setOutput(GpuStage.Output.STREAM, surface, enabled = false)
+                Trace.state(
+                    "picture path: GPU stage — take ${bitRate / 1_000_000} Mbit/s, stream ${streamBitRate / 1_000_000} Mbit/s"
+                )
+            }
+        } else {
+            Trace.state("picture path: direct — one encoder at ${bitRate / 1_000_000} Mbit/s for the take and the stream")
+        }
 
         // Full NDI's reader. YUV_420_888, because a camera cannot write into
         // an RGBA reader at all and a session carrying one is refused outright
@@ -358,8 +424,9 @@ class CameraPipeline(private val context: Context) {
             // are deferred, not standard — they must carry the same ten bit
             // profile as the preview or the stream is eight bit whatever the
             // screen says.
-            repeating = listOf(previewSurface),
-            deferred = listOf(surface, reader.surface),
+            repeating = listOf(gpu?.inputSurface ?: previewSurface),
+            deferred = if (gpu != null) listOf(reader.surface) else listOf(surface, reader.surface),
+            deferredHasEncoder = gpu == null,
             standard = listOfNotNull(rawSurface),
             fps = fps,
             wantTenBit = tenBit,
@@ -398,6 +465,10 @@ class CameraPipeline(private val context: Context) {
         encoder?.stop()
         encoder = null
         encoderSurface = null
+        recordEncoder?.stop()
+        recordEncoder = null
+        gpu?.release()
+        gpu = null
         fullReader?.setOnImageAvailableListener(null, null)
         runCatching { fullReader?.close() }
         fullReader = null
@@ -426,7 +497,8 @@ class CameraPipeline(private val context: Context) {
         when (mode) {
             // Left live if a take is running: the file is fed by the encoder,
             // and stopping the stream must never stop the recording.
-            Mode.HX -> if (!isRecording) encoderSurface?.let { engine.setTargetLive(it, false) }
+            Mode.HX -> if (gpu != null) gpu?.setEnabled(GpuStage.Output.STREAM, false)
+                else if (!isRecording) encoderSurface?.let { engine.setTargetLive(it, false) }
             Mode.FULL -> fullSurface?.let { engine.setTargetLive(it, false) }
             Mode.OFF -> Unit
         }
@@ -475,7 +547,8 @@ class CameraPipeline(private val context: Context) {
         startedAtUs = SystemClock.elapsedRealtimeNanos() / 1000
 
         val target = if (next == Mode.HX) encoderSurface else fullSurface
-        if (!engine.isConfigured(target)) {
+        val configured = if (next == Mode.HX && gpu != null) target != null else engine.isConfigured(target)
+        if (!configured) {
             listener?.onError("This phone would not give a session with that target")
             NdiSender.destroy()
             mode = Mode.OFF
@@ -485,7 +558,8 @@ class CameraPipeline(private val context: Context) {
         val ok = when (next) {
             Mode.HX -> {
                 parameterSets?.let { (sps, pps, vps) -> NdiSender.setVideoInfo(sps, pps, vps) }
-                encoderSurface?.let { engine.setTargetLive(it, true) } ?: false
+                if (gpu != null) { gpu?.setEnabled(GpuStage.Output.STREAM, true); true }
+                else encoderSurface?.let { engine.setTargetLive(it, true) } ?: false
             }
             Mode.FULL -> {
                 NdiSender.clearVideoInfo()
@@ -566,7 +640,8 @@ class CameraPipeline(private val context: Context) {
      * that lights for a target the session does not have is a key that does
      * nothing. These answer the rail rather than the rail assuming.
      */
-    val hxAvailable: Boolean get() = isRunning && engine.isConfigured(encoderSurface)
+    val hxAvailable: Boolean get() =
+        isRunning && (if (gpu != null) encoderSurface != null else engine.isConfigured(encoderSurface))
     val fullAvailable: Boolean get() = isRunning && engine.isConfigured(fullReader?.surface)
     val snapAvailable: Boolean get() = isRunning && snap.armed && engine.isConfigured(snap.surface)
 
@@ -601,7 +676,9 @@ class CameraPipeline(private val context: Context) {
             return null
         }
         val surface = encoderSurface
-        if (surface == null || !engine.isConfigured(surface)) {
+        val canRecord = if (gpu != null) recordEncoder != null
+            else surface != null && engine.isConfigured(surface)
+        if (surface == null || !canRecord) {
             listener?.onError("This phone's session has no encoder to record from")
             Trace.refused("recording", "the encoder target is not in the session")
             return null
@@ -651,8 +728,13 @@ class CameraPipeline(private val context: Context) {
 
         // The stream may be off, in which case the encoder is configured but
         // receiving nothing. A take needs it fed either way.
-        if (mode != Mode.HX) engine.setTargetLive(surface, true)
-        encoder?.requestKeyframe()
+        if (gpu != null) {
+            gpu?.setEnabled(GpuStage.Output.RECORD, true)
+            recordEncoder?.requestKeyframe()
+        } else {
+            if (mode != Mode.HX) engine.setTargetLive(surface, true)
+            encoder?.requestKeyframe()
+        }
 
         Trace.control("record", "start", opened.where)
         return opened.where
@@ -677,7 +759,8 @@ class CameraPipeline(private val context: Context) {
         file?.stop()
 
         // The encoder goes back to being fed only while HX is green.
-        if (mode != Mode.HX) encoderSurface?.let { engine.setTargetLive(it, false) }
+        if (gpu != null) gpu?.setEnabled(GpuStage.Output.RECORD, false)
+        else if (mode != Mode.HX) encoderSurface?.let { engine.setTargetLive(it, false) }
 
         val opened = take
         take = null
