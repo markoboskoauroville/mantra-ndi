@@ -1690,7 +1690,10 @@ class MainActivity : AppCompatActivity() {
      * the state; the numbers never change colour.
      */
     private fun setTimecode(word: String, active: Boolean, elapsedMs: Long) {
-        val tc = Mechanism.timecode(elapsedMs, pipeline.fps)
+        // Called from onCreate too, before the pipeline exists (v88 crashed on
+        // launch there): standing by, zero is zero at any rate.
+        val fps = if (::pipeline.isInitialized) pipeline.fps else 25
+        val tc = Mechanism.timecode(elapsedMs, fps)
         val text = android.text.SpannableString("$word  $tc")
         val wordColour = if (active) android.graphics.Color.rgb(255, 59, 48) else android.graphics.Color.WHITE
         text.setSpan(
