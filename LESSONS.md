@@ -62,3 +62,14 @@ follows the phone's own setting, which is what an operator expects.
 built above it, or guards with `::x.isInitialized`; and the CI APK is launched on the emulator
 before anything else is said about a release. A released number is never reused: the fix is the
 next version (v89).
+
+## 8. A physical lens has its own colour keys (v96)
+
+**What he saw:** on the Pixel 7 the white balance fader moved the number and not the picture, while
+on the Nothing Phone (2a) it worked. The Pixel's lenses are physical sub-cameras of a logical camera;
+the stream went to the lens but the colour keys were set on the logical request, and the readback was
+read from the logical result. **Rule:** when a stream names a physical lens, build the request with
+`createCaptureRequest(template, setOf(physicalId))`, set per-lens keys with `setPhysicalCameraKey`, and
+read that lens's answer from `physicalCameraTotalResults[physicalId]`. Then check that what was sent is
+what was used; a control that is silently ignored must say so and fall back.
+

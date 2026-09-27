@@ -264,4 +264,28 @@ become this one.
 > specifics of Pixel Phone 7."
 
 Trace: `~/.claude/uploads/e6c861f6-db96-40aa-8b9c-c88d869cc059/93abab3b-trace-2026-09-27-164207.txt`.
-**Status:** being diagnosed.
+**Status: diagnosed; v96 released with the fix, to be proven on his Pixel.**
+
+**What the trace shows.** Pixel 7, Android 16, v95, lens L1 = logical camera 0, physical lens 3 (the
+ultra wide), 3840x2160 10-bit HEVC. The camera **accepted** manual white balance (readback: AWB mode 0
+= off, correction mode 0 = transform matrix), but the gains it reported hardly moved and moved the
+wrong way: asked 5812 K → red 2.340 / blue 1.645; 4768 K → 2.389 / 1.499; 3292 K → 2.328 / 1.487. For
+3292 K our maths sends about red 1.44 / blue 2.34 (daylight turns blue). The probe at start also
+clamped at 6500 K: the auto gains it anchored to did not fit this lens's calibration.
+
+**What is special about the Pixel 7.** Its lenses are *physical sub-cameras* of one logical camera
+(`[0:3]`, `[0:4]`, `[1:5]` in the trace; only the "fused" L2 and L5 are the logical cameras
+themselves). The app routes the picture to the physical lens (`setPhysicalCameraId`), but every
+colour key was set on the **logical** request only, and the anchor and readback were read from the
+**logical** result, which can describe another sensor. A sub-camera keeps its own colour pipeline and
+only reads keys set on it with `setPhysicalCameraKey`. The Nothing Phone (2a) exposes each lens as its
+own camera, so a plain request reaches it, which is why the fader works there.
+
+**v96:** the request is built naming the physical lens, every white balance key is set on the lens
+too, the anchor / probe / readback come from the lens's own result, the gains sent are traced in full,
+and eight frames later they are compared with what the lens used. If a lens still ignores them (the
+fused logical camera in 10-bit HLG may be that case: his screenshots were on L2), the screen says so
+and the fader switches to the camera's own presets instead of moving a number and not the picture.
+Emulator: the check says "followed", no false alarm; monkey 96096 20,000 clean. **His test:** L1, L2
+and L3 on the Pixel, WB from 3200 K to 6500 K; the trace's `white balance check` lines say which lens
+followed.
