@@ -141,8 +141,8 @@ class ControlZones @JvmOverloads constructor(
     /** How far a finger may wander and still have meant a tap. */
     private val slop get() = density(8f)
 
-    /** Below the status line, which is pinned to the top edge. */
-    private val topInset get() = density(24f)
+    /** Below the telemetry and status lines, which are pinned to the top edge (v91: two lines). */
+    private val topInset get() = density(44f)
 
     /**
      * Thick: a fader is grabbed without looking. As tall as the picture allows

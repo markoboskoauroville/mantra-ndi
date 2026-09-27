@@ -1368,4 +1368,20 @@ class MechanismTest {
         assertArrayEquals(booleanArrayOf(false, false, true),
             Mechanism.nextCameraMode(auto, booleanArrayOf(false, true, true, true)))
     }
+
+    @Test fun telemetryNamesEveryDestinationInPlace() {
+        val idle = Mechanism.telemetry(true, false, 50.0, false, 1, false, 0.0, 0)
+        assertEquals(listOf("FILE", "USB", "NDI", "YT"), idle.map { it.name })
+        assertEquals(Mechanism.Output.READY, idle[0].state)
+        assertEquals(Mechanism.Output.OFF, idle[2].state)
+        val rolling = Mechanism.telemetry(true, true, 50.0, true, 2, true, 212.4, 3)
+        assertEquals(Mechanism.Output.LIVE, rolling[0].state)
+        assertEquals("50 Mb/s", rolling[0].detail)
+        assertEquals("NDI FULL", rolling[2].name)
+        assertEquals("212.4 Mb/s · 3 watching", rolling[2].detail)
+        // NDI only, the file disarmed: the file says so and stays in its place
+        val ndiOnly = Mechanism.telemetry(false, false, 50.0, true, 1, true, 8.0, -1)
+        assertEquals(Mechanism.Output.OFF, ndiOnly[0].state)
+        assertEquals("8.0 Mb/s · 0 watching", ndiOnly[2].detail)
+    }
 }

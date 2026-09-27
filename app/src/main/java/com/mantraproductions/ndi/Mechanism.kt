@@ -1596,6 +1596,40 @@ object Mechanism {
         return ((db - METER_FLOOR_DB) / -METER_FLOOR_DB).coerceIn(0f, 1f)
     }
 
+    // --- the switchboard and its telemetry line (v91) --------------------------------
+
+    /** How one destination stands: not armed, armed and waiting for the record key, or sending. */
+    enum class Output { OFF, READY, LIVE }
+
+    data class Telemetry(val name: String, val state: Output, val detail: String)
+
+    /**
+     * The telemetry line at the top of the picture, one entry per destination
+     * in his order: FILE, USB, NDI, YOUTUBE. *"Clearly indicating which of the
+     * four destinations are currently active and receiving data."* The words
+     * are fixed and in place (a destination never disappears from the line), so
+     * the eye finds each where it was.
+     */
+    fun telemetry(
+        armFile: Boolean, fileLive: Boolean, fileMbps: Double,
+        armNdi: Boolean, ndiKind: Int, ndiLive: Boolean, ndiMbps: Double, watching: Int
+    ): List<Telemetry> {
+        fun state(armed: Boolean, live: Boolean) = when {
+            live -> Output.LIVE
+            armed -> Output.READY
+            else -> Output.OFF
+        }
+        val ndiName = if (ndiKind == 2) "NDI FULL" else "NDI HX"
+        return listOf(
+            Telemetry("FILE", state(armFile, fileLive),
+                if (fileLive) String.format(java.util.Locale.ROOT, "%.0f Mb/s", fileMbps) else ""),
+            Telemetry("USB", Output.OFF, ""),
+            Telemetry(if (armNdi || ndiLive) ndiName else "NDI", state(armNdi, ndiLive),
+                if (ndiLive) String.format(java.util.Locale.ROOT, "%.1f Mb/s · %d watching", ndiMbps, watching.coerceAtLeast(0)) else ""),
+            Telemetry("YT", Output.OFF, "")
+        )
+    }
+
     // --- presets under the faders (v90) ---------------------------------------------
 
     /** The shutter presets, in degrees, as he listed them. */

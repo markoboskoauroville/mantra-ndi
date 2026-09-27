@@ -40,4 +40,9 @@
     <string name="rot">Turn the preview</string>
     <string name="rot_hint">Quarter turns for a lens that is mounted unusually, kept per lens. Most phones never need it.</string>
     <string name="zebra">Zebra level</string>
+    <string name="outputs">Outputs</string>
+    <string name="outputs_hint">Arm a destination here; nothing leaves the phone until the record key on the camera, and then every armed one starts together and stops together. Mix any of them.</string>
+    <string name="ndi_kind">Kind of NDI</string>
+    <string name="usb_obs_soon">OBS over the USB cable arrives in v92. Until then NDI can already travel down the cable: USB tethering, below.</string>
+    <string name="youtube_soon">Streaming to YouTube arrives in v93: the stream key, or Google sign-in from the app.</string>
 </resources>

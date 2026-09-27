@@ -86,21 +86,44 @@
                  the one place on a camera that must stay clear — it is where
                  the subject is. The faders start below this line instead.
             -->
+            <!--
+                 v91, THE TELEMETRY LINE: FILE, USB, NDI, YT, each dim when not
+                 armed, white when armed, a red dot and its numbers while it is
+                 sending. On a dark band, because grey words over a bright sky
+                 were unreadable on his Pixel.
+            -->
+            <TextView
+                android:id="@+id/telemetry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="2dp"
+                android:background="#88000000"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:textSize="11sp"
+                android:textColor="#FFFFFF" />
+
             <TextView
                 android:id="@+id/status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top"
+                android:layout_marginTop="22dp"
                 android:gravity="center"
                 android:paddingTop="3dp"
                 android:paddingBottom="3dp"
                 android:paddingStart="4dp"
                 android:paddingEnd="4dp"
                 android:fontFamily="monospace"
-                android:textSize="9sp"
-                android:textColor="#9AA0A6"
+                android:textSize="10sp"
+                android:textColor="#E6E8EA"
                 android:shadowColor="#000000"
-                android:shadowRadius="3"
+                android:shadowRadius="4"
                 android:text="@string/starting" />
 
             <!--

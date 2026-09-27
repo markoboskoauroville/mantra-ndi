@@ -74,27 +74,193 @@
                 android:textColor="@color/amber" />
         </LinearLayout>
 
-        <!-- v85: where takes go, the LUT library, this lens's turn, zebra -->
-        <TextView style="@style/MantraLabel" android:text="@string/record_to" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/record_to_hint" />
-        <TextView android:id="@+id/recordFolder" style="@style/MantraValue" />
+        <!--
+             v91, THE SWITCHBOARD. "Four distinct, parallel destinations ...
+             independent, collapsible activation switches ... when a switch is
+             turned on, its configuration panel expands." A switch only ARMS a
+             destination; the record key on the camera starts every armed one
+             together, and stops them together.
+        -->
+        <TextView style="@style/MantraLabel" android:text="@string/outputs" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/outputs_hint" />
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <Button
-                android:id="@+id/chooseFolder"
-                style="@style/MantraKey"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="10dp">
+            <TextView
                 android:layout_width="0dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/choose_folder" />
-            <Button
-                android:id="@+id/defaultFolder"
-                style="@style/MantraKey"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:text="@string/default_folder" />
+                android:fontFamily="monospace"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/sand"
+                android:text="FILE" />
+            <Switch
+                android:id="@+id/armFile"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
         </LinearLayout>
+        <LinearLayout
+            android:id="@+id/panelFile"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:visibility="gone">
+            <TextView style="@style/MantraLabel" android:text="@string/record_to" />
+            <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/record_to_hint" />
+            <TextView android:id="@+id/recordFolder" style="@style/MantraValue" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/chooseFolder"
+                    style="@style/MantraKey"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="@string/choose_folder" />
+                <Button
+                    android:id="@+id/defaultFolder"
+                    style="@style/MantraKey"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="@string/default_folder" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="10dp">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/sand"
+                android:text="USB" />
+            <Switch
+                android:id="@+id/armUsb"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/panelUsb"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:visibility="gone">
+            <TextView style="@style/MantraHint" android:text="@string/usb_obs_soon" />
+            <!-- The cable -->
+            <TextView style="@style/MantraLabel" android:text="@string/usb" />
+            <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/usb_hint" />
+            <TextView
+                android:id="@+id/usbState"
+                style="@style/MantraValue"
+                android:lineSpacingMultiplier="1.35"
+                android:paddingBottom="8dp" />
+            <Button
+                android:id="@+id/usbSettings"
+                style="@style/MantraKey"
+                android:layout_width="match_parent"
+                android:text="@string/usb_open" />
+            <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/usb_webcam" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="10dp">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/sand"
+                android:text="NDI" />
+            <Switch
+                android:id="@+id/armNdi"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/panelNdi"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:visibility="gone">
+            <TextView style="@style/MantraLabel" android:text="@string/ndi_kind" />
+            <RadioGroup
+                android:id="@+id/ndiKind"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+            <!-- The source name -->
+            <TextView style="@style/MantraLabel" android:text="@string/source_name" />
+            <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/source_name_hint" />
+            <EditText
+                android:id="@+id/sourceName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1"
+                android:textColor="@color/sand"
+                android:textColorHint="@color/quiet"
+                android:fontFamily="monospace"
+                android:textSize="14sp"
+                android:autofillHints="name"
+                android:background="@color/surface"
+                android:padding="10dp" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="10dp">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/sand"
+                android:text="YOUTUBE" />
+            <Switch
+                android:id="@+id/armYoutube"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/panelYoutube"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:visibility="gone">
+            <TextView style="@style/MantraHint" android:text="@string/youtube_soon" />
+        </LinearLayout>
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:background="@color/slate" />
+
+        <!-- v85: the LUT library, this lens's turn, zebra -->
+
 
         <TextView style="@style/MantraLabel" android:text="@string/luts" />
         <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/luts_hint" />
@@ -210,22 +376,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal" />
 
-        <!-- The source name -->
-        <TextView style="@style/MantraLabel" android:text="@string/source_name" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/source_name_hint" />
-        <EditText
-            android:id="@+id/sourceName"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="text"
-            android:maxLines="1"
-            android:textColor="@color/sand"
-            android:textColorHint="@color/quiet"
-            android:fontFamily="monospace"
-            android:textSize="14sp"
-            android:autofillHints="name"
-            android:background="@color/surface"
-            android:padding="10dp" />
+
 
 
 
@@ -264,20 +415,7 @@
             android:orientation="horizontal"
             android:paddingTop="6dp" />
 
-        <!-- The cable -->
-        <TextView style="@style/MantraLabel" android:text="@string/usb" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/usb_hint" />
-        <TextView
-            android:id="@+id/usbState"
-            style="@style/MantraValue"
-            android:lineSpacingMultiplier="1.35"
-            android:paddingBottom="8dp" />
-        <Button
-            android:id="@+id/usbSettings"
-            style="@style/MantraKey"
-            android:layout_width="match_parent"
-            android:text="@string/usb_open" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/usb_webcam" />
+
 
         <!-- The trace -->
         <TextView style="@style/MantraLabel" android:text="@string/trace" />

@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var zones: ControlZones
     private lateinit var fullScreenCatcher: View
     private lateinit var status: TextView
+    private lateinit var telemetry: TextView
     private lateinit var vu: VuMeterView
     private lateinit var iris: TextView
     private lateinit var stage: LinearLayout
@@ -190,7 +191,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logKey: RailButton
     private lateinit var manualKey: RailButton
     private lateinit var ctrlKey: RailButton
-    private lateinit var ndiKey: RailButton
     private lateinit var screenKey: RailButton
 
     private val ui = Handler(Looper.getMainLooper())
@@ -207,6 +207,7 @@ class MainActivity : AppCompatActivity() {
         zones = findViewById(R.id.zones)
         fullScreenCatcher = findViewById(R.id.fullScreenCatcher)
         status = findViewById(R.id.status)
+        telemetry = findViewById(R.id.telemetry)
         vu = findViewById(R.id.vu)
         iris = findViewById(R.id.iris)
         stage = findViewById(R.id.stage)
@@ -402,8 +403,6 @@ class MainActivity : AppCompatActivity() {
         logKey = newKey("LOG") { nextCurve() }.also { railLeft.addView(it) }
         manualKey = newKey("M") { nextCameraMode() }.also { railLeft.addView(it) }
         ctrlKey = newKey("CTRL") { toggleZones() }.also { railLeft.addView(it) }
-        // One key for NDI: off, HX, full, off. An NDI source is one stream.
-        ndiKey = newKey("NDI") { nextNdiMode() }.also { railLeft.addView(it) }
         // The clean feed, for a phone that is being broadcast by its screen.
         screenKey = newKey("FULL") { setFullScreen(!fullScreen) }
             .also { railLeft.addView(it) }
@@ -645,7 +644,7 @@ class MainActivity : AppCompatActivity() {
         focus.stop()
         // The file is closed before the camera goes, not after: a take whose
         // encoder disappeared underneath it has no moov atom and opens nowhere.
-        if (pipeline.isRecording) stopRecording()
+        if (rolling) stopAll()
         pipeline.stop()
         meter?.stop()
         meter = null
@@ -726,11 +725,65 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleRecording() {
-        if (pipeline.isRecording) stopRecording() else startRecording()
+        if (rolling) stopAll() else startAll()
     }
 
-    private fun startRecording() {
+    /** The master trigger is engaged: every armed destination is running (v91). */
+    private var rolling = false
+
+    /**
+     * THE MASTER TRIGGER (v91). *"Activating a destination in the Settings
+     * menu only arms that specific channel ... will not commence until the
+     * user presses the master Record button ... both armed streams will start
+     * perfectly synchronized."* Every armed destination starts in this one
+     * call, off the one encoder, so they share frames and time from the first
+     * one; the record-run timecode counts from here.
+     */
+    private fun startAll() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
+        val file = settings.armFile
+        val ndi = settings.armNdi
+        if (!file && !ndi) {
+            say("Nothing is armed — arm FILE or NDI in settings (the gear)")
+            return
+        }
+        rolling = true
+        recordingSince = android.os.SystemClock.elapsedRealtime()
+        val started = mutableListOf<String>()
+        if (ndi) {
+            val want = if (settings.ndiKind == 2) CameraPipeline.Mode.FULL else CameraPipeline.Mode.HX
+            val possible = if (want == CameraPipeline.Mode.FULL) pipeline.fullAvailable else pipeline.hxAvailable
+            if (possible) {
+                pipeline.setMode(want)
+                started += if (want == CameraPipeline.Mode.FULL) "NDI FULL" else "NDI HX"
+            } else {
+                say("${if (want == CameraPipeline.Mode.FULL) "Full NDI" else "NDI HX"} is not possible on this lens")
+            }
+        }
+        if (file && startRecording()) started += "FILE"
+        if (started.isEmpty()) { rolling = false; refreshKeys(); return }
+        Trace.control("master", "start", started.joinToString(" + "))
+        showTimecode(true)
+        refreshTelemetry()
+        refreshKeys()
+    }
+
+    /** Everything that is running stops together. */
+    private fun stopAll() {
+        rolling = false
+        if (pipeline.isRecording) stopRecording()
+        if (pipeline.mode != CameraPipeline.Mode.OFF) {
+            pipeline.setMode(CameraPipeline.Mode.OFF)
+            if (!settings.armFile) say("Stopped")
+        }
+        Trace.control("master", "stop", "all")
+        showTimecode(false)
+        refreshTelemetry()
+        refreshKeys()
+    }
+
+    private fun startRecording(): Boolean {
+        if (!pipeline.isRunning) { say("The camera is not open"); return false }
         if (meter == null) say("No microphone: this take will have no sound")
         val where = pipeline.startRecording(
             this, meter, settings.recordFolder,
@@ -739,21 +792,16 @@ class MainActivity : AppCompatActivity() {
                 pipeline.engine.isFrontFacing, manualQuarterTurns
             )
         )
-            ?: run { refreshKeys(); return }
+            ?: run { refreshKeys(); return false }
         pipeline.lastTakeUri?.let { settings.lastTake = it.toString() }
-        recordingSince = android.os.SystemClock.elapsedRealtime()
-        recKey.recording = true
-        showTimecode(true)
         say("Recording → $where")
-        refreshKeys()
+        return true
     }
 
     private fun stopRecording() {
         val frames = pipeline.recordedFrames
         val drops = pipeline.recordedDrops
         val where = pipeline.stopRecording()
-        recKey.recording = false
-        showTimecode(false)
         refreshStorage()
         say(
             when {
@@ -1611,6 +1659,7 @@ class MainActivity : AppCompatActivity() {
         railLeft.visibility = hidden
         railRight.visibility = hidden
         status.visibility = hidden
+        telemetry.visibility = hidden
         vu.visibility = hidden
         timecode.visibility = hidden
         // The zones and the focus box come back to whichever of them was up.
@@ -1661,33 +1710,6 @@ class MainActivity : AppCompatActivity() {
         return lens.id + (lens.physicalId?.let { ":$it" } ?: "")
     }
 
-    /**
-     * Off, HX, full, off.
-     *
-     * A mode this phone cannot offer is stepped over rather than being a tap
-     * that does nothing: on a session that gave up the full-NDI reader to get
-     * ten bit, the key goes straight from HX back to off.
-     */
-    private fun nextNdiMode() {
-        if (!pipeline.isRunning) { say("The camera is not open"); return }
-        var next = pipeline.mode
-        for (step in 1..3) {
-            next = when (next) {
-                CameraPipeline.Mode.OFF -> CameraPipeline.Mode.HX
-                CameraPipeline.Mode.HX -> CameraPipeline.Mode.FULL
-                CameraPipeline.Mode.FULL -> CameraPipeline.Mode.OFF
-            }
-            val possible = when (next) {
-                CameraPipeline.Mode.OFF -> true
-                CameraPipeline.Mode.HX -> pipeline.hxAvailable
-                CameraPipeline.Mode.FULL -> pipeline.fullAvailable
-            }
-            if (possible) break
-        }
-        pipeline.setMode(next)
-        Trace.control("stream", next.name, next.name)
-        refreshKeys()
-    }
 
     // --- the LUT switcher, and the other right-rail keys (v85) ----------------
 
@@ -1785,7 +1807,7 @@ class MainActivity : AppCompatActivity() {
     /** Record-run timecode, ticking ten times a second while a take runs. */
     private val timecodeTick = object : Runnable {
         override fun run() {
-            if (pipeline.isRecording) {
+            if (rolling) {
                 setTimecode("REC", true, android.os.SystemClock.elapsedRealtime() - recordingSince)
                 ui.postDelayed(this, 100)
             }
@@ -1886,17 +1908,6 @@ class MainActivity : AppCompatActivity() {
         manualKey.state = if (mode == "AUTO") RailButton.State.OFF else RailButton.State.ON
         manualKey.sub = mode
         ctrlKey.state = if (zonesOn) RailButton.State.ON else RailButton.State.OFF
-        ndiKey.sub = when (pipeline.mode) {
-            CameraPipeline.Mode.HX -> "HX"
-            CameraPipeline.Mode.FULL -> "FULL"
-            CameraPipeline.Mode.OFF -> "OFF"
-        }
-        ndiKey.state = when {
-            pipeline.mode != CameraPipeline.Mode.OFF -> RailButton.State.ON
-            pipeline.isRunning && !pipeline.hxAvailable && !pipeline.fullAvailable ->
-                RailButton.State.DEAD
-            else -> RailButton.State.OFF
-        }
         screenKey.state = if (fullScreen) RailButton.State.ON else RailButton.State.OFF
 
         // The LUT switcher says which LUT is on, or OFF.
@@ -1912,7 +1923,8 @@ class MainActivity : AppCompatActivity() {
         gearKey.state = RailButton.State.OFF
 
         recKey.dead = !pipeline.isRunning
-        recKey.recording = pipeline.isRecording
+        recKey.recording = rolling
+        refreshTelemetry()
     }
 
     // --- the status line ------------------------------------------------------
@@ -1925,30 +1937,51 @@ class MainActivity : AppCompatActivity() {
         Trace.state(text)
     }
 
+    private var lastMbps = 0.0
+    private var lastWatching = 0
+
     private fun showRate(fps: Double, mbps: Double, connections: Int) {
-        val mode = when (pipeline.mode) {
-            CameraPipeline.Mode.HX -> "NDI HX"
-            CameraPipeline.Mode.FULL -> "NDI FULL"
-            CameraPipeline.Mode.OFF -> "not sending"
-        }
+        lastMbps = mbps
+        lastWatching = connections
         val depth = if (pipeline.isTenBit) "10-bit" else "8-bit"
-        // "raw" on the full path, because that number is what was handed to
-        // the SDK and not what left the phone: full NDI compresses to SpeedHQ
-        // on its way out, so the wire carries a fraction of it. On HX the
-        // encoder's own output is measured and the number is the wire.
-        val rate = if (pipeline.mode == CameraPipeline.Mode.FULL) {
-            String.format("%.0f Mbit/s raw", mbps)
-        } else {
-            String.format("%.1f Mbit/s", mbps)
+        status.text = String.format(java.util.Locale.ROOT, "%s · %.1f fps · %s", depth, fps, lastSaid)
+        refreshTelemetry()
+    }
+
+    /**
+     * The telemetry line (v91): FILE, USB, NDI, YT, in place. Dim is not
+     * armed, white is armed and waiting for the record key, a red dot and
+     * its numbers is sending.
+     */
+    private fun refreshTelemetry() {
+        // LESSONS 7: never read the pipeline before onCreate has made it.
+        if (!::telemetry.isInitialized || !::pipeline.isInitialized) return
+        val parts = Mechanism.telemetry(
+            settings.armFile, pipeline.isRecording, pipeline.videoBitRate / 1_000_000.0,
+            settings.armNdi, settings.ndiKind, pipeline.mode != CameraPipeline.Mode.OFF,
+            lastMbps, lastWatching
+        )
+        val text = android.text.SpannableStringBuilder()
+        parts.forEachIndexed { i, p ->
+            if (i > 0) text.append("   ")
+            val start = text.length
+            if (p.state == Mechanism.Output.LIVE) {
+                text.append("● ")
+                text.setSpan(android.text.style.ForegroundColorSpan(android.graphics.Color.rgb(255, 59, 48)),
+                    start, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            val wordStart = text.length
+            text.append(p.name)
+            if (p.detail.isNotEmpty()) text.append(" ").append(p.detail)
+            val colour = when (p.state) {
+                Mechanism.Output.OFF -> android.graphics.Color.argb(120, 200, 204, 208)
+                Mechanism.Output.READY -> android.graphics.Color.WHITE
+                Mechanism.Output.LIVE -> android.graphics.Color.WHITE
+            }
+            text.setSpan(android.text.style.ForegroundColorSpan(colour), wordStart, text.length,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        status.text = if (pipeline.mode == CameraPipeline.Mode.OFF) {
-            "$mode · $depth · $lastSaid"
-        } else {
-            String.format(
-                "%s · %s · %.1f fps · %s · %d watching",
-                mode, depth, fps, rate, connections.coerceAtLeast(0)
-            )
-        }
+        telemetry.text = text
     }
 
     private fun exportTrace() {

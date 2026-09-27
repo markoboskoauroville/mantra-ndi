@@ -73,11 +73,56 @@ class SettingsActivity : AppCompatActivity() {
             showLuts()
         }
 
+    /**
+     * The four outputs (v91). A switch arms its destination and opens its
+     * panel; off, the panel is hidden. USB and YouTube stay in place, dark,
+     * until the versions that build them (a key that cannot work stays where
+     * it will be, dark — the camera's language).
+     */
+    private fun switchboard() {
+        fun bind(switchId: Int, panelId: Int, armed: Boolean, onSet: ((Boolean) -> Unit)?) {
+            val sw = findViewById<android.widget.Switch>(switchId)
+            val panel = findViewById<View>(panelId)
+            sw.isChecked = armed
+            panel.visibility = if (armed) View.VISIBLE else View.GONE
+            if (onSet == null) {
+                sw.isEnabled = false
+                // The panel says when it arrives, so it opens on a tap of the row.
+                (sw.parent as View).setOnClickListener {
+                    panel.visibility = if (panel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                }
+                return
+            }
+            sw.setOnCheckedChangeListener { _, on ->
+                onSet(on)
+                panel.visibility = if (on) View.VISIBLE else View.GONE
+                Trace.control("output", resources.getResourceEntryName(switchId), if (on) "armed" else "off")
+            }
+        }
+        bind(R.id.armFile, R.id.panelFile, settings.armFile) { settings.armFile = it }
+        bind(R.id.armUsb, R.id.panelUsb, false, null)
+        bind(R.id.armNdi, R.id.panelNdi, settings.armNdi) { settings.armNdi = it }
+        bind(R.id.armYoutube, R.id.panelYoutube, false, null)
+
+        val kind = findViewById<RadioGroup>(R.id.ndiKind)
+        listOf(1 to "HX", 2 to "FULL").forEach { (k, name) ->
+            kind.addView(RadioButton(this).apply {
+                id = 200 + k
+                text = name
+                textSize = 13f
+                isChecked = settings.ndiKind == k
+            })
+        }
+        kind.setOnCheckedChangeListener { _, id -> settings.ndiKind = id - 200 }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
         settings = Settings(this)
         slots = LutSlots(this)
+
+        switchboard()
 
         // Where takes go.
         showFolder()
