@@ -1393,4 +1393,41 @@ class MechanismTest {
         assertTrue(Mechanism.gainsFollowed(2.14, 1.36, 2.20, 1.37))
         assertFalse(Mechanism.gainsFollowed(2.14, 0.0, 2.2, 1.3))
     }
+
+    @Test fun logGreyTargetsAreTheMakersNumbers() {
+        // Sony S-Log3: 18 % grey = 420 of 1023. Panasonic V-Log: 42 % (433).
+        // ARRI LogC3 EI800: 0.391. ARRI LogC4: 0.2784. Blackmagic Film Gen5: about 0.384.
+        assertEquals(420.0 / 1023.0, Mechanism.greyTarget(LogCurves.Curve.SLOG3)!!, 0.001)
+        assertEquals(0.423, Mechanism.greyTarget(LogCurves.Curve.VLOG)!!, 0.002)
+        assertEquals(0.391, Mechanism.greyTarget(LogCurves.Curve.LOGC3)!!, 0.001)
+        assertEquals(0.2784, Mechanism.greyTarget(LogCurves.Curve.LOGC4)!!, 0.001)
+        assertEquals(0.384, Mechanism.greyTarget(LogCurves.Curve.BMFILM)!!, 0.002)
+        assertEquals(null, Mechanism.greyTarget(LogCurves.Curve.REC709))
+    }
+
+    @Test fun logExposureErrorIsInStops() {
+        val c = LogCurves.Curve.SLOG3
+        // grey on target: nothing to do
+        assertEquals(0.0, Mechanism.logExposureError(c, 420.0 / 1023.0)!!, 0.01)
+        // grey one stop under: S-Log3 of 0.09 linear
+        val oneUnder = LogCurves.encode(c, 0.09)
+        assertEquals(1.0, Mechanism.logExposureError(c, oneUnder)!!, 0.02)
+        val twoOver = LogCurves.encode(c, 0.72)
+        assertEquals(-2.0, Mechanism.logExposureError(c, twoOver)!!, 0.02)
+        assertEquals(null, Mechanism.logExposureError(LogCurves.Curve.REC709, 0.4))
+    }
+
+    @Test fun compensationSettlesInHalfSteps() {
+        // one stop under, 1/3-stop steps: half the error is 1.5 steps -> 2
+        assertEquals(2, Mechanism.nextCompensation(0, 1.0, 1.0 / 3, -12, 12))
+        // a small error still moves one step; a tiny one does not move
+        assertEquals(1, Mechanism.nextCompensation(0, 0.2, 1.0 / 3, -12, 12))
+        assertEquals(0, Mechanism.nextCompensation(0, 0.05, 1.0 / 3, -12, 12))
+        assertEquals(12, Mechanism.nextCompensation(11, 3.0, 1.0 / 3, -12, 12))
+        assertEquals(-3, Mechanism.nextCompensation(0, -2.0, 1.0 / 3, -12, 12))
+        // Coarse steps (0.6 stop): +0.21 and -0.12 are as close as it gets — no hunting.
+        assertEquals(-2, Mechanism.nextCompensation(-2, 0.21, 0.6, -12, 12))
+        assertEquals(-3, Mechanism.nextCompensation(-3, -0.12, 0.6, -12, 12))
+        assertEquals(-3, Mechanism.nextCompensation(-2, -0.56, 0.6, -12, 12))
+    }
 }

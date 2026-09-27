@@ -303,3 +303,16 @@ Emulator (8-bit only): picture, take, FILE + NDI HX, monkey clean. CPU on the em
 (emulated GL, two encoders) — **his Pixel gives the real figure; if the 10-bit colours look wrong there,
 Settings → Picture path → DIRECT.** Not moved to the GPU yet, and why: the full-NDI YUV packing (it still
 comes from its own camera reader), the focus and brightness samples (tiny reads of the preview). v98 next.
+
+## Eighth message, 27.9.2026, 18:00: manual controls only work on L2
+
+> "On pixel phone, manual controls now in GPU mode only works with lens 2. Other lenses no or little
+> bit, I'm not sure, but there are not big changes at all."
+
+His screenshots (v97): L2 25 mm FM, ISO 1013, 1/316, focus 0.18 m, WB 4600 K — works; L1 17 mm FM, ISO
+1604, 1/1286 — the picture hardly answers. Files: `~/.claude/uploads/e6c861f6-db96-40aa-8b9c-c88d869cc059/`
+`59af1afb-image.png`, `2e73f372-image.png`. **Diagnosis:** L2 (and L5) are the Pixel's logical cameras;
+every other lens is a physical sub-camera, and v96 moved only the white balance keys onto the lens.
+ISO, shutter, frame duration, focus, AE / AF modes and the tone curve were still set on the logical
+request only. **Status:** fixed in v98 (with log exposure): every key the lens accepts per lens is
+copied onto it at each request.

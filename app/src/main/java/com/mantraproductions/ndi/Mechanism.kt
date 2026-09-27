@@ -1596,6 +1596,50 @@ object Mechanism {
         return ((db - METER_FLOOR_DB) / -METER_FLOOR_DB).coerceIn(0f, 1f)
     }
 
+    // --- automatic exposure that knows the log curve (v98, Phase 5) ------------------
+
+    /**
+     * Where a grey card must land for [curve] to be exposed as its maker
+     * specifies: the curve's own code value for 18 % grey (S-Log3 420 of 1023,
+     * V-Log 433, LogC3 EI800 400, LogC4 278, Film Gen5 about 393). For the
+     * phone's own picture (STD / HLG) there is no maker's number and nothing
+     * is corrected.
+     */
+    fun greyTarget(curve: LogCurves.Curve): Double? =
+        if (curve == LogCurves.Curve.REC709) null else LogCurves.middleGrey(curve)
+
+    /**
+     * How many stops the picture is off, from the grey card's measured signal:
+     * both values decoded back to scene light through the curve, so a stop is a
+     * stop whatever the curve does to it. Positive means open up.
+     */
+    fun logExposureError(curve: LogCurves.Curve, measuredSignal: Double): Double? {
+        val target = greyTarget(curve) ?: return null
+        val want = LogCurves.decode(curve, target)
+        val got = LogCurves.decode(curve, measuredSignal.coerceIn(0.0, 1.0))
+        if (got <= 1e-4) return 3.0
+        return (ln(want / got) / ln(2.0)).coerceIn(-3.0, 3.0)
+    }
+
+    /**
+     * The next exposure compensation, in the camera's own steps: half the
+     * error per step so it settles rather than pumps, nothing inside a tenth
+     * of a stop, never outside the camera's range.
+     */
+    fun nextCompensation(current: Int, errorStops: Double, stepStops: Double, min: Int, max: Int): Int {
+        if (stepStops <= 0.0 || kotlin.math.abs(errorStops) < 0.1) return current.coerceIn(min, max)
+        val move = Math.round(errorStops * 0.5 / stepStops).toInt()
+        // One step only when it brings grey closer: an error under half a step
+        // is as close as this camera's steps go, and chasing it hunts between
+        // two (seen on the emulator, 0.6-stop steps, 27.9.2026).
+        val nudged = when {
+            move != 0 -> current + move
+            kotlin.math.abs(errorStops) > stepStops / 2 -> current + (if (errorStops > 0) 1 else -1)
+            else -> current
+        }
+        return nudged.coerceIn(min, max)
+    }
+
     // --- the switchboard and its telemetry line (v91) --------------------------------
 
     /** How one destination stands: not armed, armed and waiting for the record key, or sending. */

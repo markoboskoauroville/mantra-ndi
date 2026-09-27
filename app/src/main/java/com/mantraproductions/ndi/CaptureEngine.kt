@@ -1016,6 +1016,27 @@ class CaptureEngine(private val context: Context) {
     fun isoRange(): Range<Int>? =
         lensCharacteristics?.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
 
+    // --- exposure compensation, the lever of log-aware auto exposure (v98) ------
+
+    /** The compensation the camera accepts, in its own steps (the logical camera runs AE). */
+    fun aeCompensationRange(): Range<Int>? =
+        characteristics?.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
+
+    /** One step, in stops: usually 1/3 or 1/6. */
+    fun aeCompensationStep(): Double =
+        characteristics?.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toDouble() ?: 0.0
+
+    @Volatile var aeCompensation = 0
+        private set
+
+    fun setExposureCompensation(steps: Int): Boolean {
+        val request = builder ?: return false
+        request.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, steps)
+        val ok = apply()
+        if (ok) aeCompensation = steps
+        return ok
+    }
+
     /** The top of this sensor's analog gain; above it the gain is digital (v90, the HIGH preset). */
     fun maxAnalogIso(): Int? =
         lensCharacteristics?.get(CameraCharacteristics.SENSOR_MAX_ANALOG_SENSITIVITY)

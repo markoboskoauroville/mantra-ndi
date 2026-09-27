@@ -625,6 +625,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        ui.removeCallbacks(logExposureTick)
+        ui.post(logExposureTick)
         displays?.registerDisplayListener(displayListener, ui)
         if (fullScreen) hideSystemBars(true)
         // The camera session is lost while backgrounded even with a foreground
@@ -643,6 +645,7 @@ class MainActivity : AppCompatActivity() {
         runCatching { displays?.unregisterDisplayListener(displayListener) }
         ui.removeCallbacks(rateTick)
         ui.removeCallbacks(focusWatch)
+        ui.removeCallbacks(logExposureTick)
         focus.stop()
         // The file is closed before the camera goes, not after: a take whose
         // encoder disappeared underneath it has no moov atom and opens nowhere.
@@ -1207,6 +1210,95 @@ class MainActivity : AppCompatActivity() {
      * preview: the scaling is done by the GPU, a few dozen pixels are averaged
      * here.
      */
+    /**
+     * The grey card: the mean signal inside the focus box (the middle fifth of
+     * the picture when the box is put away), 0..1 as the curve encoded it.
+     * Read off the monitor texture — the picture the camera made, before the
+     * monitor LUT and the tools, which live on the View.
+     */
+    private fun sampleGreyCard(): Double? {
+        if (!preview.isAvailable) return null
+        val w = 48
+        val h = 27
+        val bmp = runCatching { preview.getBitmap(w, h) }.getOrNull() ?: return null
+        val b = if (focusSquare.visibility == View.VISIBLE) focusSquare.normalisedBounds()
+            else floatArrayOf(0.4f, 0.4f, 0.6f, 0.6f)
+        val x0 = (b[0] * w).toInt().coerceIn(0, w - 1)
+        val x1 = (b[2] * w).toInt().coerceIn(x0 + 1, w)
+        val y0 = (b[1] * h).toInt().coerceIn(0, h - 1)
+        val y1 = (b[3] * h).toInt().coerceIn(y0 + 1, h)
+        var sum = 0.0
+        var n = 0
+        for (y in y0 until y1) for (x in x0 until x1) {
+            val c = bmp.getPixel(x, y)
+            // Rec.709 luma weights, on the encoded signal, as a waveform reads it.
+            sum += (0.2126 * android.graphics.Color.red(c) + 0.7152 * android.graphics.Color.green(c) +
+                0.0722 * android.graphics.Color.blue(c)) / 255.0
+            n++
+        }
+        bmp.recycle()
+        return if (n == 0) null else sum / n
+    }
+
+    /** The last compensation move and the error before it, and the step it proved to be. */
+    private var lastMove: Pair<Int, Double>? = null
+    private var learntStep = 0.0
+
+    /** The grey readout for the status line, or null on the phone's own curve. */
+    private var greyReadout: String? = null
+
+    /**
+     * LOG-AWARE AUTO EXPOSURE (v98, Phase 5). *"Make automatic exposure expose
+     * for the chosen curve, exactly as the manufacturer specifies."* Twice a
+     * second: the grey card is read, its distance from the curve's own grey is
+     * worked out in stops, and while exposure is automatic the camera's
+     * exposure compensation is moved half of it. On the phone's own curve the
+     * compensation goes back to zero. With exposure manual it only reads.
+     */
+    private val logExposureTick = object : Runnable {
+        override fun run() {
+            if (pipeline.isRunning) runCatching { stepLogExposure() }
+                .onFailure { Trace.fault("log exposure", it) }
+            ui.postDelayed(this, 500)
+        }
+    }
+
+    private fun stepLogExposure() {
+        val engine = pipeline.engine
+        val curve = LogCurves.Curve.entries[curveIndex]
+        val auto = isoAuto && shutterAuto
+        val target = Mechanism.greyTarget(curve)
+        if (target == null) {
+            greyReadout = null
+            if (auto && engine.aeCompensation != 0) engine.setExposureCompensation(0)
+            return
+        }
+        val measured = sampleGreyCard() ?: return
+        greyReadout = String.format(
+            java.util.Locale.ROOT, "grey %.0f%% · %s %.0f%%", measured * 100, curve.displayName, target * 100
+        )
+        if (!auto) return
+        val range = engine.aeCompensationRange() ?: return
+        val error = Mechanism.logExposureError(curve, measured) ?: return
+        // What one step really moved, learnt from the last move: a camera
+        // whose step is coarser than it says would otherwise hunt between two.
+        lastMove?.let { (steps, before) ->
+            if (steps != 0) learntStep = maxOf(learntStep, kotlin.math.abs(error - before) / kotlin.math.abs(steps))
+        }
+        lastMove = null
+        val step = maxOf(engine.aeCompensationStep(), learntStep)
+        val next = Mechanism.nextCompensation(engine.aeCompensation, error, step, range.lower, range.upper)
+        val moved = next - engine.aeCompensation
+        if (next != engine.aeCompensation && engine.setExposureCompensation(next)) {
+            lastMove = moved to error
+            Trace.control(
+                "log exposure",
+                String.format(java.util.Locale.ROOT, "%s grey %.3f, target %.3f, %+.2f stops", curve.displayName, measured, target, error),
+                "compensation $next steps"
+            )
+        }
+    }
+
     private fun sampleBrightness(): Double? {
         if (!preview.isAvailable) return null
         val bmp = runCatching { preview.getBitmap(24, 14) }.getOrNull() ?: return null
@@ -1946,8 +2038,9 @@ class MainActivity : AppCompatActivity() {
         lastMbps = mbps
         lastWatching = connections
         val depth = if (pipeline.isTenBit) "10-bit" else "8-bit"
-        status.text = if (fps > 0.5) String.format(java.util.Locale.ROOT, "%s · %.1f fps · %s", depth, fps, lastSaid)
-            else "$depth · $lastSaid"
+        val grey = greyReadout?.let { " · $it" } ?: ""
+        status.text = if (fps > 0.5) String.format(java.util.Locale.ROOT, "%s · %.1f fps%s · %s", depth, fps, grey, lastSaid)
+            else "$depth$grey · $lastSaid"
         refreshTelemetry()
     }
 
