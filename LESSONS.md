@@ -77,3 +77,11 @@ tone curve) must reach a physical lens. The general rule: copy each key from
 `CameraCharacteristics.getAvailablePhysicalCameraRequestKeys()` onto the lens at every request, and read
 the lens's own result back.
 
+## 9. Read what the GPU wrote before trusting it (v99)
+
+**What happened:** the tracker said LOST on a clearly textured window. Every score read back was exactly
+0: the pattern, copied out of the luma framebuffer with `glCopyTexSubImage2D`, arrived flat on the
+emulator's GPU, with no GL error. **Rule:** when a GPU stage misbehaves, read back a row of each
+intermediate (`glReadPixels`) into the trace before theorising; and prefer drawing into a texture over
+copying between them. The pattern now lives in a kept reference frame drawn by the same shader.
+

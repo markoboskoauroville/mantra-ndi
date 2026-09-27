@@ -333,4 +333,14 @@ line "lens N takes its own: …" lists what each lens accepts.
 ## Ninth message, 27.9.2026, evening: "let's develop a tracking focus"
 
 Asked what is next (YouTube was proposed), he chose **tracking focus** (Phase 9 of the phase document).
-**Status:** v99 started.
+**Status: v99 released, 27.9.2026 19:45.** AF key: AF → TRK → MF. In TRK the pinched focus box is the
+pattern, a thin outer square the search zone; a tap sets it. GPU stage: luma copy (256 wide) of each
+frame, NCC per search place in a fragment shader against a kept reference frame, scores (≤ 64×64) read
+back, sub-pixel peak. The mark follows by the set fraction, refocuses past the tolerance, and turns red
+with LOST below the confidence (stays put). Settings: search zone ×, frames between searches, confidence,
+tolerance, follow speed. Tests: known shift to ⅓ px, exposure change + noise, flat / unrelated = lost,
+screen↔sensor exact inverse. Emulator: LOST on a flat wall (correct), 1.000 on a window, monkey clean;
+its scene does not move, so **following a moving subject is for his phone.** Found and fixed: the pattern
+copy (glCopyTexSubImage2D) came back flat (LESSONS 9). Also fixed on the way: the AF region mapped the
+screen through "front camera" instead of what the monitor shows (they differ since the GPU stage).
+Needs the GPU stage (Settings → Picture path).
