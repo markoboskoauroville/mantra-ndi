@@ -256,3 +256,12 @@ px in his picture): flash tab, chamfered corner, hump x 48.8–59.6 up to y 39.8
 1-unit orange outline inside the body's edge; lifted 4 units for the number. Seen on the emulator's
 launcher reading v95. Not yet done: the SNAP key on the rail still draws the v88 camera; it should
 become this one.
+
+## Sixth message, 27.9.2026, evening: the white balance trace
+
+> "Here is the trace from the Google Pixel 7 phone and it doesn't work. Interestingly enough, on my
+> Nothing Phone 2a, the white balance slider is working. Please diagnose what is the issue and what are
+> specifics of Pixel Phone 7."
+
+Trace: `~/.claude/uploads/e6c861f6-db96-40aa-8b9c-c88d869cc059/93abab3b-trace-2026-09-27-164207.txt`.
+**Status:** being diagnosed.
