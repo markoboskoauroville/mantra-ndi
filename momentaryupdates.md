@@ -228,3 +228,12 @@ phone-only and finishes first; the Mac app is the longer road.
    under the camera from `appVersion`. **Status:** done in **v93** (and grey body, item 1): the icon is
    a template in `app/src/main/icon`, `build.gradle.kts` draws the number; seen on the emulator's
    launcher as "v93".
+
+## Fourth message, 27.9.2026, evening
+
+> "Please build the next version and write inside the settings when there is a version number. It
+> is basically a hidden link. If I click on the version number, it will take me to the GitHub latest
+> release APK page."
+
+The version number in settings (top right, and at the bottom) opens the repository's latest release
+page on GitHub, where the APK is. **Status:** to do, v94 (YouTube moves to v95).
