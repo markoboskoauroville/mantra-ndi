@@ -31,6 +31,8 @@ class SettingsActivity : AppCompatActivity() {
         /** The lens the camera screen was on, for ROT. */
         const val EXTRA_LENS = "lens"
         const val EXTRA_LENS_NAME = "lensName"
+        /** The newest signed APK lives here (CI publishes every version as a release). */
+        const val LATEST_RELEASE = "https://github.com/markoboskoauroville/mantra-ndi/releases/latest"
     }
 
     /** The system's folder picker: any drive, a USB SSD included. */
@@ -345,7 +347,18 @@ class SettingsActivity : AppCompatActivity() {
         showHints(settings.verboseSettings)
 
         // The version, at the top, where he looks for it after an install.
-        findViewById<TextView>(R.id.headerVersion).text = "v${BuildConfig.VERSION_NAME}"
+        // v94, a hidden link: *"If I click on the version number, it will take me
+        // to the GitHub latest release APK page."* It looks like the number and
+        // nothing else; a tap opens the latest release, where the APK is.
+        findViewById<TextView>(R.id.headerVersion).apply {
+            text = "v${BuildConfig.VERSION_NAME}"
+            setOnClickListener {
+                runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(LATEST_RELEASE)))
+                }.onFailure { Toast.makeText(this@SettingsActivity, "No browser to open $LATEST_RELEASE", Toast.LENGTH_LONG).show() }
+                Trace.control("version", "tapped", "opens $LATEST_RELEASE")
+            }
+        }
         findViewById<TextView>(R.id.version).text =
             if (NdiSender.available) "NDI SDK present" else "built without the NDI SDK"
     }
