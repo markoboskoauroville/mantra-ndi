@@ -192,3 +192,15 @@ is exactly the old edge and the symbol stays in the 42 box (`res/drawable/ic_lau
 same encoder as the file and NDI, with sound); **v93 = USB, the phone's side of the Mac companion**
 (and the companion app in its own repository). Swapped from the first split because YouTube is
 phone-only and finishes first; the Mac app is the longer road.
+
+## Third message, 27.9.2026, about 15:40 (after v92's icon)
+
+1. **"Camera body should be gray. That's the rule of the icon."** Keep the drawing, the orange lens
+   ring and the thin orange body outline; the body itself is grey, as on his launcher (light grey on
+   the dark ground). **Status:** to do, next build.
+2. **White balance, three screenshots from his Pixel** (L2 25 mm, ISO 50, 1/682, HLG 10-bit, 4K,
+   outdoors in afternoon daylight, WB on M): the fader at the far right (value hidden under the
+   screenshot thumbnail), at **4100 K**, and at **3200 K**. *"Let me know what has changed in the white
+   balance in these images after I'm moving the slider."* Screenshots on the Mac at
+   `~/.claude/uploads/e6c861f6-db96-40aa-8b9c-c88d869cc059/573d21fa-image.png`, `e4713b3d-image.png`,
+   `aa18b794-image.png`. **Status:** being analysed (the answer and any fix are written below).
