@@ -148,6 +148,7 @@ class CaptureEngine(private val context: Context) {
         this.lensCharacteristics = null
         this.gainsIgnored = false
         this.checkFrames = 0
+        this.lensKeysCache = null
         this.targetFps = fps
         this.activeCurve = curve
         this.wantedRepeating = repeating
@@ -503,6 +504,7 @@ class CaptureEngine(private val context: Context) {
         val session = session ?: return false
         val request = builder ?: return false
         return try {
+            mirrorToLens(request)
             val built = request.build()
             session.setRepeatingRequest(built, captureCallback, handler)
             lastGood = built
@@ -523,16 +525,18 @@ class CaptureEngine(private val context: Context) {
             result: TotalCaptureResult
         ) {
             framesCompleted++
-            lastIso = result.get(CaptureResult.SENSOR_SENSITIVITY)
-            lastExposureNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
-            lastFocusDistance = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
+            // What the lens itself did (v98): on a physical sub-camera the
+            // logical result can describe another sensor.
+            val lensResult = lensResultOf(result)
+            lastIso = lensResult.get(CaptureResult.SENSOR_SENSITIVITY)
+            lastExposureNs = lensResult.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+            lastFocusDistance = lensResult.get(CaptureResult.LENS_FOCUS_DISTANCE)
             lastResult = result
 
             // The camera's own white balance, kept while it is still the one
             // deciding. This is the anchor the fader hangs off: gains and
             // matrix measured by the people who tuned this ISP, for this
             // scene, at the moment the operator took it over.
-            val lensResult = lensResultOf(result)
             if (!manualWhiteBalance) {
                 lensResult.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { g ->
                     autoGains = floatArrayOf(g.red, g.greenEven, g.greenOdd, g.blue)
@@ -1333,6 +1337,43 @@ class CaptureEngine(private val context: Context) {
                 .onFailure { Trace.refused("lens key ${key.name}", Trace.describe(it)) }
         }
     }
+
+    /**
+     * EVERY CONTROL ON THE LENS (v98). *"Manual controls now only work with
+     * lens 2."* On the Pixel 7, L2 and L5 are logical cameras and every other
+     * lens is a physical sub-camera: v96 put white balance on the lens, but
+     * ISO, shutter, frame duration, focus, the AE / AF modes and the tone curve
+     * stayed on the logical request, which that lens does not read. So at every
+     * request each key the camera lists as settable per lens is copied onto the
+     * lens with the value the logical request carries.
+     */
+    private fun mirrorToLens(request: CaptureRequest.Builder) {
+        val physical = physicalId ?: return
+        if (!requestNamesLens || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+        for (key in lensRequestKeys) {
+            @Suppress("UNCHECKED_CAST")
+            val k = key as CaptureRequest.Key<Any>
+            val value = runCatching { request.get(k) }.getOrNull() ?: continue
+            runCatching { request.setPhysicalCameraKey(k, value, physical) }
+        }
+    }
+
+    /** The keys this logical camera lets a request set per lens. */
+    private val lensRequestKeys: List<CaptureRequest.Key<*>>
+        get() {
+            val cached = lensKeysCache
+            if (cached != null) return cached
+            val keys = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                runCatching { characteristics?.availablePhysicalCameraRequestKeys }.getOrNull().orEmpty()
+            else emptyList()
+            lensKeysCache = keys
+            Trace.state(
+                if (keys.isEmpty()) "lens $physicalId: this camera lists no per-lens request keys"
+                else "lens $physicalId takes its own: " + keys.joinToString(", ") { it.name.substringAfterLast('.') }
+            )
+            return keys
+        }
+    private var lensKeysCache: List<CaptureRequest.Key<*>>? = null
 
     /** The result of the lens the picture comes from; the logical one may describe another sensor. */
     private fun lensResultOf(result: TotalCaptureResult): CaptureResult {
