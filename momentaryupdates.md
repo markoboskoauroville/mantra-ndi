@@ -236,7 +236,9 @@ phone-only and finishes first; the Mac app is the longer road.
 > release APK page."
 
 The version number in settings (top right, and at the bottom) opens the repository's latest release
-page on GitHub, where the APK is. **Status:** to do, v94 (YouTube moves to v95).
+page on GitHub, where the APK is. **Status:** done in **v94**: the number at the top right of settings
+opens `https://github.com/markoboskoauroville/mantra-ndi/releases/latest`; proven on the emulator (a
+tap started Chrome on that address). YouTube moves to v96.
 
 ## Fifth message, 27.9.2026, evening: the icon, literally
 
@@ -248,4 +250,9 @@ His picture: `~/.claude/uploads/e6c861f6-db96-40aa-8b9c-c88d869cc059/f8c7d4c6-im
 themed rendering of our icon: a grey camera on a dark slate circle). To do: trace it — the same body
 shape, the same grey, the same background colour — then a thin orange outline around the body, and the
 dark ring between the lens glass and the body filled orange. The version number stays under the camera
-(his earlier rule). **Status:** to do, v95.
+(his earlier rule). **Status:** done in **v95**: traced against the 72-unit circle (the circle is 160
+px in his picture): flash tab, chamfered corner, hump x 48.8–59.6 up to y 39.8, body x 36.7–71.8 y
+42.5–66.8, lens centre (54.2, 55.1) ring r 6.7–9.6, grey #A8ADAF on slate #263238; orange ring, a
+1-unit orange outline inside the body's edge; lifted 4 units for the number. Seen on the emulator's
+launcher reading v95. Not yet done: the SNAP key on the rail still draws the v88 camera; it should
+become this one.
