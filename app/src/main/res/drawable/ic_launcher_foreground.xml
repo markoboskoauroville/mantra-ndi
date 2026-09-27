@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Mantra Manual Camera, v88: a camera body and its lens, the same drawing as
+     the SNAP key. MANTRA_MANIFEST modules/app-icon.md: everything inside the
+     42 box (33 … 75), so the symbol is 42 / 72 = 0.58 of the visible circle.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- The body with the viewfinder hump on top: 33..75 wide, 38..70 high. -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M45,38h14l3,5h9a4,4 0,0 1,4,4v19a4,4 0,0 1,-4,4h-34a4,4 0,0 1,-4,-4v-19a4,4 0,0 1,4,-4h5z" />
+    <!-- The lens: a dark ring cut into the body, with its glass. -->
+    <path android:fillColor="#0E1114"
+        android:pathData="M54,56m-10.5,0a10.5,10.5 0,1 0,21 0a10.5,10.5 0,1 0,-21 0" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M54,56m-6,0a6,6 0,1 0,12 0a6,6 0,1 0,-12 0" />
+</vector>

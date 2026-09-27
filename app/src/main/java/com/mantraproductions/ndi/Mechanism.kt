@@ -1693,8 +1693,28 @@ object Mechanism {
         return sorted.firstOrNull { it > current } ?: 0
     }
 
-    /** SHOOT: 0 follows the phone, 1 landscape, 2 portrait, then back to 0. */
-    fun nextShoot(mode: Int): Int = ((mode % 3) + 3 + 1) % 3
+    /**
+     * The orientation key: LANDSCAPE or PORTRAIT, and a tap turns it (v88).
+     *
+     * *"It just says LANDSCAPE or PORTRAIT and toggles between the two."* There
+     * is no AUTO any more. 1 is landscape, 2 portrait; the 0 an older version
+     * stored ("follow the phone") is read as whichever way the screen is now.
+     */
+    fun shootResolved(mode: Int, screenIsLandscape: Boolean): Int = when (mode) {
+        1, 2 -> mode
+        else -> if (screenIsLandscape) 1 else 2
+    }
+
+    fun toggleShoot(mode: Int, screenIsLandscape: Boolean): Int =
+        if (shootResolved(mode, screenIsLandscape) == 1) 2 else 1
+
+    /**
+     * Only a step worth taking is sent to the camera (v88). The half-manual
+     * loop runs four times a second; sending, and tracing, the same exposure
+     * every quarter second wrote 1,786 identical lines in eight minutes.
+     */
+    fun exposureChanged(iso: Int, shutterNs: Long, sentIso: Int, sentShutterNs: Long): Boolean =
+        iso != sentIso || shutterNs != sentShutterNs
 
     /**
      * CONSTANT FRAME RATE: which slot of an exact 1/fps grid a frame belongs in.

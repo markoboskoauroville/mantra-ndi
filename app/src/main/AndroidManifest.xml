@@ -25,7 +25,7 @@
     <application
         android:name=".MantraApp"
         android:allowBackup="false"
-        android:icon="@android:drawable/ic_menu_camera"
+        android:icon="@mipmap/ic_launcher"
         android:label="Mantra Manual Camera"
         android:theme="@style/Theme.MantraNdi"
         android:supportsRtl="true">

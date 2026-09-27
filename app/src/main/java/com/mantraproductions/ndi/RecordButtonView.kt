@@ -9,12 +9,9 @@ import android.view.View
 import kotlin.math.min
 
 /**
- * Record: an outlined circle with a red dot in it when idle, filled red with
- * the running time inside once recording.
- *
- * Putting the counter inside the button means the one thing you check mid-take
- * is where your thumb already is, rather than somewhere else on screen
- * competing with the image.
+ * Record: a white circle when idle, red when recording, and nothing inside
+ * (v88). *"Remove the running number inside the record button, because it is
+ * now duplicated"* — the timecode at the bottom middle says it.
  *
  * It sits at the top of the right rail rather than being a key like the
  * others, and that is on purpose: it is the only control on this camera whose
@@ -33,21 +30,11 @@ class RecordButtonView @JvmOverloads constructor(
     var dead: Boolean = false
         set(value) { if (field != value) { field = value; invalidate() } }
 
-    var elapsedSeconds: Long = 0
-        set(value) { if (field != value) { field = value; invalidate() } }
-
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-    }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        textAlign = Paint.Align.CENTER
-        typeface = android.graphics.Typeface.create(
-            android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD
-        )
     }
 
     init {
@@ -62,22 +49,13 @@ class RecordButtonView @JvmOverloads constructor(
         ringPaint.strokeWidth = 2f * density
         ringPaint.color = if (dead) Color.parseColor("#3A3E42") else Color.parseColor("#C8CDD2")
         fillPaint.color = when {
-            dead -> Color.parseColor("#4A2420")
-            else -> Color.parseColor("#FF1F0F")
+            dead -> Color.parseColor("#3A3E42")
+            recording -> Color.parseColor("#FF1F0F")
+            else -> Color.WHITE
         }
         val radius = min(cx, cy) - ringPaint.strokeWidth
 
         canvas.drawCircle(cx, cy, radius, ringPaint)
-
-        if (recording && !dead) {
-            canvas.drawCircle(cx, cy, radius - 3f * density, fillPaint)
-            textPaint.textSize = radius * 0.46f
-            val text = String.format(
-                "%02d:%02d", elapsedSeconds / 60, elapsedSeconds % 60
-            )
-            canvas.drawText(text, cx, cy + textPaint.textSize / 3f, textPaint)
-        } else {
-            canvas.drawCircle(cx, cy, radius * 0.60f, fillPaint)
-        }
+        canvas.drawCircle(cx, cy, radius - 3f * density, fillPaint)
     }
 }

@@ -99,11 +99,17 @@ class ControlZones @JvmOverloads constructor(
     private var downY = 0f
     private var moved = false
 
+    // v88: the names were grey and thin, and vanished over a bright picture.
+    // Now the same weight as the numbers, white, over a dark band.
     private val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.LEFT
-        typeface = Typeface.MONOSPACE
-        textSize = density(10f)
-        letterSpacing = 0.12f
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        textSize = density(12f)
+        letterSpacing = 0.08f
+    }
+    private val band = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.argb(120, 0, 0, 0)
     }
     private val value = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.LEFT
@@ -193,13 +199,20 @@ class ControlZones @JvmOverloads constructor(
                 zone.auto -> Color.argb(225, 232, 163, 61)
                 else -> Color.argb(235, 245, 247, 248)
             }
-            title.color = Color.argb(if (zone.live) 190 else 90, 235, 238, 240)
+            title.color = Color.argb(if (zone.live) 245 else 110, 245, 247, 248)
             value.color = tint
             title.setShadowLayer(density(2.5f), 0f, 0f, Color.BLACK)
             value.setShadowLayer(density(2.5f), 0f, 0f, Color.BLACK)
             val words = top + rowHeight * 0.30f
+            val valueX = trackLeft + title.measureText(zone.title) + density(10f)
+            val pad = density(5f)
+            canvas.drawRoundRect(
+                trackLeft - pad, words + value.ascent() - pad * 0.6f,
+                valueX + value.measureText(zone.value) + pad, words + value.descent() + pad * 0.6f,
+                pad, pad, band
+            )
             canvas.drawText(zone.title, trackLeft, words, title)
-            canvas.drawText(zone.value, trackLeft + title.measureText(zone.title) + density(10f), words, value)
+            canvas.drawText(zone.value, valueX, words, value)
 
             if (!zone.live) continue
             val left = trackLeft

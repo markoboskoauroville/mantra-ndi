@@ -1233,11 +1233,20 @@ class MechanismTest {
         assertEquals(5, Mechanism.nextLut(3, loaded))
     }
 
-    @Test fun shootCyclesAutoLandscapePortrait() {
-        assertEquals(1, Mechanism.nextShoot(0))
-        assertEquals(2, Mechanism.nextShoot(1))
-        assertEquals(0, Mechanism.nextShoot(2))
-        assertEquals(1, Mechanism.nextShoot(-3))
+    @Test fun shootTogglesLandscapePortrait() {
+        // v88: LANDSCAPE <-> PORTRAIT, no AUTO; an old 0 is the screen's way now.
+        assertEquals(1, Mechanism.shootResolved(0, screenIsLandscape = true))
+        assertEquals(2, Mechanism.shootResolved(0, screenIsLandscape = false))
+        assertEquals(1, Mechanism.shootResolved(1, screenIsLandscape = false))
+        assertEquals(2, Mechanism.shootResolved(2, screenIsLandscape = true))
+        assertEquals(2, Mechanism.toggleShoot(1, screenIsLandscape = true))
+        assertEquals(1, Mechanism.toggleShoot(2, screenIsLandscape = true))
+        assertEquals(2, Mechanism.toggleShoot(0, screenIsLandscape = true))
+        assertEquals(1, Mechanism.toggleShoot(0, screenIsLandscape = false))
+        assertEquals(1, Mechanism.toggleShoot(-3, screenIsLandscape = false))
+        assertFalse(Mechanism.exposureChanged(605, 4_255_319L, 605, 4_255_319L))
+        assertTrue(Mechanism.exposureChanged(606, 4_255_319L, 605, 4_255_319L))
+        assertTrue(Mechanism.exposureChanged(605, 4_255_320L, 605, 4_255_319L))
     }
 
     // --- A / M, AUTO / HM / FM (v87) ------------------------------------------------

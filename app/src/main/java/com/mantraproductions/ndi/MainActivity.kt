@@ -71,7 +71,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var zones: ControlZones
     private lateinit var fullScreenCatcher: View
     private lateinit var status: TextView
-    private lateinit var geometry: TextView
     private lateinit var vu: VuMeterView
     private lateinit var iris: TextView
     private lateinit var stage: LinearLayout
@@ -109,6 +108,8 @@ class MainActivity : AppCompatActivity() {
     /** The brightness the half-manual loop holds, and whether the camera does it itself. */
     private var loopTarget = 0.0
     private var loopNative = false
+    private var loopSentIso = -1
+    private var loopSentShutterNs = -1L
     private var zonesOn = false
 
     /**
@@ -182,7 +183,6 @@ class MainActivity : AppCompatActivity() {
     /** The two exposure tools beside peaking. Monitor only, like peaking. */
     private var falseColour = false
     private var zebra = false
-    private lateinit var lightKey: RailButton
     private lateinit var focusKey: RailButton
     private lateinit var peakKey: RailButton
     private lateinit var snapKey: RailButton
@@ -206,13 +206,13 @@ class MainActivity : AppCompatActivity() {
         zones = findViewById(R.id.zones)
         fullScreenCatcher = findViewById(R.id.fullScreenCatcher)
         status = findViewById(R.id.status)
-        geometry = findViewById(R.id.geometry)
         vu = findViewById(R.id.vu)
         iris = findViewById(R.id.iris)
         stage = findViewById(R.id.stage)
         railLeft = findViewById(R.id.railLeft)
         railRight = findViewById(R.id.railRight)
         timecode = findViewById(R.id.timecode)
+        showTimecode(false)
 
         pipeline = CameraPipeline(this)
         slots = LutSlots(this)
@@ -315,6 +315,7 @@ class MainActivity : AppCompatActivity() {
                     // A new session starts from the template, which is all
                     // automatic: his A / M switches are put back on it.
                     if (!isoAuto || !shutterAuto) applyExposure()
+                    focus.resume()
                     refreshZones()
                     refreshKeys()
                 }
@@ -418,9 +419,12 @@ class MainActivity : AppCompatActivity() {
             railRight.addView(it)
         }
         playKey = newKey("PLAY") { playLastTake() }.also { railRight.addView(it) }
-        snapKey = newKey("SNAP") { takeSnap() }.also { railRight.addView(it) }
-        lightKey = newKey("LGHT") { toggleLight() }.also { railRight.addView(it) }
-        shootKey = newKey("SHOOT") { nextShoot() }.also { railRight.addView(it) }
+        // SNAP is the app's own icon (v88): the still is this camera's picture.
+        snapKey = newKey("") { takeSnap() }.also {
+            it.glyph = RailButton.Glyph.CAMERA
+            railRight.addView(it)
+        }
+        shootKey = newKey("PORTRAIT") { nextShoot() }.also { railRight.addView(it) }
         lutKey = newKey("LUT") { nextLut() }.also {
             it.setOnLongClickListener { openSettings(); true }
             railRight.addView(it)
@@ -694,10 +698,6 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             if (pipeline.isRunning) pipeline.sampleRate()
             if (++storageTicks % 5 == 0) refreshStorage()
-            if (pipeline.isRecording) {
-                recKey.elapsedSeconds =
-                    (android.os.SystemClock.elapsedRealtime() - recordingSince) / 1000
-            }
             ui.postDelayed(this, 1000)
         }
     }
@@ -722,7 +722,6 @@ class MainActivity : AppCompatActivity() {
             ?: run { refreshKeys(); return }
         pipeline.lastTakeUri?.let { settings.lastTake = it.toString() }
         recordingSince = android.os.SystemClock.elapsedRealtime()
-        recKey.elapsedSeconds = 0
         recKey.recording = true
         showTimecode(true)
         say("Recording → $where")
@@ -734,7 +733,6 @@ class MainActivity : AppCompatActivity() {
         val drops = pipeline.recordedDrops
         val where = pipeline.stopRecording()
         recKey.recording = false
-        recKey.elapsedSeconds = 0
         showTimecode(false)
         refreshStorage()
         say(
@@ -856,7 +854,6 @@ class MainActivity : AppCompatActivity() {
             " · buf ${bufferSize.width}x${bufferSize.height} · view ${vw}x$vh" +
             " · squeeze " + String.format("%.3f", squeeze) +
             (if (kotlin.math.abs(squeeze - 1.0) > 0.01) "  STRETCHED" else "")
-        geometry.text = line
         Trace.control("preview geometry", line, applied)
         updateFocusRegion()
     }
@@ -951,12 +948,6 @@ class MainActivity : AppCompatActivity() {
 
     /** The mode to put back once the new lens is live. */
     private var restoreMode: CameraPipeline.Mode = CameraPipeline.Mode.OFF
-
-    private fun toggleLight() {
-        val on = !pipeline.engine.torchOn
-        if (!pipeline.engine.setTorch(on)) say("This lens has no lamp")
-        refreshKeys()
-    }
 
     private fun toggleAutoFocus() {
         val next = if (focus.mode == FocusDirector.Mode.AUTO) FocusDirector.Mode.MANUAL
@@ -1108,6 +1099,8 @@ class MainActivity : AppCompatActivity() {
                     loopNative = true
                 } else {
                     engine.setManualExposure(iso, shutterNs)
+                    loopSentIso = iso
+                    loopSentShutterNs = shutterNs
                     loopTarget = sampleBrightness() ?: 0.0
                     Trace.control(
                         "exposure", if (mode == 1) "ISO priority" else "shutter priority",
@@ -1146,8 +1139,12 @@ class MainActivity : AppCompatActivity() {
                         ).toInt()
                     }
                 }
-                engine.setManualExposure(iso, shutterNs)
-                refreshZones()
+                if (Mechanism.exposureChanged(iso, shutterNs, loopSentIso, loopSentShutterNs)) {
+                    engine.setManualExposure(iso, shutterNs)
+                    loopSentIso = iso
+                    loopSentShutterNs = shutterNs
+                    refreshZones()
+                }
             }
             ui.postDelayed(this, 250)
         }
@@ -1504,7 +1501,6 @@ class MainActivity : AppCompatActivity() {
         railLeft.visibility = hidden
         railRight.visibility = hidden
         status.visibility = hidden
-        geometry.visibility = hidden
         vu.visibility = hidden
         timecode.visibility = hidden
         // The zones and the focus box come back to whichever of them was up.
@@ -1621,30 +1617,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * SHOOT: follow the phone, landscape, or portrait.
+     * The orientation key: LANDSCAPE or PORTRAIT.
      *
      * *"A button to change the orientation of the screen and its labels ...
-     * when I rotate the phone I need to read all the labels clearly."* With
-     * the phone's auto-rotate off, this is how the camera is turned: the whole
-     * interface goes with it, so every word stays upright.
+     * when I rotate the phone I need to read all the labels clearly."* The
+     * whole interface goes with it, so every word stays upright. v88: *"it
+     * just says LANDSCAPE or PORTRAIT and toggles between the two"* — no AUTO.
      */
     private fun nextShoot() {
-        settings.shootMode = Mechanism.nextShoot(settings.shootMode)
+        settings.shootMode = Mechanism.toggleShoot(settings.shootMode, screenIsLandscape())
         applyShootMode()
         refreshKeys()
-        say(when (settings.shootMode) {
-            1 -> "Shooting landscape"
-            2 -> "Shooting portrait"
-            else -> "Following the phone's rotation"
-        })
+        say(if (settings.shootMode == 1) "Landscape" else "Portrait")
     }
 
+    private fun screenIsLandscape(): Boolean =
+        resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
     private fun applyShootMode() {
-        requestedOrientation = when (settings.shootMode) {
-            1 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-            2 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
-            else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
-        }
+        // An older version's "follow the phone" becomes the way the screen is now.
+        settings.shootMode = Mechanism.shootResolved(settings.shootMode, screenIsLandscape())
+        requestedOrientation = if (settings.shootMode == 1)
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
     }
 
     /**
@@ -1681,19 +1676,33 @@ class MainActivity : AppCompatActivity() {
     private val timecodeTick = object : Runnable {
         override fun run() {
             if (pipeline.isRecording) {
-                timecode.text = Mechanism.timecode(
-                    android.os.SystemClock.elapsedRealtime() - recordingSince, pipeline.fps
-                )
+                setTimecode("REC", true, android.os.SystemClock.elapsedRealtime() - recordingSince)
                 ui.postDelayed(this, 100)
             }
         }
     }
 
+    /**
+     * Bottom middle: the status word, then the timecode (v88).
+     *
+     * *"The timecode is always white. Next to the timecode we have a status,
+     * REC, which becomes red when it is active, or PLAY."* The word carries
+     * the state; the numbers never change colour.
+     */
+    private fun setTimecode(word: String, active: Boolean, elapsedMs: Long) {
+        val tc = Mechanism.timecode(elapsedMs, pipeline.fps)
+        val text = android.text.SpannableString("$word  $tc")
+        val wordColour = if (active) android.graphics.Color.rgb(255, 59, 48) else android.graphics.Color.WHITE
+        text.setSpan(
+            android.text.style.ForegroundColorSpan(wordColour), 0, word.length,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        timecode.text = text
+    }
+
     private fun showTimecode(recording: Boolean) {
-        timecode.setTextColor(if (recording) android.graphics.Color.rgb(255, 59, 48)
-            else android.graphics.Color.argb(200, 220, 224, 228))
         if (recording) { ui.removeCallbacks(timecodeTick); ui.post(timecodeTick) }
-        else ui.removeCallbacks(timecodeTick)
+        else { ui.removeCallbacks(timecodeTick); setTimecode("REC", false, 0) }
     }
 
     /**
@@ -1748,11 +1757,6 @@ class MainActivity : AppCompatActivity() {
             key.sub = lens?.equivalentMm?.takeIf { it > 0 }?.let { "${it}mm" }
         }
 
-        lightKey.state = when {
-            !pipeline.isRunning || !pipeline.engine.hasFlash() -> RailButton.State.DEAD
-            pipeline.engine.torchOn -> RailButton.State.ON
-            else -> RailButton.State.OFF
-        }
         focusKey.label = if (focus.mode == FocusDirector.Mode.AUTO) "AF" else "MF"
         focusKey.state =
             if (focus.mode == FocusDirector.Mode.AUTO) RailButton.State.ON
@@ -1789,8 +1793,8 @@ class MainActivity : AppCompatActivity() {
         falseKey.state = if (falseColour) RailButton.State.ON else RailButton.State.OFF
         zebraKey.state = if (zebra) RailButton.State.ON else RailButton.State.OFF
         zebraKey.sub = if (zebra) "${settings.zebraLevel}%" else null
-        shootKey.sub = when (settings.shootMode) { 1 -> "LAND"; 2 -> "PORT"; else -> "AUTO" }
-        shootKey.state = if (settings.shootMode == 0) RailButton.State.OFF else RailButton.State.ON
+        shootKey.label = if (settings.shootMode == 1) "LANDSCAPE" else "PORTRAIT"
+        shootKey.state = RailButton.State.OFF
         playKey.state = if (lastTakeUri() != null) RailButton.State.OFF else RailButton.State.DEAD
         gearKey.state = RailButton.State.OFF
 

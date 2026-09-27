@@ -39,7 +39,7 @@ class RailButton @JvmOverloads constructor(
      * out on a shoot — a missing glyph is a hollow box, and a hollow box in the
      * corner of a camera is indistinguishable from a bug.
      */
-    enum class Glyph { NONE, GEAR, UP, DOWN }
+    enum class Glyph { NONE, GEAR, UP, DOWN, CAMERA }
 
     var glyph: Glyph = Glyph.NONE
         set(value) { field = value; describe(); invalidate() }
@@ -65,6 +65,7 @@ class RailButton @JvmOverloads constructor(
      */
     private fun describe() {
         val what = when {
+            glyph == Glyph.CAMERA -> "snap"
             glyph != Glyph.NONE -> glyph.name.lowercase() + (sub?.let { " $it" } ?: "")
             sub.isNullOrBlank() -> label
             else -> "$label $sub"
@@ -200,6 +201,27 @@ class RailButton @JvmOverloads constructor(
                 markPath.lineTo(cx, cy - r * 0.55f)
                 markPath.lineTo(cx + r, cy + r * 0.45f)
                 canvas.drawPath(markPath, mark)
+            }
+            Glyph.CAMERA -> {
+                // SNAP, v88: *"put the icon of this application."* The launcher
+                // icon's drawing (res/drawable/ic_launcher_foreground.xml),
+                // in outline: its 42 x 32 body on a 108 grid, scaled to the key.
+                val u = r * 2.3f / 42f
+                val x0 = cx - 21f * u
+                val y0 = cy - 16f * u
+                markPath.moveTo(x0 + 12f * u, y0)
+                markPath.lineTo(x0 + 26f * u, y0)
+                markPath.lineTo(x0 + 29f * u, y0 + 5f * u)
+                markPath.lineTo(x0 + 42f * u, y0 + 5f * u)
+                markPath.lineTo(x0 + 42f * u, y0 + 32f * u)
+                markPath.lineTo(x0, y0 + 32f * u)
+                markPath.lineTo(x0, y0 + 5f * u)
+                markPath.lineTo(x0 + 9f * u, y0 + 5f * u)
+                markPath.close()
+                mark.strokeWidth = density(1.8f)
+                canvas.drawPath(markPath, mark)
+                canvas.drawCircle(cx, y0 + 18f * u, 9f * u, mark)
+                mark.strokeWidth = density(1.4f)
             }
             Glyph.NONE -> Unit
         }

@@ -127,43 +127,23 @@
                 android:visibility="gone" />
 
             <!--
-                 Timecode, record run, HH:MM:SS:FF: grey while standing by, red
-                 while a take runs, as on any camera's display.
+                 Bottom middle, v88: the status word (REC, red while a take
+                 runs; PLAY) and the record-run timecode, HH:MM:SS:FF, always
+                 white. The geometry line that sat here went to the trace only.
             -->
             <TextView
                 android:id="@+id/timecode"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="bottom|end"
+                android:layout_gravity="bottom|center_horizontal"
                 android:padding="4dp"
                 android:fontFamily="monospace"
                 android:textStyle="bold"
                 android:textSize="14sp"
-                android:textColor="#C8DCE0E4"
+                android:textColor="#FFFFFFFF"
                 android:shadowColor="#000000"
                 android:shadowRadius="3"
-                android:text="00:00:00:00" />
-
-            <!--
-                 The geometry, on screen.
-
-                 This app has shipped a stretched or sideways picture six times,
-                 and every one of those was diagnosed by holding a phone up to
-                 something rectangular and arguing. These are the five numbers
-                 that decide it, so a single screenshot settles what used to
-                 take days.
-            -->
-            <TextView
-                android:id="@+id/geometry"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|start"
-                android:padding="4dp"
-                android:fontFamily="monospace"
-                android:textSize="8sp"
-                android:textColor="#8A9299"
-                android:shadowColor="#000000"
-                android:shadowRadius="3" />
+                android:text="REC  00:00:00:00" />
         </com.mantraproductions.ndi.AspectFrame>
 
         <LinearLayout

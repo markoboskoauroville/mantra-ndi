@@ -33,7 +33,11 @@ class FocusDirector(
 
     private val handler = Handler(Looper.getMainLooper())
 
-    var mode: Mode = Mode.MANUAL
+    /**
+     * Focus starts on A (v88). It started on M, so the M key read HM on a
+     * camera where he had touched nothing.
+     */
+    var mode: Mode = Mode.AUTO
         private set
 
     /** Where the box is, as fractions of the frame. */
@@ -86,6 +90,14 @@ class FocusDirector(
                 onState(FocusSquareView.State.FAILED)
             }
         }
+    }
+
+    /** A new session is open: automatic focus finds its subject again. */
+    fun resume() {
+        if (mode != Mode.AUTO) return
+        handler.removeCallbacksAndMessages(null)
+        racking = false
+        focusNowThenHold()
     }
 
     fun stop() {
