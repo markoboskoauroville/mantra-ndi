@@ -1383,6 +1383,9 @@ class MainActivity : AppCompatActivity() {
                 say("${Mechanism.SHUTTER_ANGLES[preset]}° = ${Mechanism.formatShutter(target)}")
             }
         }
+        // The M key reads the switches: a preset just put one on M.
+        if (Mechanism.cameraMode(switches()) == "HM") lastHalf = switches()
+        refreshKeys()
     }
 
     private var glider: android.animation.ValueAnimator? = null

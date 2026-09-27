@@ -24,7 +24,10 @@ or subtracted for front vs back. Must be right for every lens, both orientations
 holding landscape. Test: record on the emulator with the front and back cameras in portrait and
 landscape and read the rotation out of each file (`ffprobe` side data / `rotate` tag).
 
-**Status:** to do, v90.
+**Status:** done in **v90** (27.9.2026). `Mechanism.recordingRotation` → `MediaMuxer.setOrientationHint`.
+Emulator: portrait take 90° (upright), landscape (display 270) 180°, both read back with ffprobe and
+matching the monitor. The selfie lens is proven by unit tests only (the emulator has no front
+camera): **his Pixel is the test**.
 
 ### 2. Shutter: presets in degrees under the fader
 
@@ -53,7 +56,9 @@ the fader follows to that Kelvin, then WB goes back to **M** by itself and stays
 manual value comes back afterwards, and nothing tracks the light continuously. In AUTO mode (the M
 key) WB behaves the same way: measured once, then held.
 
-**Status:** to do, v90.
+**Status:** done in **v90**. WB left the M key's AUTO/HM/FM count; the camera measures once on
+opening; the probe waits for AWB converged (20 frames minimum, 90 maximum, 6 s deadline). Emulator:
+started → 5003 K → M in 0.65 s.
 
 ### 4. ISO: presets at the camera's base ISO (and a second native ISO where there is one)
 
@@ -68,7 +73,7 @@ gain is digital, more noise and nothing gained). Android does **not** publish a 
 the keys are **BASE** (the range's lower end) and **HIGH** (the top of analog gain: the low-light
 preset), each showing its number. Say this truthfully to him. A preset puts ISO on M.
 
-**Status:** to do, v90.
+**Status:** done in **v90**. Emulator: BASE 100, HIGH 1600; BASE lit, ISO on M.
 
 ### 5. His general direction
 
@@ -159,10 +164,15 @@ His text, kept whole so nothing is lost:
 
 | Version | What | Status |
 |---|---|---|
-| **v90** | Items 4, 5, 6, 7 (and 1–4 of the first message, which are the same things): shutter-angle presets, BASE / HIGH ISO presets, one-shot WB, the orientation written right into the MP4, the icon with the orange outlines | to do |
+| **v90** | Items 4, 5, 6, 7 (and 1–4 of the first message, which are the same things): shutter-angle presets, BASE / HIGH ISO presets, one-shot WB, the orientation written right into the MP4, the icon with the orange outlines | **released 27.9.2026, tested on the emulator** (monkey 90091 20,000 clean). One display fault (M key after a preset) fixed for v91 |
 | **v91** | The switchboard in settings (File, USB, NDI, YouTube, each a switch that expands its panel; NDI HX / Full inside it); the NDI key leaves the main screen; the record key becomes the master trigger for every armed destination; a telemetry line at the top naming what is being sent. File and NDI wired first | to do |
 | **v92** | **USB (OBS camera)**: the picture to OBS on the Mac over the USB cable. Open question for him: which route OBS should receive (NDI over the USB tether already works; a plain SRT/RTMP feed into OBS's Media Source needs no plug-in; a true "OBS camera" source is the Mac companion of the old v97 plan) | to do, ask |
 | **v93** | **YouTube**: RTMPS to YouTube's ingest with the stream key; "authenticate from the app" = Google sign-in with the YouTube Data API to create the broadcast and fetch the key. That needs a Google Cloud OAuth client for the app, which Marko has to create (a step for him) | to do, needs his OAuth client |
 | v94 … | the in-app player, scopes, settings preview, the GPU stage, log AE, grey-card WB, KELVIN, tracking (the phase document, each moved on by the new versions) | later |
 
-**Status of this second message:** saved 27.9.2026; v90 started.
+**Status of this second message:** saved 27.9.2026; v90 released the same day; v91 (switchboard) next.
+
+**The icon (item 7):** the v88 drawing unchanged, plus two #FF9800 strokes, 2 units wide, one unit
+inside the body's outer edge and the lens circle's outer edge (r 10.5), so the outline's outer side
+is exactly the old edge and the symbol stays in the 42 box (`res/drawable/ic_launcher_foreground.xml`).
+"Inner lens circle" was read as the lens (the dark ring's outer edge), not the small white glass.
