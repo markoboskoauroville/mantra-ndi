@@ -329,3 +329,8 @@ linear. If grey sits far below target with compensation at its limit, that is th
 gets fixed next. **His test:** L1, L3, L4 in FM — ISO and shutter must now move the picture; the trace
 line "lens N takes its own: …" lists what each lens accepts.
 
+
+## Ninth message, 27.9.2026, evening: "let's develop a tracking focus"
+
+Asked what is next (YouTube was proposed), he chose **tracking focus** (Phase 9 of the phase document).
+**Status:** v99 started.
