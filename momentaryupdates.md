@@ -188,22 +188,43 @@ is exactly the old edge and the symbol stays in the 42 box (`res/drawable/ic_lau
 - **YouTube: the stream key first.** He pastes the key from YouTube Studio into the YouTube panel once;
   the record key goes live. Google sign-in can come later.
 
-**Order, therefore:** **v92 = YouTube by stream key** (all on the phone: an RTMPS publisher fed by the
-same encoder as the file and NDI, with sound); **v93 = USB, the phone's side of the Mac companion**
-(and the companion app in its own repository). Swapped from the first split because YouTube is
+**Order, therefore (renumbered: v92 and v93 went to his icon corrections):** **v94 = YouTube by stream key** (all on the phone: an RTMPS publisher fed by the
+same encoder as the file and NDI, with sound); **then USB, the phone's side of the Mac companion**
+(and the companion app in its own repository) is **v95**. Swapped from the first split because YouTube is
 phone-only and finishes first; the Mac app is the longer road.
 
 ## Third message, 27.9.2026, about 15:40 (after v92's icon)
 
 1. **"Camera body should be gray. That's the rule of the icon."** Keep the drawing, the orange lens
    ring and the thin orange body outline; the body itself is grey, as on his launcher (light grey on
-   the dark ground). **Status:** to do, next build.
+   the dark ground). **Status:** done in **v93** (#B4BABF).
 2. **White balance, three screenshots from his Pixel** (L2 25 mm, ISO 50, 1/682, HLG 10-bit, 4K,
    outdoors in afternoon daylight, WB on M): the fader at the far right (value hidden under the
    screenshot thumbnail), at **4100 K**, and at **3200 K**. *"Let me know what has changed in the white
    balance in these images after I'm moving the slider."* Screenshots on the Mac at
    `~/.claude/uploads/e6c861f6-db96-40aa-8b9c-c88d869cc059/573d21fa-image.png`, `e4713b3d-image.png`,
-   `aa18b794-image.png`. **Status:** being analysed (the answer and any fix are written below).
+   `aa18b794-image.png`. **Status: analysed 27.9.2026, a fault found, the fix needs his trace.**
+
+   **What the pictures measure** (mean colour of the pavement, bottom of each frame; G = 1):
+   | fader | whites R/G, B/G | mid-tones R/G, B/G | darks R/G, B/G |
+   |---|---|---|---|
+   | far right (6500 K; the number was under the thumbnail) | 1.00, 1.01 | 0.97, 1.06 | 0.90, 1.15 |
+   | 4100 K | 1.00, 1.00 | 1.00, 0.98 | 0.96, 0.99 |
+   | 3200 K | 1.01, 1.00 | 1.04, 0.99 | 1.03, 1.06 |
+   Moving the fader **right made the picture a little bluer, left a little warmer**, a few percent at
+   most, with a green-cyan lean at 4100 K. At the far right the top-left corner went **red-magenta**
+   (R/G 1.91): a colour-shading fault at the edge of the lens.
+
+   **What it should do** (our own maths, run on a white object in 5600 K daylight): 3200 K → strongly
+   blue (B/G 1.72), 4100 K → blue (1.33), 5600 K → neutral, 6500 K → slightly warm (R/G 1.08). The
+   convention of every camera: the number is the light you are correcting for, so tungsten on a
+   daylight scene turns it blue. **Our gains are right; the Pixel is not putting them on the
+   picture** in this mode (10-bit HLG, 4K). What little moved is most likely the colour matrix half
+   alone, which moves the other way. The trace's `white balance readback` line (the gains and the
+   correction mode the camera says it used) settles it: export the trace (settings → trace) after
+   moving WB, or plug the phone in so the session can read it.
 3. **"From now on, under the camera, write the version number in the icon, so in the icon I can already
    see what my version is."** A rule for every build: the build generates the icon with `vNN` painted
-   under the camera from `appVersion`. **Status:** to do, next build (with the grey body).
+   under the camera from `appVersion`. **Status:** done in **v93** (and grey body, item 1): the icon is
+   a template in `app/src/main/icon`, `build.gradle.kts` draws the number; seen on the emulator's
+   launcher as "v93".
