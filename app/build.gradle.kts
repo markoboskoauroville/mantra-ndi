@@ -13,6 +13,55 @@ val ndiSdkPresent = file("src/main/cpp/ndi/include/Processing.NDI.Lib.h").exists
 // versioning.md: the version is written once, in gradle.properties.
 val appVersion = (project.findProperty("appVersion") as String).toInt()
 
+// THE VERSION IN THE ICON (v93). *"Under the camera, write the version number,
+// so in the icon I can already see what my version is."* A vector drawable has
+// no text, so the number is drawn: segment strokes for the digits and a v,
+// under the camera, inside the 42-unit symbol box (modules/app-icon.md). The
+// template is src/main/icon; the icon the app ships is generated from it here.
+val versionIconDir = layout.buildDirectory.dir("generated/versionIcon").get().asFile
+run {
+    val segments = mapOf(
+        'a' to "M0,0 H5", 'b' to "M5,0 V5", 'c' to "M5,5 V10", 'd' to "M0,10 H5",
+        'e' to "M0,5 V10", 'f' to "M0,0 V5", 'g' to "M0,5 H5"
+    )
+    val digits = mapOf(
+        '0' to "abcdef", '1' to "bc", '2' to "abged", '3' to "abgcd", '4' to "fgbc",
+        '5' to "afgcd", '6' to "afgedc", '7' to "abc", '8' to "abcdefg", '9' to "abcdfg"
+    )
+    val text = "v$appVersion"
+    val cell = 5.0
+    val gap = 2.2
+    val width = text.length * cell + (text.length - 1) * gap
+    val left = 54.0 - width / 2
+    val top = 64.0
+    val paths = StringBuilder()
+    text.forEachIndexed { i, ch ->
+        val x = left + i * (cell + gap)
+        val data = if (ch == 'v') "M0,4 L2.5,10 L5,4"
+            else digits[ch].orEmpty().map { segments.getValue(it) }.joinToString(" ")
+        // Each glyph's path is written in its 5 x 10 cell and moved into place.
+        val moved = Regex("([MLHV])([-0-9.]+)(,([-0-9.]+))?").replace(data) { m ->
+            val cmd = m.groupValues[1]
+            val a = m.groupValues[2].toDouble()
+            val b = m.groupValues[4].takeIf { it.isNotEmpty() }?.toDouble()
+            // Rounded by hand: a Double prints with a dot in every locale.
+            fun n(v: Double) = (Math.round(v * 100) / 100.0).toString()
+            when (cmd) {
+                "H" -> "H" + n(a + x)
+                "V" -> "V" + n(a + top)
+                else -> cmd + n(a + x) + "," + n((b ?: 0.0) + top)
+            }
+        }
+        paths.append("    <path android:strokeColor=\"#E6E8EA\" android:strokeWidth=\"1.5\" ")
+            .append("android:strokeLineCap=\"round\" android:strokeLineJoin=\"round\" ")
+            .append("android:pathData=\"").append(moved).append("\" />\n")
+    }
+    val template = file("src/main/icon/ic_launcher_foreground.xml").readText()
+    val out = File(versionIconDir, "drawable/ic_launcher_foreground.xml")
+    out.parentFile.mkdirs()
+    out.writeText(template.replace("    <!--VERSION-->\n", "    <!-- v$appVersion, generated -->\n$paths"))
+}
+
 // android-app.md §3: one permanent key for the life of the app. A different key
 // is a different app to Android, and every install after it is an uninstall
 // first. CI decodes it from secrets; without them a build is unsigned and the
@@ -53,6 +102,7 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
+            res.srcDirs("src/main/res", versionIconDir)
         }
     }
 
