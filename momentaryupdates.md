@@ -295,4 +295,11 @@ followed.
 Asked "what is next upgrade" (answer: YouTube by stream key), he chose instead: **the GPU stage and log
 exposure**. Order now: **v97 the GPU stage** (phase 4 of the phase document), **v98 automatic exposure
 that knows the log curve** (phase 5); YouTube, the Mac companion and the rest move after them.
-**Status:** v97 started.
+**Status:** **v97 released** (the GPU stage): `GpuStage.kt`; the take has its own encoder and bit rate,
+the stream its own (settings: Picture path GPU STAGE / DIRECT, stream bit rate). Every output carries the
+raw sensor orientation, so rotation is unchanged. 10-bit through the GPU only with GL_EXT_YUV_target +
+RGBA1010102 + BT.2020 HLG surfaces (YUV read as numbers, Media3's matrix), else the direct path, traced.
+Emulator (8-bit only): picture, take, FILE + NDI HX, monkey clean. CPU on the emulator 29 % vs 18 % direct
+(emulated GL, two encoders) — **his Pixel gives the real figure; if the 10-bit colours look wrong there,
+Settings → Picture path → DIRECT.** Not moved to the GPU yet, and why: the full-NDI YUV packing (it still
+comes from its own camera reader), the focus and brightness samples (tiny reads of the preview). v98 next.

@@ -472,3 +472,5 @@ a small model on the AI cores is the upgrade path, and the doc will say so then.
 | 27.9.2026 | v87 | 2 | Finished on the emulator: A/M, drag ISO 605 with shutter answering 1/229 → 1/896, M cycle HM → FM → AUTO → HM, WB probe 5000 K, double tap inert, monkey 87087 20,000 clean. Found: the loop traced the same exposure 4×/s |
 | 27.9.2026 | v88 | 2b | His cosmetic list, focus starts A, readable fader names, loop sends only a change, app icon. CI green; **crashed on launch** (timecode read the pipeline before it existed) |
 | 27.9.2026 | v89 | 2b' | The fix. Emulator: upgrade with settings kept, M AUTO at start, take + still, REC red / timecode white, LANDSCAPE ↔ PORTRAIT, names readable, HM 2 lines in 8 s (was 32), monkey 89089 20,000 clean. Not provable there: the focus box settling (the fake lens always answers not focused) |
+| 27.9.2026 | v97 | 4 | The GPU stage: camera → one texture → monitor, take encoder (own rate), stream encoder (own rate). Emulator 8-bit: picture, take, FILE + NDI HX, monkey 97097 clean; CPU 29 % vs 18 % direct on the emulator (emulated GL). 10-bit via the GPU needs his Pixel. Full NDI packing still on its reader |
+
