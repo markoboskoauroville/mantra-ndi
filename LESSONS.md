@@ -72,4 +72,8 @@ read from the logical result. **Rule:** when a stream names a physical lens, bui
 `createCaptureRequest(template, setOf(physicalId))`, set per-lens keys with `setPhysicalCameraKey`, and
 read that lens's answer from `physicalCameraTotalResults[physicalId]`. Then check that what was sent is
 what was used; a control that is silently ignored must say so and fall back.
+**v98 widened it:** not only colour — every control (ISO, shutter, frame duration, focus, AE/AF modes,
+tone curve) must reach a physical lens. The general rule: copy each key from
+`CameraCharacteristics.getAvailablePhysicalCameraRequestKeys()` onto the lens at every request, and read
+the lens's own result back.
 

@@ -316,3 +316,16 @@ every other lens is a physical sub-camera, and v96 moved only the white balance 
 ISO, shutter, frame duration, focus, AE / AF modes and the tone curve were still set on the logical
 request only. **Status:** fixed in v98 (with log exposure): every key the lens accepts per lens is
 copied onto it at each request.
+
+**v98 released, 27.9.2026 18:10:** (1) every key the camera lists as per-lens is copied onto the
+physical lens at every request (ISO, shutter, frame duration, focus, AE / AF modes, tone curve, white
+balance), and ISO / shutter / focus are read back from the lens; (2) **log-aware auto exposure**: while
+exposure is automatic on a log curve, the focus box is read as a grey card twice a second and exposure
+compensation steers grey onto the maker's number (S-Log3 41 %, V-Log 42 %, LogC3 39 %, LogC4 28 %, Film
+Gen5 38 %), never hunting (one step only when it brings grey closer, step learnt from the last move);
+the status line reads e.g. `grey 39% · S-Log3 41%`. Emulator: loop settled in one move at 39 % vs 41 %,
+monkey clean. **Open on his phone:** the tone curve treats its input as display-referred; Camera2 says
+linear. If grey sits far below target with compensation at its limit, that is the answer, and the curve
+gets fixed next. **His test:** L1, L3, L4 in FM — ISO and shutter must now move the picture; the trace
+line "lens N takes its own: …" lists what each lens accepts.
+
