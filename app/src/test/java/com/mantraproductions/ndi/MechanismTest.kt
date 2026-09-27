@@ -1384,4 +1384,13 @@ class MechanismTest {
         assertEquals(Mechanism.Output.OFF, ndiOnly[0].state)
         assertEquals("8.0 Mb/s · 0 watching", ndiOnly[2].detail)
     }
+
+    @Test fun aLensThatKeepsItsOwnGainsIsCaught() {
+        // His Pixel 7, 27.9.2026: 3292K should send about 1.44 red / 2.34 blue; the lens reported 2.328 / 1.487.
+        assertFalse(Mechanism.gainsFollowed(1.44, 2.34, 2.328, 1.487))
+        // A camera that renormalises but keeps the balance followed.
+        assertTrue(Mechanism.gainsFollowed(1.44, 2.34, 1.44 * 1.3, 2.34 * 1.3))
+        assertTrue(Mechanism.gainsFollowed(2.14, 1.36, 2.20, 1.37))
+        assertFalse(Mechanism.gainsFollowed(2.14, 0.0, 2.2, 1.3))
+    }
 }

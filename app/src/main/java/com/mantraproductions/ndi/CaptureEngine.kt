@@ -143,6 +143,8 @@ class CaptureEngine(private val context: Context) {
         this.cameraId = cameraId
         this.physicalId = physicalId
         this.lensCharacteristics = null
+        this.gainsIgnored = false
+        this.checkFrames = 0
         this.targetFps = fps
         this.activeCurve = curve
         this.wantedRepeating = repeating
@@ -430,7 +432,18 @@ class CaptureEngine(private val context: Context) {
      */
     private fun startRepeating(camera: CameraDevice) {
         try {
-            val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
+            // v96, THE PIXEL'S WHITE BALANCE. A lens that is a physical
+            // sub-camera (on the Pixel 7 every lens but the fused ones) takes
+            // its own copy of the colour keys: set only on the logical request
+            // they did nothing to the picture. The request is built naming the
+            // lens so [setWb] can put them on it too.
+            val physical = physicalId
+            val request = if (physical != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                runCatching { camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD, setOf(physical)) }
+                    .onFailure { Trace.refused("request for lens $physical", Trace.describe(it)) }
+                    .getOrNull()?.also { requestNamesLens = true }
+                    ?: camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).also { requestNamesLens = false }
+            } else camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).also { requestNamesLens = false }
             liveSurfaces.forEach { request.addTarget(it) }
 
             request.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
@@ -440,7 +453,7 @@ class CaptureEngine(private val context: Context) {
                 CaptureRequest.SENSOR_FRAME_DURATION,
                 Mechanism.frameDurationForFps(targetFps)
             )
-            request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+            setWb(request, CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
             request.set(
                 CaptureRequest.CONTROL_AF_MODE,
                 CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
@@ -515,11 +528,12 @@ class CaptureEngine(private val context: Context) {
             // deciding. This is the anchor the fader hangs off: gains and
             // matrix measured by the people who tuned this ISP, for this
             // scene, at the moment the operator took it over.
+            val lensResult = lensResultOf(result)
             if (!manualWhiteBalance) {
-                result.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { g ->
+                lensResult.get(CaptureResult.COLOR_CORRECTION_GAINS)?.let { g ->
                     autoGains = floatArrayOf(g.red, g.greenEven, g.greenOdd, g.blue)
                 }
-                matrix(result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM))?.let {
+                matrix(lensResult.get(CaptureResult.COLOR_CORRECTION_TRANSFORM))?.let {
                     autoTransform = it
                 }
             }
@@ -527,7 +541,7 @@ class CaptureEngine(private val context: Context) {
             // own algorithm has had time to settle on this light.
             if (probeFrames > 0) {
                 probeSeen += 1
-                val converged = result.get(CaptureResult.CONTROL_AWB_STATE) ==
+                val converged = lensResult.get(CaptureResult.CONTROL_AWB_STATE) ==
                     CaptureResult.CONTROL_AWB_STATE_CONVERGED
                 if (Mechanism.probeDone(probeSeen, PROBE_MIN_FRAMES, probeFrames, converged)) {
                     probeFrames = 0
@@ -546,20 +560,21 @@ class CaptureEngine(private val context: Context) {
             // picture that goes green names which half did it.
             if (reportWhiteBalance) {
                 reportWhiteBalance = false
-                val g = result.get(CaptureResult.COLOR_CORRECTION_GAINS)
+                val g = lensResult.get(CaptureResult.COLOR_CORRECTION_GAINS)
                 Trace.state(
-                    "white balance readback: awb mode " +
-                        result.get(CaptureResult.CONTROL_AWB_MODE) +
-                        ", correction mode " + result.get(CaptureResult.COLOR_CORRECTION_MODE) +
+                    "white balance readback" + (if (lensResult !== result) " (lens $physicalId)" else "") +
+                        ": awb mode " + lensResult.get(CaptureResult.CONTROL_AWB_MODE) +
+                        ", correction mode " + lensResult.get(CaptureResult.COLOR_CORRECTION_MODE) +
                         (g?.let {
                             String.format(
                                 ", gains %.3f/%.3f/%.3f", it.red, it.greenEven, it.blue
                             )
                         } ?: ", NO gains reported") +
-                        (if (result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM) == null)
+                        (if (lensResult.get(CaptureResult.COLOR_CORRECTION_TRANSFORM) == null)
                             ", NO transform reported" else ", transform reported")
                 )
             }
+            checkGainsFollowed(lensResult)
             listener?.onCaptureValues(lastIso, lastExposureNs, lastFocusDistance)
 
             pendingFocus?.let { waiting ->
@@ -1211,11 +1226,8 @@ class CaptureEngine(private val context: Context) {
         probeFrames = frames.coerceIn(PROBE_MIN_FRAMES, 150)
         probeSeen = 0
         manualWhiteBalance = false
-        request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
-        request.set(
-            CaptureRequest.COLOR_CORRECTION_MODE,
-            CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY
-        )
+        setWb(request, CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+        setWb(request, CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY)
         val ok = apply()
         if (!ok) {
             onProbe = null
@@ -1281,6 +1293,63 @@ class CaptureEngine(private val context: Context) {
     @Volatile private var manualWhiteBalance = false
     @Volatile private var reportWhiteBalance = false
 
+    /** The request was built naming the physical lens, so its own keys can be set (v96). */
+    private var requestNamesLens = false
+
+    /**
+     * One colour key on the request, and on the physical lens too when there
+     * is one: a sub-camera does not read the logical camera's colour keys.
+     */
+    private fun <T> setWb(request: CaptureRequest.Builder, key: CaptureRequest.Key<T>, value: T) {
+        request.set(key, value)
+        val physical = physicalId
+        if (requestNamesLens && physical != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            runCatching { request.setPhysicalCameraKey(key, value, physical) }
+                .onFailure { Trace.refused("lens key ${key.name}", Trace.describe(it)) }
+        }
+    }
+
+    /** The result of the lens the picture comes from; the logical one may describe another sensor. */
+    private fun lensResultOf(result: TotalCaptureResult): CaptureResult {
+        val physical = physicalId ?: return result
+        return when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                result.physicalCameraTotalResults[physical] ?: result
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ->
+                @Suppress("DEPRECATION") result.physicalCameraResults[physical] ?: result
+            else -> result
+        }
+    }
+
+    /** The gains last sent, and frames left before looking at whether they arrived. */
+    @Volatile private var sentGains: FloatArray? = null
+    @Volatile private var checkFrames = 0
+
+    /**
+     * True once this lens has been seen to ignore manual gains: white balance
+     * then goes through the camera's own presets, said on the screen, rather
+     * than a fader that moves a number and not the picture (the Pixel 7, v95).
+     */
+    @Volatile var gainsIgnored = false
+        private set
+
+    private fun checkGainsFollowed(lensResult: CaptureResult) {
+        if (checkFrames <= 0) return
+        if (--checkFrames > 0) return
+        val sent = sentGains ?: return
+        val got = lensResult.get(CaptureResult.COLOR_CORRECTION_GAINS) ?: return
+        val followed = Mechanism.gainsFollowed(
+            sent[0].toDouble(), sent[3].toDouble(), got.red.toDouble(), got.blue.toDouble()
+        )
+        Trace.state(String.format(java.util.Locale.ROOT,
+            "white balance check: sent %.3f/%.3f, the lens used %.3f/%.3f — %s",
+            sent[0], sent[3], got.red, got.blue, if (followed) "followed" else "IGNORED"))
+        if (!followed && !gainsIgnored) {
+            gainsIgnored = true
+            listener?.onError("This lens ignores manual white balance — the fader now uses the camera's presets")
+        }
+    }
+
     /** What the anchor came out at, for the fader to start from. */
     @Volatile var lastAnchorKelvin: Int? = null
         private set
@@ -1313,7 +1382,7 @@ class CaptureEngine(private val context: Context) {
         val colour = colourCharacteristics()
         val wanted = kelvin.coerceIn(WhiteBalance.COOLEST_KELVIN, WhiteBalance.WARMEST_KELVIN)
 
-        if (supportsContinuousWhiteBalance() && colour != null) {
+        if (supportsContinuousWhiteBalance() && colour != null && !gainsIgnored) {
             val k1 = WhiteBalance.kelvinForIlluminant(
                 colour.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1) ?: 17
             )
@@ -1369,21 +1438,19 @@ class CaptureEngine(private val context: Context) {
                     else -> modelTransform
                 }
 
-                request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
-                request.set(
-                    CaptureRequest.COLOR_CORRECTION_MODE,
-                    CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
-                )
-                request.set(
-                    CaptureRequest.COLOR_CORRECTION_GAINS,
-                    RggbChannelVector(gains[0], gains[1], gains[2], gains[3])
-                )
+                setWb(request, CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+                setWb(request, CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
+                setWb(request, CaptureRequest.COLOR_CORRECTION_GAINS, RggbChannelVector(gains[0], gains[1], gains[2], gains[3]))
                 // The other half, out of the same blend. Without it this is v65.
                 if (transform != null) {
-                    request.set(
-                        CaptureRequest.COLOR_CORRECTION_TRANSFORM, transformOf(transform)
-                    )
+                    setWb(request, CaptureRequest.COLOR_CORRECTION_TRANSFORM, transformOf(transform))
                 }
+                // Checked a few frames on: did the lens take these gains?
+                sentGains = gains.copyOf()
+                checkFrames = GAIN_CHECK_FRAMES
+                Trace.state(String.format(java.util.Locale.ROOT,
+                    "white balance sent: %dK, gains %.3f/%.3f/%.3f%s", wanted, gains[0], gains[1], gains[3],
+                    if (requestNamesLens) " (logical and lens $physicalId)" else ""))
                 manualWhiteBalance = true
                 val ok = apply()
                 whiteBalanceIsContinuous = ok
@@ -1411,7 +1478,7 @@ class CaptureEngine(private val context: Context) {
             Trace.refused("white balance", "this camera offers no preset either")
             return false
         }
-        request.set(CaptureRequest.CONTROL_AWB_MODE, presetMode(index))
+        setWb(request, CaptureRequest.CONTROL_AWB_MODE, presetMode(index))
         manualWhiteBalance = true
         val ok = apply()
         whiteBalanceIsContinuous = false
@@ -1436,11 +1503,8 @@ class CaptureEngine(private val context: Context) {
     fun setAutoWhiteBalance(): Boolean {
         val request = builder ?: return false
         manualWhiteBalance = false
-        request.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
-        request.set(
-            CaptureRequest.COLOR_CORRECTION_MODE,
-            CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY
-        )
+        setWb(request, CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+        setWb(request, CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY)
         val ok = apply()
         whiteBalanceIsContinuous = false
         Trace.control("white balance", "auto", if (ok) "applied" else "refused")
@@ -1513,5 +1577,7 @@ class CaptureEngine(private val context: Context) {
     private companion object {
         /** A white balance probe never answers before this many frames. */
         const val PROBE_MIN_FRAMES = 20
+        /** Frames after a white balance change before its gains are checked. */
+        const val GAIN_CHECK_FRAMES = 8
     }
 }

@@ -1670,6 +1670,17 @@ object Mechanism {
         presets.indexOfFirst { it > 0.0 && kotlin.math.abs(value - it) <= it * 0.01 }
 
     /**
+     * Did the lens take the gains it was sent (v96)? Compared as red over blue,
+     * the balance itself, within 8 %: a camera may renormalise all three, but
+     * a warm-cool balance it did not keep is a white balance it ignored.
+     */
+    fun gainsFollowed(sentRed: Double, sentBlue: Double, gotRed: Double, gotBlue: Double): Boolean {
+        if (sentBlue <= 0.0 || gotBlue <= 0.0) return false
+        val ratio = (gotRed / gotBlue) / (sentRed / sentBlue)
+        return kotlin.math.abs(ratio - 1.0) <= 0.08
+    }
+
+    /**
      * The white balance probe is done (v90): past its minimum and the camera
      * says it has converged, or out of time whatever it says.
      */
