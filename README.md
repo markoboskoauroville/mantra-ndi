@@ -136,24 +136,26 @@ Left rail (the top bar when the phone is upright), in order:
 | Key | What |
 |---|---|
 | `L1`–`L5` | the real lenses, only the ones this phone has, named from each sensor's own 35mm equivalent. A Pixel does not put its ultra wide in `cameraIdList` — the back camera is one *logical* camera that fuses several and picks by zoom — so the physical ones are found through `getPhysicalCameraIds()` and selected by naming one on each OutputConfiguration |
-| `AF` / `MF` | the focus director: hold, notice, then rack over a beat, rather than the hunting the camera's own routine does. Starts on AF |
-| `LOG` | the tone curve: HLG or STD (the phone's own), S-Log3, V-Log, LogC3, LogC4, Film Gen5; a curve a lens cannot run is taken back with "not supported" |
-| `M` | AUTO, HM (half manual) or FM (full manual), read off the four A / M switches |
-| `CTRL` | the four mixer faders — ISO, shutter, focus, white balance — each with its own A / M switch |
-| `NDI` | off, HX or full. One key, because an NDI source is one stream |
+| `AF` / `TRK` / `MF` | AF: the focus director — hold, notice, then rack over a beat, rather than the hunting the camera's own routine does. TRK: **tracking focus** — the box becomes a mark that follows a subject by pattern matching on the GPU, refocuses only past a set tolerance and says LOST when it loses it. MF: manual |
+| `LOG` | the tone curve: HLG or STD (the phone's own), S-Log3, V-Log, LogC3, LogC4, Film Gen5; a curve a lens cannot run is taken back with "not supported". With exposure on auto, **auto exposure lands a grey card on each maker's own number** (S-Log3 41 %, V-Log 42 %, LogC3 39 %, LogC4 28 %) and the status line shows it |
+| `M` | AUTO, HM (half manual) or FM (full manual), read off the ISO, shutter and focus A / M switches |
+| `CTRL` | the four mixer faders — ISO, shutter, focus, white balance — each with its own A / M switch; **shutter presets in degrees** (0°, 90°, 180°, 270°, 360°) and **ISO presets** (BASE, the sensor's cleanest, and HIGH, the top of its analog gain) under the faders; white balance's A measures the scene once and holds it |
 | `FULL` | the clean feed: nothing on the glass but the picture; a double tap comes back |
+
+At the top of the picture a telemetry line names every output — FILE, USB, NDI, YT — dim when not
+armed, white when armed, a red dot with its numbers while it is sending.
 
 Right rail (the bottom bar when upright):
 
 | Key | What |
 |---|---|
-| record | a white circle; red while recording |
+| record | the master trigger: a white circle; red while every output armed in settings (file, NDI, and later USB and YouTube) runs, started together |
 | `PLAY` | the last take |
 | the camera icon | SNAP: the picture as a PNG beside the takes |
 | `LANDSCAPE` / `PORTRAIT` | turns the interface |
 | `LUT` | switches between the LUTs loaded in settings; long press opens the library |
 | `PEAK` `FALSE` `ZEBRA` | focus peaking, false colour, zebra — monitor only, on the GPU |
-| gear | settings: LUT library, record folder (any drive), ROT, zebra level, NDI name |
+| gear | settings: the output switchboard (FILE, USB, NDI HX / FULL, YOUTUBE), LUT library, record folder (any drive), ROT, zebra level, the picture path (GPU stage or direct), the take's and the stream's own bit rates, tracking focus. The version number at the top is a link to the latest release |
 | storage | free space on the recording drive and the time left at the current bit rate |
 
 ## The picture and the wire

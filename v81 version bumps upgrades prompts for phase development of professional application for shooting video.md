@@ -45,15 +45,19 @@ because there is no Apple developer account. The order is now:
 
 **Forecast: the last version is v98** (v84, v86 and v89 were fix rounds; v85, v88, v90 and v91 were added on 26.9.2026 at his request). Every fix round adds one.
 
-## Tomorrow starts here (rewritten 27.9.2026)
+## Tomorrow starts here (rewritten 27.9.2026, closing the day)
 
-**State:** v89 is released and tested on the emulator (v87's tests finished too; see the log below).
-v88 is out but crashes on launch: never install it. **Waiting for Marko:** v89 on his Pixel, the
-cosmetic list checked by eye, the focus box settling after start-up (the emulator cannot show it).
+**State:** v99 is released and tested on the emulator. The day went v90 → v99 on his requests, in
+`momentaryupdates.md` (read it first), not in this document's order: Phase 4 (GPU stage) is v97,
+Phase 5 (log exposure) is v98, Phase 9 (tracking) is v99. **Waiting for Marko** (his Pixel): manual
+controls on every lens, white balance per lens, the grey card in S-Log3, 10-bit colours on the GPU
+stage, a selfie take in portrait, TRK on a moving subject — and the trace of each.
 
-**Next, in order:** v90 the player (Phase 2c) → v91 scopes → the table on, one phase per version,
-each confirmed on his phone before the next. Small findings waiting: the LANDSCAPE / PORTRAIT word is
-small; the status line at the top is grey over a bright picture.
+**Next:** fix whatever his tests find; then his choice, proposed YouTube by stream key; then USB via
+the Mac companion; the player; scopes; the settings preview; full NDI on the GPU (Phase 4b); the
+grey-card WB sweep (Phase 6); MANTRA_KELVIN (Phase 8). Small: the SNAP key should draw the traced
+camera; the LANDSCAPE / PORTRAIT word is small; if the grey card shows the tone curve's input is
+linear, fix `toneCurvePoints`.
 
 ## Every request of 26.9.2026, and where it stands
 

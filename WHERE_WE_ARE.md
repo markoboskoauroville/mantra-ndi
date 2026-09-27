@@ -6,6 +6,33 @@ working state of *this* app.
 
 ---
 
+## 27.9.2026, evening, closing the day: v90 → v99
+
+His requests of the day are in `momentaryupdates.md`, word for word, each with its status. Built and
+released (each tested on the Pixel 7 emulator, monkey 20,000 clean; the phase document's log has the
+detail):
+
+| Version | What |
+|---|---|
+| v90 | The MP4 carries its rotation (it never did); shutter presets 0°–360°; ISO BASE / HIGH; WB's A a one-shot measurement; icon outline |
+| v91 | Output switchboard in settings (FILE, USB, NDI, YOUTUBE), record key as master trigger, telemetry line; NDI key gone |
+| v92, v93 | His icon: orange ring and outline, grey body, the version number drawn under the camera by the build |
+| v94 | The version in settings links to the latest release |
+| v95 | The icon traced literally from his launcher picture |
+| v96 | White balance keys on the Pixel's physical lenses, a check, a preset fallback |
+| v97 | The GPU stage: one camera texture → monitor, take encoder, stream encoder (own bit rates); Picture path setting |
+| v98 | Every per-lens key on the Pixel's physical lenses (manual worked only on L2); log-aware auto exposure with a grey readout |
+| v99 | Tracking focus: TRK, NCC on the GPU, LOST, five settings |
+
+**Waiting for his Pixel:** v98 manual controls on L1/L3/L4; WB blue → warm on each lens; the grey card
+in S-Log3 (and with it whether the tone curve's input is linear — Camera2 says so, the code assumes
+display-referred); 10-bit colours through the GPU stage (else Picture path → DIRECT); a selfie take in
+portrait; TRK on a moving subject. **Next, his choice:** YouTube by stream key (the panel is there,
+dark), then USB via a Mac companion app, the in-app player, scopes, the settings preview, full NDI on
+the GPU, the grey-card WB sweep, MANTRA_KELVIN.
+
+---
+
 ## 27.9.2026: v87 tested, v88 his cosmetic list (crashed on launch), v89 the fix
 
 **v87 finished on the emulator.** A/M on ISO, a drag to ISO 605, and shutter on A answered 1/229 →
