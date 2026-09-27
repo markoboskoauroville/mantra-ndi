@@ -1,35 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     Mantra Manual Camera: a camera body and its lens, the same drawing as the
-     SNAP key. THIS IS A TEMPLATE (v93): app/build.gradle.kts writes the real
-     icon into build/generated/versionIcon, with the version number drawn under
-     the camera (his rule, 27.9.2026: "in the icon I can already see what my
-     version is"). The camera is scaled to 0.8 and lifted to make room. MANTRA_MANIFEST modules/app-icon.md: everything inside the
-     42 box (33 … 75), so the symbol is 42 / 72 = 0.58 of the visible circle.
+     Mantra Manual Camera, the icon. THIS IS A TEMPLATE: app/build.gradle.kts writes
+     the real icon into build/generated/versionIcon with the version number drawn
+     under the camera (his rule, 27.9.2026: "in the icon I can already see what my
+     version is").
+
+     v95, his instruction: "literally vectorize this image". The camera below is
+     traced from his launcher's picture (the old system camera: a flash tab, an
+     off-centre hump, a thick lens ring), measured against the 72-unit circle:
+     the same shape and the same grey (#A8ADAF). Then only what he asked: a thin
+     orange outline (#FF9800) around the body, and the ring between the lens glass
+     and the body filled orange. Lifted 4 units so the version fits under it.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- The body with the viewfinder hump on top: 33..75 wide, 38..70 high. -->
-    <group android:pivotX="54" android:pivotY="38" android:scaleX="0.8" android:scaleY="0.8"
-        android:translateY="-5">
-        <!-- The body is GREY (his rule for the icon, 27.9.2026), as on his launcher. -->
-        <path android:fillColor="#B4BABF"
-            android:pathData="M45,38h14l3,5h9a4,4 0,0 1,4,4v19a4,4 0,0 1,-4,4h-34a4,4 0,0 1,-4,-4v-19a4,4 0,0 1,4,-4h5z" />
-        <!--
-             The lens, v91 (his correction, 27.9.2026, from his launcher): the ring
-             that was dark is ORANGE (#FF9800), with the glass inside it as before.
-        -->
+    <group android:translateY="-4">
+        <!-- The flash tab, top left. -->
+        <path android:fillColor="#A8ADAF"
+            android:pathData="M38,40.5 L43.2,40.5 L38,42.9 Z" />
+        <!-- The body: a chamfered top-left corner, the hump. -->
+        <path android:fillColor="#A8ADAF"
+            android:pathData="M45.67,42.5 L48.83,42.5 L48.83,39.83 L59.62,39.83 L59.62,42.5 L71.78,42.5 L71.78,66.83 L36.67,66.83 L36.67,45.23 Z" />
+        <!-- The ring between the lens glass and the body: orange. -->
         <path android:fillColor="#FF9800"
-            android:pathData="M54,56m-10.5,0a10.5,10.5 0,1 0,21 0a10.5,10.5 0,1 0,-21 0" />
-        <path android:fillColor="#B4BABF"
-            android:pathData="M54,56m-6,0a6,6 0,1 0,12 0a6,6 0,1 0,-12 0" />
-        <!--
-             A thin orange outline around the camera body (1.2 units), inside its
-             edge by half its width, so the drawing keeps its size and its 42 box.
-        -->
-        <path android:strokeColor="#FF9800" android:strokeWidth="1.2" android:strokeLineJoin="round"
-            android:pathData="M45.34,38.6 L58.66,38.6 L61.66,43.6 H71 A3.4,3.4 0 0 1 74.4,47 V66 A3.4,3.4 0 0 1 71,69.4 H37 A3.4,3.4 0 0 1 33.6,66 V47 A3.4,3.4 0 0 1 37,43.6 H42.34 Z" />
+            android:pathData="M54.23,55.12m-9.57,0a9.57,9.57 0,1 0,19.14 0a9.57,9.57 0,1 0,-19.14 0" />
+        <!-- The glass, the body's grey. -->
+        <path android:fillColor="#A8ADAF"
+            android:pathData="M54.23,55.12m-6.71,0a6.71,6.71 0,1 0,13.42 0a6.71,6.71 0,1 0,-13.42 0" />
+        <!-- A thin orange outline, 1 unit, just inside the body's edge. -->
+        <path android:strokeColor="#FF9800" android:strokeWidth="1" android:strokeLineJoin="miter"
+            android:pathData="M45.8,43 L49.33,43 L49.33,40.33 L59.12,40.33 L59.12,43 L71.28,43 L71.28,66.33 L37.17,66.33 L37.17,45.6 Z" />
     </group>
     <!--VERSION-->
 </vector>
