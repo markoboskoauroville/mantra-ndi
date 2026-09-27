@@ -179,3 +179,16 @@ for a Google Cloud OAuth client he creates for the sign-in.
 inside the body's outer edge and the lens circle's outer edge (r 10.5), so the outline's outer side
 is exactly the old edge and the symbol stays in the 42 box (`res/drawable/ic_launcher_foreground.xml`).
 "Inner lens circle" was read as the lens (the dark ring's outer edge), not the small white glass.
+
+## His answers, 27.9.2026 afternoon (after v91)
+
+- **USB (OBS camera): the Mac companion app.** A small Mac app receives the phone over the USB cable
+  and appears as a camera in OBS, Zoom and everything else (the old webcam plan; research in
+  `NDI_LICENSING_AND_WEBCAM.md`). The biggest of the four; its own repository.
+- **YouTube: the stream key first.** He pastes the key from YouTube Studio into the YouTube panel once;
+  the record key goes live. Google sign-in can come later.
+
+**Order, therefore:** **v92 = YouTube by stream key** (all on the phone: an RTMPS publisher fed by the
+same encoder as the file and NDI, with sound); **v93 = USB, the phone's side of the Mac companion**
+(and the companion app in its own repository). Swapped from the first split because YouTube is
+phone-only and finishes first; the Mac app is the longer road.
