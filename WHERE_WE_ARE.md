@@ -6,6 +6,40 @@ working state of *this* app.
 
 ---
 
+## 27.9.2026: v87 tested, v88 his cosmetic list (crashed on launch), v89 the fix
+
+**v87 finished on the emulator.** A/M on ISO, a drag to ISO 605, and shutter on A answered 1/229 →
+1/896 (the app's loop; the emulator has no native priority). M cycled HM → FM → AUTO → HM: FM puts
+all four on M, and WB going to M read the camera once ("5000K, now manual"); AUTO puts all on A;
+HM puts back his own set. A double tap does nothing. Monkey seed 87087, 20,000 events: no crash, no
+ANR. **Found:** the half-manual loop sent and traced the same exposure four times a second (1,786
+lines in eight minutes).
+
+**v88 (released, broken):** his cosmetic list. The geometry line is off the screen (trace only);
+bottom middle `REC  00:00:00:00`, the timecode always white, REC red while rolling; the record key a
+white circle, red recording, no number; SNAP is the app's icon, and the app has a real adaptive
+launcher icon (a camera body and lens, white on #0E1114, 42/72 = 0.58, `modules/app-icon.md`); LGHT
+removed; the orientation key reads LANDSCAPE or PORTRAIT and toggles (an old "follow the phone" is
+read as the screen's way now, `Mechanism.shootResolved`); **focus starts on A**, so M reads AUTO;
+fader names bold white over a dark band; the loop sends an exposure only when it changes
+(`Mechanism.exposureChanged`). **It crashed on launch**: `showTimecode(false)` in `onCreate` read
+`pipeline.fps` before the pipeline was made. LESSONS 7.
+
+**v89 (released):** the one-line guard. **Tested on the emulator:** installed over v88/v87 with
+settings kept; launch, splash with the new icon; M AUTO and AF at start; a take (REC red, record key
+red, timecode white 00:00:03:29), saved 116 frames; a still beside it; LANDSCAPE → PORTRAIT; fader
+names read over the white wall; HM for 8 s wrote 2 exposure lines (was 32). Monkey seed 89089,
+20,000 events: no crash, no ANR.
+
+**Not proven on the emulator:** its fake lens answers every autofocus with NOT_FOCUSED_LOCKED, so
+the box goes red at start and on a tap. On his Pixel the box should settle white after start-up.
+**Small findings for later:** LANDSCAPE / PORTRAIT is shrunk to fit and small in both
+orientations; the status line at the top is still grey on a bright picture.
+
+**Next:** v90 the player inside the app (was v89), then scopes v91 … tracking v98.
+
+---
+
 ## 26.9.2026, closing the day: v87, mixer faders and A / M, and what comes next
 
 **v87 (released, CI green):** the zones are thick mixer faders (a dark slot with ticks, a flat cap

@@ -49,10 +49,10 @@ calibration so it never goes green. Double tap to take the camera's own reading 
 *Coming next:* a grey-card sweep that finds the most neutral temperature by itself, and a companion
 app that calibrates the fader to a colour meter.
 
-**A camera's readouts, not a phone's.** Record-run timecode in HH:MM:SS:FF, red while rolling. The
+**A camera's readouts, not a phone's.** Record-run timecode in HH:MM:SS:FF at the bottom middle, always white, with REC beside it turning red while rolling. The
 free space on the recording drive and how many hours and minutes are left at the current bit rate,
 always on screen. Record to the phone or to any drive it can see, a USB-C SSD included. PLAY opens
-the last take at once. SHOOT turns the whole interface for landscape or portrait so every label
+the last take at once. One key reads LANDSCAPE or PORTRAIT and turns the whole interface, so every label
 stays upright, whatever the phone's own rotation lock says.
 
 **Every lens, one key each.** Wide, main, telephoto, selfie: whatever your phone physically has,
@@ -131,49 +131,42 @@ how thirty controls fit on screen without one of them sitting on the shot.
 **Grey is off, green is on, dark is a key this phone cannot honour.** That is
 the whole of the interface language, and it is why the keys can be this small.
 
-Left rail, in order:
+Left rail (the top bar when the phone is upright), in order:
 
 | Key | What |
 |---|---|
-| `L1`–`L4` | the real lenses, named from each sensor's own 35mm equivalent. A Pixel does not put its ultra wide in `cameraIdList` — the back camera is one *logical* camera that fuses several and picks by zoom — so the physical ones are found through `getPhysicalCameraIds()` and selected by naming one on each OutputConfiguration |
-| `LGHT` | the lamp, on the repeating request — `CameraManager.setTorchMode` is refused while this app holds the camera |
-| `AF` / `MF` | the focus director: hold, notice, then rack over a beat, rather than the hunting the camera's own routine does |
-| `PEAK` | edge detector, monitor only |
-| `SNAP` | the sensor's own frame as a DNG, uncorrected, while the stream carries on |
-| `LOG` | which log curve the tone mapper is applying: Rec.709, S-Log3, V-Log, LogC3, LogC4, Film Gen5 |
-| `ROT` | a quarter turn of the preview, by hand, for a phone mounted sideways |
-| `HX` / `FULL` | which kind of NDI, or neither. Two ends of one switch, because an NDI source is one stream |
+| `L1`–`L5` | the real lenses, only the ones this phone has, named from each sensor's own 35mm equivalent. A Pixel does not put its ultra wide in `cameraIdList` — the back camera is one *logical* camera that fuses several and picks by zoom — so the physical ones are found through `getPhysicalCameraIds()` and selected by naming one on each OutputConfiguration |
+| `AF` / `MF` | the focus director: hold, notice, then rack over a beat, rather than the hunting the camera's own routine does. Starts on AF |
+| `LOG` | the tone curve: HLG or STD (the phone's own), S-Log3, V-Log, LogC3, LogC4, Film Gen5; a curve a lens cannot run is taken back with "not supported" |
+| `M` | AUTO, HM (half manual) or FM (full manual), read off the four A / M switches |
+| `CTRL` | the four mixer faders — ISO, shutter, focus, white balance — each with its own A / M switch |
+| `NDI` | off, HX or full. One key, because an NDI source is one stream |
+| `FULL` | the clean feed: nothing on the glass but the picture; a double tap comes back |
 
-Right rail: **eleven LUT slots, five at a time.** Tap an empty one to load a
-`.cube` from storage; tap a loaded one to put it on the monitor; long press to
-replace or empty it. Eleven because the ARRI LogC4 family is eleven files; five
-at a time because eleven keys down the side of a phone are each too small to
-hit with a thumb. The sixth key turns the page and carries which page it is on,
-and the seventh is the gear.
+Right rail (the bottom bar when upright):
 
-The LUT is a **monitor** LUT, deliberately. The stream carries the log picture
-the tone mapper produced, and the LUT is how the operator judges it — which is
-what a broadcast camera does, and the only thing that is possible at 10 bits.
-
-## Settings
-
-Behind the gear at the foot of the right rail: the source name, whether to ask
-for ten bit, the HX bitrate, the focus hold and rack times, the peaking colour
-and sensitivity, the route that gets the trace off the phone, and the NDI
-attribution the licence requires. Everything an operator touches *during* a
-take is a key on a rail where it can be reached without looking; what is in
-here is what is decided once.
+| Key | What |
+|---|---|
+| record | a white circle; red while recording |
+| `PLAY` | the last take |
+| the camera icon | SNAP: the picture as a PNG beside the takes |
+| `LANDSCAPE` / `PORTRAIT` | turns the interface |
+| `LUT` | switches between the LUTs loaded in settings; long press opens the library |
+| `PEAK` `FALSE` `ZEBRA` | focus peaking, false colour, zebra — monitor only, on the GPU |
+| gear | settings: LUT library, record folder (any drive), ROT, zebra level, NDI name |
+| storage | free space on the recording drive and the time left at the current bit rate |
 
 ## The picture and the wire
 
-The geometry is on screen, under the picture:
+The geometry is written to the trace every time the preview is laid out (it was on screen until
+v88):
 
     sensor 90 · disp 270 · rot 180 · buf 1920x1080 · view 1676x943
 
 Those five numbers decide whether the preview is upright and whether it is
 stretched, and this app has shipped one or the other wrong six times. Each of
 those was diagnosed by holding a phone up to something rectangular and
-arguing; now a single screenshot settles it.
+arguing; now one line of the trace settles it.
 
 The arithmetic behind them is not in the view any more. `Mechanism.previewFit`
 and `Mechanism.previewRotation` are pure functions, and the suite asserts the

@@ -5,7 +5,7 @@ decided and what is not tested.
 
 ## State
 
-**v87, 26.9.2026. Mantra Manual Camera** (renamed from Mantra NDI at v83; package id unchanged).
+**v89, 27.9.2026. Mantra Manual Camera** (v88 crashed on launch; never install it) (renamed from Mantra NDI at v83; package id unchanged).
 Read `v81 version bumps upgrades prompts for phase development of professional application for
 shooting video.md` first: it holds the phase plan (v82 → v97), a section *Tomorrow starts here*,
 and a table of every request Marko made on 26.9.2026 with where each one stands. Then

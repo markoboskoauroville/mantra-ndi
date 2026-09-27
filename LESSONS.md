@@ -53,3 +53,12 @@ mirror) and through the stream's crop of the active array (16:9 out of 4:3). Pur
 
 `android:screenOrientation="fullSensor"` turns the screen even with auto-rotate off. `fullUser`
 follows the phone's own setting, which is what an operator expects.
+
+## 7. A unit test cannot see onCreate's order (v88)
+
+**What happened:** v88 passed 249 unit tests and CI, then crashed on the first launch: a new call in
+`onCreate` (`showTimecode(false)`) read `pipeline.fps` two lines before `pipeline` was made, a
+`lateinit` not yet initialised. **Rule:** anything added to `onCreate` reads only what is already
+built above it, or guards with `::x.isInitialized`; and the CI APK is launched on the emulator
+before anything else is said about a release. A released number is never reused: the fix is the
+next version (v89).
