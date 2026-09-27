@@ -237,3 +237,15 @@ phone-only and finishes first; the Mac app is the longer road.
 
 The version number in settings (top right, and at the bottom) opens the repository's latest release
 page on GitHub, where the APK is. **Status:** to do, v94 (YouTube moves to v95).
+
+## Fifth message, 27.9.2026, evening: the icon, literally
+
+> "For the next icon and default icon, literally vectorize this image. Literally make the same camera
+> shape. Literally make the same body color and just add a thin orange outline around the camera body
+> and fill up this space between lens and camera with orange color. Literally."
+
+His picture: `~/.claude/uploads/e6c861f6-db96-40aa-8b9c-c88d869cc059/f8c7d4c6-image.png` (the launcher's
+themed rendering of our icon: a grey camera on a dark slate circle). To do: trace it — the same body
+shape, the same grey, the same background colour — then a thin orange outline around the body, and the
+dark ring between the lens glass and the body filled orange. The version number stays under the camera
+(his earlier rule). **Status:** to do, v95.
