@@ -387,3 +387,13 @@ Needs the GPU stage (Settings → Picture path).
 5. Settings, at the very top: a flashlight icon that turns the torch on (not on the main screen). — **Status:** open
 6. Settings order: focus size, exposure circle size, light; then 8-bit/10-bit; then resolution. — **Status:** open
 7. Remove "interface orientation" from settings; always 0. — **Status:** open
+
+## 2.10.2026, 03:55 — three shapes, three functions, and their keys on the left
+
+> But since I want to distinguish the shapes on the screen, we should be very different. So we have the same as visual languages Android phone. So the square is circle will be the exposure and triangle will be the white balance. So we have 3 different shapes in the in the, in this app for the 3 different functions. And since they are so important, you need to put their, their shapes, icons, on the left or right side of the user interface. I would say left side, left side. And they will have 2 states. Uh, one state is grayed out, it means it's not showing on the screen. Second state is white, it means it's shown on the screen. And third state is orange, which means the pinch action is changing the size of that one. So this orange is toggle, so only one I can change with pinching action, only one of those guys. And same for focus, for white balance. And the gray balance or white balance action is tapping. So when I tap, it reads and it locks. The whole app doesn't have any tracking at all. It just— user needs to tap, it reads, it probes the right value, and then it stays there. And the same visual language as for focusing. While searching, it's orange. When it's locked, then it's green.
+
+8. Three shapes: SQUARE = focus, CIRCLE = exposure, TRIANGLE = white balance (replaces item 2's rectangle). — **Status:** v101 = the triangle; the circle with item 3
+9. Their three icons on the LEFT rail. Grey = not on the picture; white = on the picture; orange = the one a
+   pinch resizes (only one at a time, a toggle). — **Status:** open (v102)
+10. White balance is a tap: it reads, probes, LOCKS and stays — nothing tracks. Orange while searching, green
+    when locked, as the focus square. — **Status:** v101
