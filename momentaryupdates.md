@@ -560,3 +560,8 @@ Needs the GPU stage (Settings → Picture path).
 - **Stress test on the A142, v116 (07:31):** after the curve fix, every other risky key ran without a freeze:
   M ×3, focus ×3, PEAK/FALSE/ZEBRA ×2, lenses L1 and L2, FULL. Curves: S-Log3 and V-Log crash its camera driver
   (now caught, refused for good, camera back in ~2 s). — **Status:** item 31 done
+
+> (07:40) remote control is a priority. Not breaking down this Nothing Phone app. It works without the log. That's fine. Please close this app on my Nothing Phone 2a, and please bring monitor up
+
+32. REMOTE CONTROL is the priority: the monitor drives the camera. The camera stays on the Nothing (works without
+    log); close it there and bring the monitor up. — **Status:** started
