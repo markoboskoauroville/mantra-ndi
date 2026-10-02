@@ -612,3 +612,7 @@ Needs the GPU stage (Settings → Picture path).
 > in any ramping algorithm you need to implement ease-in and ease-out curves. Please
 
 39. Every ramp eases in and eases out: it leaves slowly, travels, and arrives slowly — never a linear start or stop. — **Status:** started
+
+> now there is a white paper on my keyboard. Please use it to test the slider for manual white balancing. Does the color shift as it's supposed to shift, or is it unnatural? Please check the slider, do screenshots, and give me a report
+
+40. Test the manual white balance fader on the white paper: does the colour shift as it should, or unnaturally? Screenshots and a report. — **Status:** started
