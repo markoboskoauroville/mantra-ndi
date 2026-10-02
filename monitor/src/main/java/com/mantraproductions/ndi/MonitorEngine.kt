@@ -139,7 +139,9 @@ class MonitorEngine(
                         // Wait for a keyframe: configuring mid-GOP gives a
                         // decoder no parameter sets and a green mess on screen.
                         if (!isKeyframe) continue
-                        if (!configureCodec(width, height, isHevc)) return
+                        // v122: a decoder that will not start is tried again at the next keyframe; the
+                        // connection (and the remote control riding on it) stays up
+                        if (!configureCodec(width, height, isHevc)) continue
                     }
 
                     received.addAndGet(size.toLong())
@@ -176,24 +178,32 @@ class MonitorEngine(
     private fun configureCodec(width: Int, height: Int, isHevc: Boolean): Boolean {
         releaseCodec()
         val mime = if (isHevc) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
-        return try {
-            val format = MediaFormat.createVideoFormat(mime, width, height)
-            // v121: a monitor wants the newest frame now, not a smooth queue: low latency, real-time priority
-            if (android.os.Build.VERSION.SDK_INT >= 30) format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
-            format.setInteger(MediaFormat.KEY_PRIORITY, 0)
-            val c = MediaCodec.createDecoderByType(mime)
-            c.configure(format, surface, null, 0)
-            c.start()
-            codec = c
-            configuredWidth = width
-            configuredHeight = height
-            configuredHevc = isHevc
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Decoder setup failed", e)
-            postStatus("No hardware decoder for ${if (isHevc) "H.265" else "H.264"} at ${width}x$height")
-            false
+        // v122: low latency first, the plain setup if this phone's decoder refuses it. v121 asked only for low
+        // latency; the Nothing Phone 2a's decoder refused, the loop gave up, and the camera stopped sending.
+        for (lowLatency in listOf(true, false)) {
+            var c: MediaCodec? = null
+            try {
+                val format = MediaFormat.createVideoFormat(mime, width, height)
+                if (lowLatency) {
+                    if (android.os.Build.VERSION.SDK_INT >= 30) format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
+                    format.setInteger(MediaFormat.KEY_PRIORITY, 0)
+                }
+                c = MediaCodec.createDecoderByType(mime)
+                c.configure(format, surface, null, 0)
+                c.start()
+                codec = c
+                configuredWidth = width
+                configuredHeight = height
+                configuredHevc = isHevc
+                Log.i(TAG, "decoder ${if (lowLatency) "low latency" else "plain"} ${width}x$height ${if (isHevc) "HEVC" else "AVC"}")
+                return true
+            } catch (e: Exception) {
+                Log.w(TAG, "Decoder setup failed (${if (lowLatency) "low latency" else "plain"})", e)
+                runCatching { c?.release() }
+            }
         }
+        postStatus("No hardware decoder for ${if (isHevc) "H.265" else "H.264"} at ${width}x$height")
+        return false
     }
 
     private fun feedDecoder(buffer: ByteBuffer, size: Int, ptsUs: Long) {
