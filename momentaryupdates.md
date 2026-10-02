@@ -571,4 +571,4 @@ Needs the GPU stage (Settings → Picture path).
   the turn. The monitor wears that interface: the camera's own RailButton (now shared) top and bottom, the marks
   over the picture, the status line; a key tap presses it on the camera, a picture tap goes to the camera's armed
   mark (focus / exposure / white balance there), the turn follows the camera. Nothing is recorded on the monitor.
-  RemoteTest: the vocabulary round-trips. — **Status:** built, to test between the phones
+  RemoteTest: the vocabulary round-trips. — **Status:** PROVEN 07:47 between his phones: the monitor showed the camera's keys, status line and marks, upright by itself; PEAK pressed on the Nothing switched peaking on the Pixel (and back); a tap on the keyboard in the monitor moved the Pixel's white balance triangle there and locked neutral in 2 steps, both screens green

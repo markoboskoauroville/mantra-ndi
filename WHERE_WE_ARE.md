@@ -7,6 +7,24 @@ working state of *this* app.
 ---
 
 
+
+## 2.10.2026, morning: v113 → v117, the sister app and remote control
+
+- **MANTRA MONITOR** (monitor/, its own APK in every release, `com.mantraproductions.ndi.monitor`): a double tap in
+  the middle lists the NDI sources; it plays one through the hardware decoder in its true shape. When the source is a
+  Mantra camera it becomes its **remote control** (v117): the camera's own keys (RailButton, now in shared/) top and
+  bottom, its status line, its marks on the picture, the picture turned as the camera holds it; a key tap presses that
+  key on the camera, a picture tap goes to the camera's armed mark. PROVEN between his Pixel (camera) and Nothing
+  Phone 2a (monitor), 07:47.
+- **The wire:** NDI metadata both ways. Up: `<mantra_cam key="PEAK"/>`, `<mantra_cam tap_x=".." tap_y=".."/>` (stream
+  coordinates). Down, twice a second: `<mantra_cam_state status keys marks armed turns …/>`. The camera polls without
+  blocking under the sender's lock (ndi_bridge.cpp nativePollMetadata / nativeSendMetadata).
+- **The Nothing's freeze, found and cured (v115/v116):** S-Log3 and V-Log stop its picture and crash its camera driver
+  ("Camera error 4"); the app now takes the curve back for good on that lens, says it is not available, and reopens
+  the camera with retries (back in ~2 s). Everything else in scripts/stress.py ran clean on it.
+- **Next:** remote pinch (resize the armed mark from the monitor), and the camera's settings over the wire; FILE is
+  disarmed on his Pixel since the NDI tests — put it back.
+
 ## 2.10.2026, night: v100 → v106, white balance proven, three marks, settings in his order
 
 **Proven on his Pixel 7 (adb + scrcpy), against the G815 keyboard as a colour reference:**
