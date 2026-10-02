@@ -544,3 +544,4 @@ Needs the GPU stage (Settings → Picture path).
   the hardware decoder. Faults seen: the picture is SIDEWAYS (the sensor's landscape frame from an upright phone)
   and STRETCHED to the portrait screen. adb taps cannot make a double tap (too slow); a real double click on the
   scrcpy window does. — **Status:** v114 fixes the shape and the turn
+- **v114 (2.10.2026):** the monitor keeps the picture's own shape (letterboxed, never stretched) and has a TURN key: a quarter turn per tap, remembered per source. — **Status:** built

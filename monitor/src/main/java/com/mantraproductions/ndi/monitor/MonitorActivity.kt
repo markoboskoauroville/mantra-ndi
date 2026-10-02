@@ -9,8 +9,10 @@ import android.os.Looper
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
-import android.view.SurfaceHolder
-import android.view.SurfaceView
+import android.graphics.Matrix
+import android.graphics.SurfaceTexture
+import android.view.Surface
+import android.view.TextureView
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -39,7 +41,11 @@ import kotlin.concurrent.thread
 class MonitorActivity : Activity() {
 
     private val ui = Handler(Looper.getMainLooper())
-    private lateinit var surface: SurfaceView
+    // v114: a TextureView, so the picture can keep its shape (letterboxed) and be turned in quarter turns
+    private lateinit var surface: TextureView
+    private var output: Surface? = null
+    private lateinit var turnKey: TextView
+    private var turns = 0
     private lateinit var status: TextView
     private lateinit var picker: ScrollView
     private lateinit var list: LinearLayout
@@ -56,7 +62,7 @@ class MonitorActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        surface = SurfaceView(this)
+        surface = TextureView(this)
         root.addView(surface, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
         status = TextView(this).apply {
             setTextColor(Color.parseColor("#E6E8EA")); textSize = 11f
@@ -68,6 +74,14 @@ class MonitorActivity : Activity() {
         picker = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#E60B0D10")); visibility = View.GONE; addView(list)
         }
+        // TURN: a quarter turn per tap, kept per source (Marko's camera sends its sensor's landscape frame even when
+        // the phone is upright; until the camera reports how it is held, the operator turns it once and it stays)
+        turnKey = word("TURN", Color.parseColor("#7A8087"), 13f) {
+            turns = (turns + 1) % 4
+            current?.let { prefs.edit().putInt("turns:$it", turns).apply() }
+            fit()
+        }
+        root.addView(turnKey, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(20), dp(28)) })
         root.addView(picker, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
 
@@ -83,14 +97,23 @@ class MonitorActivity : Activity() {
         })
         surface.setOnTouchListener { _, ev -> taps.onTouchEvent(ev) }
 
-        surface.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(h: SurfaceHolder) {
+        surface.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) {
+                output = Surface(t)
                 val again = current ?: prefs.getString("source", null)
                 if (again != null) watch(again) else say("Double tap in the middle to choose a source")
             }
-            override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hh: Int) = Unit
-            override fun surfaceDestroyed(h: SurfaceHolder) { engine?.stop(); engine = null }
-        })
+            override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) = fit()
+            override fun onSurfaceTextureDestroyed(t: SurfaceTexture): Boolean {
+                engine?.stop(); engine = null; output?.release(); output = null
+                return true
+            }
+            override fun onSurfaceTextureUpdated(t: SurfaceTexture) {
+                // the picture's size is known only once frames arrive; fit when it changes
+                val e = engine ?: return
+                if (e.lastWidth != fittedW || e.lastHeight != fittedH) fit()
+            }
+        }
     }
 
     override fun onResume() {
@@ -146,13 +169,44 @@ class MonitorActivity : Activity() {
         }
     }
 
+    private var fittedW = 0
+    private var fittedH = 0
+
+    /**
+     * The picture in its own shape, centred, turned by [turns] quarter turns, as large as fits — never stretched.
+     * A TextureView draws the buffer stretched over the whole view; the matrix takes it back to the video's own size,
+     * turns it about its centre, and scales it to fit.
+     */
+    private fun fit() {
+        val e = engine ?: return
+        val vw = e.lastWidth.toFloat(); val vh = e.lastHeight.toFloat()
+        val w = surface.width.toFloat(); val h = surface.height.toFloat()
+        if (vw <= 0 || vh <= 0 || w <= 0 || h <= 0) return
+        fittedW = e.lastWidth; fittedH = e.lastHeight
+        val sideways = turns % 2 == 1
+        val cw = if (sideways) vh else vw
+        val ch = if (sideways) vw else vh
+        val scale = minOf(w / cw, h / ch)
+        val m = Matrix()
+        m.setScale(vw / w, vh / h)
+        m.postTranslate(-vw / 2f, -vh / 2f)
+        m.postRotate(90f * turns)
+        m.postScale(scale, scale)
+        m.postTranslate(w / 2f, h / 2f)
+        surface.setTransform(m)
+        turnKey.setTextColor(if (turns != 0) Color.parseColor("#33D17A") else Color.parseColor("#7A8087"))
+    }
+
     private fun watch(source: String) {
         engine?.stop()
         current = source
+        turns = prefs.getInt("turns:$source", 0)
+        fittedW = 0; fittedH = 0
         cameraSeen = false
         prefs.edit().putString("source", source).apply()
         say("Connecting…")
-        val e = MonitorEngine(surface.holder.surface,
+        val out = output ?: run { say("No picture surface yet"); return }
+        val e = MonitorEngine(out,
             onStatus = { msg -> ui.post { say(msg) } },
             onCameraState = { st -> ui.post { onCamera(st) } })
         engine = e
