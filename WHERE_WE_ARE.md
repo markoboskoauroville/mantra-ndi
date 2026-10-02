@@ -6,6 +6,28 @@ working state of *this* app.
 
 ---
 
+
+## 2.10.2026, night: v100 → v106, white balance proven, three marks, settings in his order
+
+**Proven on his Pixel 7 (adb + scrcpy), against the G815 keyboard as a colour reference:**
+- **White balance = the TRIANGLE.** Tap it (or tap anywhere while its key is orange): it reads the lit,
+  unclipped pixels inside, steps red/blue gain by a learned response until neutral, LOCKS (green), and that
+  becomes the fader's anchor. Locked in 3–6 steps; red, orange, yellow, green, cyan, blue, magenta, white then
+  read true through the camera. A is the camera's own measurement again; nothing runs by itself at start.
+- **Exposure = the CIRCLE.** A tap meters auto exposure on it and locks (AE regions, precapture, AE lock).
+- **Focus = the SQUARE**, as before. Left rail: L (lenses fold out and back) □ ○ △: grey off the picture,
+  white on it, orange = the one a pinch resizes AND a tap anywhere serves (also in FULL).
+- **Status line** names the armed shape and its locked numbers (focus m/dpt, ISO·shutter·EV, K·gains).
+- **Settings:** the torch at the top (proven: the desk lit), the three sizes, then depth and resolution;
+  "Turn the preview" removed (turn always 0); SHOW ON THE CAMERA hides the outputs line.
+- **Freeze watch for every change** (v104): frames stopping 1.2 s after a change put back the last request
+  that made a picture and say the setting is not available. **Not proven** — nothing freezes on the Pixel.
+  Next: his Nothing Phone 2a on the screen copy, to make it freeze on purpose.
+
+**Open:** the Kelvin read-out clamps at 6500K (the sensor's calibration ends at 6504K; the gains are exact);
+saturated colours on overexposed LEDs clip (expose for the subject); the 16 KB-alignment notice for the NDI
+libraries shows on every install of a debuggable build.
+
 ## 27.9.2026, evening, closing the day: v90 → v99
 
 His requests of the day are in `momentaryupdates.md`, word for word, each with its status. Built and

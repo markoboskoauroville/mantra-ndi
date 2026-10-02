@@ -85,3 +85,24 @@ emulator's GPU, with no GL error. **Rule:** when a GPU stage misbehaves, read ba
 intermediate (`glReadPixels`) into the trace before theorising; and prefer drawing into a texture over
 copying between them. The pattern now lives in a kept reference frame drawn by the same shader.
 
+
+## 10. White balance on a spot: the pixels must not change, and the picture is not linear (v100 → v102)
+
+**What he saw:** v100's spot swung r/g 1.54 → 0.16 → 3.19 → 0.18 and never settled; v101 said "nothing lit"
+over a lit keyboard. **Causes:** (1) the population of "lit, unclipped" pixels changed every round as gains
+pushed red keys over the clipping line; (2) on the 10-bit HLG path the picture answers a gain change far more
+than linearly (≈ gain³); (3) `getBitmap(192, 108)` of a PORTRAIT view squashed ~17 screen rows into one, so
+thin lit legends averaged into black. **Rule:** choose the pixels once and keep them; learn the response
+exponent from each pair of rounds and step by it, capped ×1.25; read the texture in its own shape. Measured:
+locked in 3–6 steps on his Pixel, and the colours through the camera then matched his eye.
+
+## 11. "Converged" can be the state left from before (v103)
+
+The exposure circle locked "after 1 frame": AE_STATE was still CONVERGED from the old region. **Rule:** after
+a new metering region or trigger, ignore the state for a few frames (6) before believing it.
+
+## 12. A test is only as good as the scene under it (2.10.2026)
+
+The first white-balance proof ran on his ORANGE keyboard bank (he had switched banks), so the camera made
+orange white and everything leaned blue. **Rule:** before a colour test, confirm the reference really is the
+reference (here: set the keys white and read the bank back).
