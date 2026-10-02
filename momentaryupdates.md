@@ -412,3 +412,9 @@ Needs the GPU stage (Settings → Picture path).
 
 12. The lens keys L1..L5 fold into ONE key, L: a press unfolds them, choosing a lens folds them again; the room
     goes to the square, circle and triangle keys. — **Status:** open (with the rail keys, item 9)
+
+- **MEASURED v102 on his Pixel, 2.10.2026 03:51** (keyboard all white, triangle on it, one tap):
+  r/g 1.724 → 1.372 → 0.947 → 1.009, b/g 0.764 → 0.897 → 1.004 → 1.011, "locked: neutral after 3 steps".
+  Pure colours afterwards through the camera: red, green, cyan, blue right; orange pale (legends clipped),
+  yellow leans green, magenta violet. Next: his precise light, and exposure for the LEDs. — **Status:** item 1
+  and 10 done for the white; colour accuracy of saturated colours open
