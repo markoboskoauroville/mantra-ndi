@@ -31,7 +31,10 @@ class FocusSquareView @JvmOverloads constructor(
     private val density = resources.displayMetrics.density
 
     var state: State = State.IDLE
-        set(value) { if (field != value) { field = value; invalidate() } }
+        set(value) { if (field != value) { field = value; invalidate(); onStateChanged?.invoke() } }
+
+    /** v107: told when the colour changes, so its rail key can wear the same one. */
+    var onStateChanged: (() -> Unit)? = null
 
     /** Centre as a fraction of the view, so it survives rotation and resize. */
     var centreX = 0.5f
@@ -159,6 +162,18 @@ class FocusSquareView @JvmOverloads constructor(
         const val FAR_SLOP = 44f
     }
 
+    /** The colour it is drawn in now; its rail key wears the same one (v107). */
+    fun colour(): Int = when {
+        tracking && lost -> Color.parseColor("#FF2D1F")
+        tracking -> Color.parseColor("#33D17A")
+        else -> when (state) {
+            State.IDLE -> Color.parseColor("#CCFFFFFF")
+            State.SEEKING -> Color.parseColor("#FFD400")
+            State.LOCKED -> Color.parseColor("#12C46A")
+            State.FAILED -> Color.parseColor("#FF2D1F")
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         if (!drawn) return
         val cx = width * drawnCentreX()
@@ -166,16 +181,7 @@ class FocusSquareView @JvmOverloads constructor(
         val (hw, hh) = halves().let { it[0] to it[1] }
         rect.set(cx - hw, cy - hh, cx + hw, cy + hh)
 
-        paint.color = when {
-            tracking && lost -> Color.parseColor("#FF2D1F")
-            tracking -> Color.parseColor("#33D17A")
-            else -> when (state) {
-            State.IDLE -> Color.parseColor("#CCFFFFFF")
-            State.SEEKING -> Color.parseColor("#FFD400")
-            State.LOCKED -> Color.parseColor("#12C46A")
-            State.FAILED -> Color.parseColor("#FF2D1F")
-            }
-        }
+        paint.color = colour()
         // Half the weight it was. A focus box is a reference, not a graphic,
         // and a heavy one hides the very detail being judged.
         paint.strokeWidth = 1f * density

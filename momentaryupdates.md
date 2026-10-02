@@ -463,3 +463,4 @@ Needs the GPU stage (Settings → Picture path).
 17. The □ ○ △ keys take the colour their shape has on the picture at that moment (white idle, orange
     searching, green locked, red failed); grey when the shape is off. The armed one (the pinch's and the tap's)
     is then told by a bar under its key, since orange now means "searching". — **Status:** v107
+- **v107 (2.10.2026):** the □ ○ △ keys wear their shape's colour of the moment (white, orange searching, green locked, red failed), grey when off; a bar under the armed one (item 17). — **Status:** built

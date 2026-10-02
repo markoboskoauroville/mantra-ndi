@@ -43,7 +43,18 @@ class MarkView @JvmOverloads constructor(
     private val density = resources.displayMetrics.density
 
     var state: State = State.IDLE
-        set(value) { if (field != value) { field = value; invalidate() } }
+        set(value) { if (field != value) { field = value; invalidate(); onStateChanged?.invoke() } }
+
+    /** v107: told when the colour changes, so its rail key can wear the same one. */
+    var onStateChanged: (() -> Unit)? = null
+
+    /** The colour it is drawn in now. */
+    fun colour(): Int = when (state) {
+        State.IDLE -> Color.WHITE
+        State.MEASURING -> Color.parseColor("#E8A33D")
+        State.NEUTRAL -> Color.parseColor("#33D17A")
+        State.FAILED -> Color.parseColor("#FF3B30")
+    }
 
     var centreX = 0.78f
         private set
@@ -116,12 +127,7 @@ class MarkView @JvmOverloads constructor(
             path.lineTo(cx - halfW(), cy + halfH())
             path.close()
         }
-        line.color = when (state) {
-            State.IDLE -> Color.WHITE
-            State.MEASURING -> Color.parseColor("#E8A33D")
-            State.NEUTRAL -> Color.parseColor("#33D17A")
-            State.FAILED -> Color.parseColor("#FF3B30")
-        }
+        line.color = colour()
         line.strokeWidth = 1.5f * density
         canvas.drawPath(path, line)
     }

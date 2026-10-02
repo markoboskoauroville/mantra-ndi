@@ -44,6 +44,13 @@ class RailButton @JvmOverloads constructor(
     var glyph: Glyph = Glyph.NONE
         set(value) { field = value; describe(); invalidate() }
 
+    /** v107: a colour that overrides the state's, for the mark keys that wear their shape's colour. */
+    var tint: Int? = null
+        set(value) { if (field != value) { field = value; invalidate() } }
+    /** v107: a bar under the key: this mark is the armed one (the pinch's and the tap's). */
+    var marked = false
+        set(value) { if (field != value) { field = value; invalidate() } }
+
     var label: String = ""
         set(value) { field = value; describe(); invalidate() }
 
@@ -115,6 +122,12 @@ class RailButton @JvmOverloads constructor(
             State.ARMED -> AMBER
             State.DEAD -> DEAD
             State.SHOWN -> WHITE
+        }.let { if (state != State.OFF && state != State.DEAD) this.tint ?: it else it }
+        if (marked) {
+            mark.color = tint
+            mark.strokeWidth = density(2.2f)
+            canvas.drawLine(width * 0.32f, height - density(4f), width * 0.68f, height - density(4f), mark)
+            mark.strokeWidth = density(1.4f)
         }
 
         word.color = tint

@@ -296,6 +296,9 @@ class MainActivity : AppCompatActivity() {
         exposureCircle.post { exposureCircle.moveTo(settings.circleX, settings.circleY) }
         exposureCircle.onMoved = { x, y -> settings.circleX = x; settings.circleY = y; exposureCircle.state = MarkView.State.IDLE }
         exposureCircle.onTapped = { meterExposure() }
+        focusSquare.onStateChanged = { refreshKeys() }
+        exposureCircle.onStateChanged = { refreshKeys() }
+        wbBox.onStateChanged = { refreshKeys() }
         focusSquare.onTapFor = { x, y -> tapAt(x, y) }
         refreshMarks()
         wbBox.onMoved = { x, y -> settings.wbBoxX = x; settings.wbBoxY = y }
@@ -2372,12 +2375,13 @@ class MainActivity : AppCompatActivity() {
         lenses.getOrNull(activeLens)?.equivalentMm?.takeIf { it > 0 }?.let { lensChooser.sub = "${it}mm" }
         lensChooser.state = if (lensesOpen) RailButton.State.ARMED else RailButton.State.ON
         lensKeys.forEach { it.visibility = if (lensesOpen) View.VISIBLE else View.GONE }
+        // v107: each mark key wears its shape's colour of the moment (white, orange searching, green locked,
+        // red failed), grey when the shape is off; a bar under it says which one is armed.
         markKeys.forEachIndexed { i, key ->
-            key.state = when {
-                settings.marksShown and (1 shl i) == 0 -> RailButton.State.OFF
-                settings.pinchTarget == i -> RailButton.State.ARMED
-                else -> RailButton.State.SHOWN
-            }
+            val on = settings.marksShown and (1 shl i) != 0
+            key.state = if (on) RailButton.State.SHOWN else RailButton.State.OFF
+            key.tint = if (!on) null else when (i) { 0 -> focusSquare.colour(); 1 -> exposureCircle.colour(); else -> wbBox.colour() }
+            key.marked = on && settings.pinchTarget == i
             key.invalidate()
         }
         lensKeys.forEachIndexed { i, key ->
