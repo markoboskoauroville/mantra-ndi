@@ -441,3 +441,16 @@ Needs the GPU stage (Settings → Picture path).
     picture serves: the tap MOVES that shape to where it landed, runs its automatic correction (focus, exposure
     or white balance) and LOCKS. The same in FULL screen, where nothing is drawn. — **Status:** v105
 - **v105 (2.10.2026):** a tap anywhere on the picture serves the armed (orange) shape — square focus, circle exposure, triangle white balance — moving it there, correcting, locking; in the clean feed and under CTRL too (item 13). — **Status:** built
+
+## 2.10.2026, 04:30 — hide the outputs line; the status line names the armed shape and says where it locked
+
+> Also, you need to give me toggle in the settings to hide the streaming status display, which is USB, NDI, file, and so on. And always when the active triangle is there— triangle, square, circle— at the top status line, you need to write exposure circle. white balance triangle, focusing square, and then when it reads the value and locks the shape in the top status, you need to write exact number where is it locked, on which focus distance, what is the white balance color, and what is the exposure level.
+
+> after everything is done, please remind me to plug into the screen copy my notiphone 2a so you can freeze it for sure with some functions
+
+14. A settings switch that hides the outputs line (FILE USB NDI YT). — **Status:** v106
+15. The top status line names the armed shape ("focusing square", "exposure circle", "white balance triangle")
+    and, when it locks, the exact value: focus distance, white balance (K and gains), exposure (ISO, shutter, EV).
+    — **Status:** v106
+16. At the end: remind Marko to plug the Nothing Phone 2a into the screen copy, to test the freeze watch on a
+    phone that really freezes. — **Status:** reminder pending
