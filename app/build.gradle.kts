@@ -103,6 +103,8 @@ android {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
             res.srcDirs("src/main/res", versionIconDir)
+            // v113: what the camera and its sister monitor both speak (CameraCommand, CameraState)
+            java.srcDirs("src/main/java", "../shared/kotlin")
         }
     }
 

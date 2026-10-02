@@ -136,10 +136,28 @@ jobs:
           # versioning.md §2: the number is written at both ends of the filename.
           cp "$APK" "$V-mantra-manual-camera-v$V.apk"
 
+          # v113: THE SISTER APP, Mantra Monitor — the same gates over its own APK.
+          MON=monitor/build/outputs/apk/debug/monitor-debug.apk
+          unzip -l "$MON" | grep -q libndi_advanced.so \
+            || { echo "::error::NDI runtime missing from the monitor"; exit 1; }
+          unzip -l "$MON" | grep -q libndi_bridge.so \
+            || { echo "::error::JNI bridge missing from the monitor"; exit 1; }
+          "$APKSIGNER" verify --print-certs "$MON" > /tmp/mcerts.txt \
+            || { echo "::error::monitor APK is not signed"; exit 1; }
+          MFP=$(grep -m1 -oP 'SHA-256 digest: \K[0-9a-f]+' /tmp/mcerts.txt)
+          [ "$MFP" = "$EXPECTED" ] || { echo "::error::monitor signed with another key: $MFP"; exit 1; }
+          "$AAPT" dump badging "$MON" > /tmp/mbadging.txt
+          MCODE=$(grep -oP "versionCode='\K\d+" /tmp/mbadging.txt)
+          [ "$MCODE" = "$V" ] || { echo "::error::monitor version $MCODE, expected $V"; exit 1; }
+          echo "PASS  the monitor: NDI inside, the app's own key, version $V"
+          cp "$MON" "$V-mantra-monitor-v$V.apk"
+
       - uses: actions/upload-artifact@v4
         with:
           name: mantra-manual-camera-v${{ steps.version.outputs.v }}
-          path: ${{ steps.version.outputs.v }}-mantra-manual-camera-v${{ steps.version.outputs.v }}.apk
+          path: |
+            ${{ steps.version.outputs.v }}-mantra-manual-camera-v${{ steps.version.outputs.v }}.apk
+            ${{ steps.version.outputs.v }}-mantra-monitor-v${{ steps.version.outputs.v }}.apk
           if-no-files-found: error
 
       # The artefact is not delivered until it is downloadable without a token.
@@ -150,10 +168,11 @@ jobs:
         run: |
           V=${{ steps.version.outputs.v }}
           FILE="$V-mantra-manual-camera-v$V.apk"
+          MONITOR="$V-mantra-monitor-v$V.apk"
           gh release delete "v$V" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "v$V" "$FILE" \
+          gh release create "v$V" "$FILE" "$MONITOR" \
             --title "v$V" \
-            --notes "Mantra Manual Camera v$V. Signed with the permanent key, so it updates over any earlier build carrying the same key.
+            --notes "Mantra Manual Camera v$V, and its sister app Mantra Monitor v$V (an NDI monitor that will drive the camera). Both signed with the permanent key, so each updates over any earlier build carrying the same key.
 
           Certificate: $(cat fingerprint.txt)
 
