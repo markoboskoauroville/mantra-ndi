@@ -508,3 +508,4 @@ Needs the GPU stage (Settings → Picture path).
 26. Below: TABS instead of scrolling, sections named by what they are about: DISPLAY (everything shown on the
     screen: peaking, zebra, the outputs line…), CAMERA (everything about the camera), and the rest by subject.
     — **Status:** v111
+- **v111 (2.10.2026):** settings rebuilt: no title; QUICK row (torch that lights at once through the camera manager, FPS / BIT / RESOLUTION toggles, MIN, version); the three marks' icons with 25 % size drop-downs in one line; TABS CAMERA · OUTPUTS · DISPLAY · MORE. Camera screen: the status line spans the width and moves up when the outputs line is hidden (items 21–26). — **Status:** built

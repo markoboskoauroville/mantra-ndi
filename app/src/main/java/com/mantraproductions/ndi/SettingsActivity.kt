@@ -150,15 +150,44 @@ class SettingsActivity : AppCompatActivity() {
         val torch = findViewById<android.widget.ImageButton>(R.id.torch)
         fun paintTorch() = torch.setColorFilter(if (settings.torch) RailButton.GREEN else RailButton.GREY)
         paintTorch()
-        torch.setOnClickListener { settings.torch = !settings.torch; paintTorch() }
-        fun pct(x: Float, lo: Float, hi: Float) = (((x - lo) / (hi - lo)) * 100).toInt().coerceIn(0, 100)
-        fun of(p: Int, lo: Float, hi: Float) = lo + (hi - lo) * p / 100f
-        slider(R.id.squareSize, R.id.squareSizeValue, pct(settings.focusBoxSize, Mechanism.BOX_MIN, 1f),
-            label = { "${it}%" }, onSet = { settings.focusBoxSize = of(it, Mechanism.BOX_MIN, 1f) })
-        slider(R.id.circleSize, R.id.circleSizeValue, pct(settings.circleSize, 0.06f, 0.5f),
-            label = { "${it}%" }, onSet = { settings.circleSize = of(it, 0.06f, 0.5f) })
-        slider(R.id.triangleSize, R.id.triangleSizeValue, pct(settings.wbSize, 0.06f, 0.5f),
-            label = { "${it}%" }, onSet = { settings.wbSize = of(it, 0.06f, 0.5f) })
+        torch.setOnClickListener {
+            settings.torch = !settings.torch
+            paintTorch()
+            // v111: the light comes on NOW. While settings shows, the camera screen has let the camera go, so the
+            // phone's own torch switch works here; back on the camera, the camera takes the lamp over (v104).
+            lampNow(settings.torch)
+        }
+        // v111: the three marks in one line, each its icon and its size as a drop-down in steps of 25 % ("You go
+        // by 25% that's the scale"). 25 % is the smallest a mark may be, 100 % the largest.
+        val quarters = listOf("25%", "50%", "75%", "100%")
+        fun size(spinner: Int, icon: Int, glyph: RailButton.Glyph, now: Float, lo: Float, hi: Float, set: (Float) -> Unit) {
+            findViewById<RailButton>(icon).apply { this.glyph = glyph; state = RailButton.State.SHOWN; isClickable = false }
+            val sp = findViewById<android.widget.Spinner>(spinner)
+            sp.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, quarters)
+            val at = (((now - lo) / (hi - lo)) * 4f - 1f).let { Math.round(it) }.coerceIn(0, 3)
+            sp.setSelection(at, false)
+            sp.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, i: Int, id: Long) = set(lo + (hi - lo) * (i + 1) / 4f)
+                override fun onNothingSelected(p: android.widget.AdapterView<*>?) = Unit
+            }
+        }
+        size(R.id.sizeSquare, R.id.iconSquare, RailButton.Glyph.SQUARE, settings.focusBoxSize, Mechanism.BOX_MIN, 1f) { settings.focusBoxSize = it }
+        size(R.id.sizeCircle, R.id.iconCircle, RailButton.Glyph.CIRCLE, settings.circleSize, 0.06f, 0.5f) { settings.circleSize = it }
+        size(R.id.sizeTriangle, R.id.iconTriangle, RailButton.Glyph.TRIANGLE, settings.wbSize, 0.06f, 0.5f) { settings.wbSize = it }
+
+        // v111: THE TABS instead of one long scroll. The last one chosen comes back.
+        val tabs = listOf(R.id.tabCamera to R.id.pageCamera, R.id.tabOutputs to R.id.pageOutputs,
+            R.id.tabDisplay to R.id.pageDisplay, R.id.tabMore to R.id.pageMore)
+        val prefs = getSharedPreferences("settings_screen", MODE_PRIVATE)
+        fun showTab(n: Int) {
+            tabs.forEachIndexed { i, (t, pg) ->
+                findViewById<TextView>(t).setTextColor(if (i == n) RailButton.GREEN else RailButton.GREY)
+                findViewById<View>(pg).visibility = if (i == n) View.VISIBLE else View.GONE
+            }
+            prefs.edit().putInt("tab", n).apply()
+        }
+        tabs.forEachIndexed { i, (t, _) -> findViewById<TextView>(t).setOnClickListener { showTab(i) } }
+        showTab(prefs.getInt("tab", 0).coerceIn(0, tabs.size - 1))
 
         // Zebra from 50% to 100%.
         slider(
@@ -171,27 +200,9 @@ class SettingsActivity : AppCompatActivity() {
         val sourceName = findViewById<EditText>(R.id.sourceName)
         sourceName.setText(settings.sourceName)
 
-        // Depth: two words, not a switch with a paragraph.
-        //
-        // A toggle asks "do you want ten bit?", which is a question with a
-        // right answer, and then leaves the operator to work out what "off"
-        // means. Two labelled choices say what the camera will do.
-        val depth = findViewById<RadioGroup>(R.id.depth)
-        listOf(8 to "8-bit", 10 to "10-bit").forEach { (bits, label) ->
-            depth.addView(
-                RadioButton(this).apply {
-                    id = bits
-                    text = label
-                    textSize = 12f
-                    isChecked = (bits == 10) == settings.wantTenBit
-                }
-            )
-        }
-        depth.setOnCheckedChangeListener { _, id -> settings.wantTenBit = id == 10 }
-
-        // The resolutions this phone's lenses really publish, not a list of
-        // numbers somebody typed. A resolution a lens does not have is a
-        // session it refuses and a black screen the operator has to diagnose.
+        // v111, QUICK: frame rate, depth and resolution as ONE key each; a tap steps to the next value (Marko,
+        // 2.10.2026: "all buttons now will be toggle. So we need only one button per setting"). The lists are what
+        // this phone's lenses really publish, as before: a value a lens does not have is never offered.
         val pipeline = CameraPipeline(this)
         val offered = CameraCatalogue.lenses(this)
             .flatMap { pipeline.widthsOffered(it.id, it.physicalId) }
@@ -199,57 +210,38 @@ class SettingsActivity : AppCompatActivity() {
             .filter { it in intArrayOf(1280, 1920, 2560, 3840) }
             .sorted()
             .ifEmpty { listOf(1920) }
-        val resolutions = findViewById<RadioGroup>(R.id.resolution)
-        offered.forEach { width ->
-            resolutions.addView(
-                RadioButton(this).apply {
-                    id = width
-                    text = when (width) {
-                        3840 -> "4K UHD"
-                        2560 -> "1440p"
-                        1920 -> "1080p"
-                        else -> "720p"
-                    }
-                    textSize = 12f
-                    isChecked = width == settings.captureWidth
-                }
-            )
-        }
-        // A phone that has lost the lens it was set for falls back rather than
-        // showing nothing ticked and meaning something else.
         if (offered.none { it == settings.captureWidth }) {
-            val nearest = offered.minByOrNull { kotlin.math.abs(it - settings.captureWidth) }
-            if (nearest != null) {
-                settings.captureWidth = nearest
-                resolutions.check(nearest)
-            }
+            offered.minByOrNull { kotlin.math.abs(it - settings.captureWidth) }?.let { settings.captureWidth = it }
         }
-        resolutions.setOnCheckedChangeListener { _, id -> settings.captureWidth = id }
-
-        // Frames a second, from what the lenses will actually hold. Same rule
-        // as the resolutions: a rate a sensor cannot sustain is a session that
-        // runs at something else and says nothing.
-        val rates = CameraCatalogue.lenses(this)
+        fun ratesNow() = CameraCatalogue.lenses(this)
             .flatMap { pipeline.frameRatesOffered(it.id, it.physicalId, settings.captureWidth) }
-            .distinct()
-            .sorted()
-            .ifEmpty { listOf(30) }
-        val frameRate = findViewById<RadioGroup>(R.id.frameRate)
-        rates.forEach { fps ->
-            frameRate.addView(
-                RadioButton(this).apply {
-                    id = fps
-                    text = "$fps"
-                    textSize = 12f
-                    isChecked = fps == settings.fps
-                }
-            )
+            .distinct().sorted().ifEmpty { listOf(30) }
+        fun fitRate() {
+            val rates = ratesNow()
+            if (rates.none { it == settings.fps }) rates.minByOrNull { kotlin.math.abs(it - settings.fps) }?.let { settings.fps = it }
         }
-        if (rates.none { it == settings.fps }) {
-            val nearest = rates.minByOrNull { kotlin.math.abs(it - settings.fps) }
-            if (nearest != null) { settings.fps = nearest; frameRate.check(nearest) }
+        fitRate()
+        val fpsKey = findViewById<Button>(R.id.fpsToggle)
+        val depthKey = findViewById<Button>(R.id.depthToggle)
+        val resKey = findViewById<Button>(R.id.resToggle)
+        fun resName(w: Int) = when (w) { 3840 -> "4K"; 2560 -> "1440p"; 1920 -> "1080p"; else -> "720p" }
+        fun paintQuick() {
+            fpsKey.text = "${settings.fps} FPS"
+            depthKey.text = if (settings.wantTenBit) "10-BIT" else "8-BIT"
+            resKey.text = resName(settings.captureWidth)
         }
-        frameRate.setOnCheckedChangeListener { _, id -> settings.fps = id }
+        paintQuick()
+        fpsKey.setOnClickListener {
+            val rates = ratesNow()
+            settings.fps = rates[(rates.indexOf(settings.fps) + 1) % rates.size]
+            paintQuick()
+        }
+        depthKey.setOnClickListener { settings.wantTenBit = !settings.wantTenBit; paintQuick() }
+        resKey.setOnClickListener {
+            settings.captureWidth = offered[(offered.indexOf(settings.captureWidth) + 1) % offered.size]
+            fitRate()                      // a size can change which rates the lenses hold
+            paintQuick()
+        }
 
         slider(
             R.id.bitRate, R.id.bitRateValue,
@@ -484,6 +476,21 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun seconds(tenths: Int): String =
         if (tenths == 0) "snap" else String.format("%.1f s", tenths / 10.0)
+
+    /** The phone's lamp through CameraManager, on the first back camera that has one. Silent where it cannot. */
+    private fun lampNow(on: Boolean) {
+        val cm = getSystemService(android.hardware.camera2.CameraManager::class.java) ?: return
+        runCatching {
+            val id = cm.cameraIdList.firstOrNull { cid ->
+                val c = cm.getCameraCharacteristics(cid)
+                c.get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true &&
+                    c.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) ==
+                    android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
+            } ?: return
+            cm.setTorchMode(id, on)
+            Trace.control("torch", on, "settings, through the camera manager")
+        }.onFailure { Trace.refused("torch", "settings: " + Trace.describe(it)) }
+    }
 
     private fun slider(
         barId: Int,

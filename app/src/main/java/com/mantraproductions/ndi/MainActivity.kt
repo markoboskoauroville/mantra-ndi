@@ -706,6 +706,7 @@ class MainActivity : AppCompatActivity() {
         if (preview.isAvailable && !pipeline.isRunning) openCamera()
         // v106: the outputs line, shown or hidden in settings
         telemetry.visibility = if (!fullScreen && settings.showOutputs) View.VISIBLE else View.GONE
+        placeStatus()
         // v104: back from settings — the marks take their sizes from there, and the light follows its switch
         focusSquare.size = settings.focusBoxSize
         exposureCircle.size = settings.circleSize
@@ -2150,6 +2151,7 @@ class MainActivity : AppCompatActivity() {
         railRight.visibility = hidden
         status.visibility = hidden
         telemetry.visibility = if (!on && settings.showOutputs) View.VISIBLE else View.GONE
+        placeStatus()
         vu.visibility = hidden
         timecode.visibility = hidden
         // The zones and the focus box come back to whichever of them was up.
@@ -2449,6 +2451,17 @@ class MainActivity : AppCompatActivity() {
     private var focusLockedAt: String? = null
     private var exposureLockedAt: String? = null
     private var wbLockedAt: String? = null
+
+    /**
+     * v111: the status line sits right under the outputs line when that is shown, and at the very top when it is
+     * hidden — no gap (Marko, 2.10.2026: "when my outputs are gone, the status line has a gap").
+     */
+    private fun placeStatus() {
+        val lp = status.layoutParams as? android.view.ViewGroup.MarginLayoutParams ?: return
+        val dp = resources.displayMetrics.density
+        lp.topMargin = ((if (telemetry.visibility == View.VISIBLE) 22 else 2) * dp).toInt()
+        status.layoutParams = lp
+    }
 
     private fun markStatus(): String = when (settings.pinchTarget) {
         1 -> "EXPOSURE CIRCLE" + (exposureLockedAt?.let { " $it" } ?: "") + "  ·  "

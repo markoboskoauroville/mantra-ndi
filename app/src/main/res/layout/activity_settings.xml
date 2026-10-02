@@ -1,162 +1,282 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     The things decided once, off the camera screen.
+     SETTINGS, v111 (Marko, 2.10.2026): "This settings title is not needed ... in the area where there is this torch
+     ... there will be toggles for adjusting camera settings. These are quick settings, and down there are better
+     organized settings"; "I prefer to tab the interface rather than scrolling ... Above these tabs there is a quick
+     settings toggles, and that's our new user interface for settings."
 
-     Everything an operator touches during a take is a key on a rail, where it
-     can be reached without looking. What is here is what is set up beforehand,
-     plus the two things that have to live somewhere and do not belong over the
-     picture: the NDI attribution the licence requires, and the route that gets
-     the trace off the phone.
+     QUICK: the light, frame rate, bit depth, resolution — one key each, a tap steps to the next value — and the three
+     marks with their icons and a size in steps of 25 %. Then the TABS: CAMERA, OUTPUTS, DISPLAY, MORE. Only one tab's
+     page shows; a long page still scrolls inside itself.
 -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="@color/ink"
     android:fitsSystemWindows="true"
-    android:clipToPadding="false"
-    android:fillViewport="true">
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="8dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
-
-        <!--
-             The title, the one key that decides how much this screen says, and
-             the version.
-
-             The help text is worth having once and is in the way for ever
-             after, so MIN is a mode of the screen rather than a setting. The
-             version is here because it is the first thing he checks after an
-             install and it used to be at the bottom of a long scroll.
-        -->
-        <LinearLayout
-            android:layout_width="match_parent"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ImageButton
+            android:id="@+id/torch"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="light"
+            android:src="@drawable/ic_torch" />
+        <Button
+            android:id="@+id/fpsToggle"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingBottom="14dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/settings"
-                android:textColor="@color/sand"
-                android:textSize="20sp"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.08" />
-
-            <!-- v104: the light, the first thing in settings (grey off, green on) -->
-            <ImageButton
-                android:id="@+id/torch"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:background="@android:color/transparent"
-                android:contentDescription="light"
-                android:src="@drawable/ic_torch" />
-
-            <Button
-                android:id="@+id/minimal"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:text="@string/minimal"
-                android:textAllCaps="false"
-                android:textSize="11sp"
-                android:fontFamily="monospace" />
-
-            <TextView
-                android:id="@+id/headerVersion"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingStart="6dp"
-                android:fontFamily="monospace"
-                android:textSize="13sp"
-                android:textColor="@color/amber" />
-        </LinearLayout>
-
-        <!--
-             v91, THE SWITCHBOARD. "Four distinct, parallel destinations ...
-             independent, collapsible activation switches ... when a switch is
-             turned on, its configuration panel expands." A switch only ARMS a
-             destination; the record key on the camera starts every armed one
-             together, and stops them together.
-        -->
-        <!--
-             v104, THE FIRST THINGS (Marko, 2.10.2026: "the first thing important in the settings are something
-             I'm using all the time ... the focus size, then this round exposure window, and then light. After that
-             we have 8-bit/10-bit switch, and after that we have a resolution"). The light is the lamp at the top.
-        -->
-        <TextView style="@style/MantraLabel" android:text="FOCUS SQUARE" />
-        <TextView android:id="@+id/squareSizeValue" style="@style/MantraValue" />
-        <SeekBar android:id="@+id/squareSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-        <TextView style="@style/MantraLabel" android:text="EXPOSURE CIRCLE" />
-        <TextView android:id="@+id/circleSizeValue" style="@style/MantraValue" />
-        <SeekBar android:id="@+id/circleSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-        <TextView style="@style/MantraLabel" android:text="WHITE BALANCE TRIANGLE" />
-        <TextView android:id="@+id/triangleSizeValue" style="@style/MantraValue" />
-        <SeekBar android:id="@+id/triangleSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="30 FPS"
+            android:textAllCaps="false"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/sand"
+            android:fontFamily="monospace" />
+        <Button
+            android:id="@+id/depthToggle"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:baselineAligned="false"
-            android:paddingTop="18dp">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="3"
-                android:orientation="vertical">
-                <TextView style="@style/MantraLabel"
-                    android:paddingTop="0dp"
-                    android:text="@string/depth" />
-                <RadioGroup
-                    android:id="@+id/depth"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="5"
-                android:orientation="vertical">
-                <TextView style="@style/MantraLabel"
-                    android:paddingTop="0dp"
-                    android:text="@string/resolution" />
-                <RadioGroup
-                    android:id="@+id/resolution"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <TextView android:tag="hint" style="@style/MantraHint"
-            android:text="@string/depth_hint" />
-
-        <TextView style="@style/MantraLabel" android:text="@string/outputs" />
-        <!-- v106: "give me toggle in the settings to hide the streaming status display" -->
-        <Switch
-            android:id="@+id/showOutputs"
-            android:layout_width="match_parent"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="10-BIT"
+            android:textAllCaps="false"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/sand"
+            android:fontFamily="monospace" />
+        <Button
+            android:id="@+id/resToggle"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingTop="6dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="4K"
+            android:textAllCaps="false"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/sand"
+            android:fontFamily="monospace" />
+        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+        <Button
+            android:id="@+id/minimal"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="@string/minimal"
+            android:textAllCaps="false"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+        <TextView
+            android:id="@+id/headerVersion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="6dp"
             android:fontFamily="monospace"
             android:textSize="13sp"
-            android:textColor="@color/sand"
-            android:text="SHOW ON THE CAMERA" />
+            android:textColor="@color/amber" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp">
+            <com.mantraproductions.ndi.RailButton
+                android:id="@+id/iconSquare"
+                android:layout_width="40dp"
+                android:layout_height="40dp" />
+            <Spinner
+                android:id="@+id/sizeSquare"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content" />
+            <com.mantraproductions.ndi.RailButton
+                android:id="@+id/iconCircle"
+                android:layout_width="40dp"
+                android:layout_height="40dp" />
+            <Spinner
+                android:id="@+id/sizeCircle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content" />
+            <com.mantraproductions.ndi.RailButton
+                android:id="@+id/iconTriangle"
+                android:layout_width="40dp"
+                android:layout_height="40dp" />
+            <Spinner
+                android:id="@+id/sizeTriangle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="6dp">
+            <TextView
+                android:id="@+id/tabCamera"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:text="CAMERA" />
+            <TextView
+                android:id="@+id/tabOutputs"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:text="OUTPUTS" />
+            <TextView
+                android:id="@+id/tabDisplay"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:text="DISPLAY" />
+            <TextView
+                android:id="@+id/tabMore"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:text="MORE" />
+    </LinearLayout>
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/slate" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
+            <LinearLayout
+                android:id="@+id/pageCamera"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="visible">
+        <!-- v97: the picture path, and the stream's own bit rate on the GPU stage -->
+        <TextView style="@style/MantraLabel" android:text="@string/picture_path" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/picture_path_hint" />
+        <RadioGroup
+            android:id="@+id/picturePath"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+        <TextView android:tag="hint" style="@style/MantraHint"
+            android:text="@string/depth_hint" />
+        <!-- Focus -->
+        <TextView style="@style/MantraLabel" android:text="@string/focus" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/focus_hint" />
+        <TextView android:id="@+id/holdValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/hold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+        <TextView android:id="@+id/rackValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/rack"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+
+        <!-- v99: tracking focus, every parameter -->
+        <TextView style="@style/MantraLabel" android:text="@string/tracking" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/tracking_hint" />
+        <TextView android:id="@+id/trackSearchValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="25" />
+        <TextView android:id="@+id/trackEveryValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackEvery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="9" />
+        <TextView android:id="@+id/trackConfidenceValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackConfidence"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="75" />
+        <TextView android:id="@+id/trackToleranceValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackTolerance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="24" />
+        <TextView android:id="@+id/trackFollowValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/trackFollow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="90" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/pageOutputs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+        <TextView style="@style/MantraLabel" android:text="@string/outputs" />
         <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/outputs_hint" />
         <LinearLayout
             android:layout_width="match_parent"
@@ -333,33 +453,6 @@
             android:layout_height="1dp"
             android:layout_marginTop="16dp"
             android:background="@color/slate" />
-
-        <!-- v85: the LUT library, this lens's turn, zebra -->
-
-
-        <TextView style="@style/MantraLabel" android:text="@string/luts" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/luts_hint" />
-        <LinearLayout
-            android:id="@+id/lutList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-        <Button
-            android:id="@+id/addLut"
-            style="@style/MantraKey"
-            android:layout_width="match_parent"
-            android:text="@string/add_lut" />
-
-        <!-- v104: "Turn the preview" is gone; the turn is always 0 (Marko, 2.10.2026) -->
-
-        <TextView style="@style/MantraLabel" android:text="@string/zebra" />
-        <TextView android:id="@+id/zebraValue" style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/zebra"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="50" />
-
         <!--
              The wire first.
 
@@ -377,15 +470,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="98" />
-
-        <!-- v97: the picture path, and the stream's own bit rate on the GPU stage -->
-        <TextView style="@style/MantraLabel" android:text="@string/picture_path" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/picture_path_hint" />
-        <RadioGroup
-            android:id="@+id/picturePath"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal" />
         <TextView style="@style/MantraLabel" android:text="@string/stream_bitrate" />
         <TextView
             android:id="@+id/streamBitRateValue"
@@ -395,92 +479,45 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="48" />
-
-        <!--
-             Depth and size on one line.
-
-             Two radio strips side by side rather than two labelled blocks with
-             a paragraph each: they are both answers to "what shape is the
-             picture", they are both two or three words wide, and stacking them
-             cost half a screen for nothing.
-        -->
-
-
-        <!--
-             Frames a second: the first thing anybody sets on a camera.
-
-             It was 30, in the code, with nothing on any screen to say so —
-             which on a camera is not a default but a missing control. The list
-             is what this phone's lenses publish and will hold steady, for the
-             same reason the resolutions are: a rate the sensor cannot sustain
-             is a session that quietly runs at something else.
-        -->
-        <TextView style="@style/MantraLabel" android:text="@string/frame_rate" />
-        <TextView android:tag="hint" style="@style/MantraHint"
-            android:text="@string/frame_rate_hint" />
-        <RadioGroup
-            android:id="@+id/frameRate"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal" />
-
-
-
-
-
-        <!-- Bitrate -->
-
-
-        <!-- Focus -->
-        <TextView style="@style/MantraLabel" android:text="@string/focus" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/focus_hint" />
-        <TextView android:id="@+id/holdValue" style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/hold"
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/pageDisplay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+        <!-- v106: "give me toggle in the settings to hide the streaming status display" -->
+        <Switch
+            android:id="@+id/showOutputs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="100" />
-        <TextView android:id="@+id/rackValue" style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/rack"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100" />
+            android:paddingTop="6dp"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:textColor="@color/sand"
+            android:text="SHOW ON THE CAMERA" />
+        <!-- v85: the LUT library, this lens's turn, zebra -->
 
-        <!-- v99: tracking focus, every parameter -->
-        <TextView style="@style/MantraLabel" android:text="@string/tracking" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/tracking_hint" />
-        <TextView android:id="@+id/trackSearchValue" style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/trackSearch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="25" />
-        <TextView android:id="@+id/trackEveryValue" style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/trackEvery"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="9" />
-        <TextView android:id="@+id/trackConfidenceValue" style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/trackConfidence"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="75" />
-        <TextView android:id="@+id/trackToleranceValue" style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/trackTolerance"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="24" />
-        <TextView android:id="@+id/trackFollowValue" style="@style/MantraValue" />
-        <SeekBar
-            android:id="@+id/trackFollow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="90" />
 
+        <TextView style="@style/MantraLabel" android:text="@string/luts" />
+        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/luts_hint" />
+        <LinearLayout
+            android:id="@+id/lutList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+        <Button
+            android:id="@+id/addLut"
+            style="@style/MantraKey"
+            android:layout_width="match_parent"
+            android:text="@string/add_lut" />
+        <TextView style="@style/MantraLabel" android:text="@string/zebra" />
+        <TextView android:id="@+id/zebraValue" style="@style/MantraValue" />
+        <SeekBar
+            android:id="@+id/zebra"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="50" />
         <!-- Peaking -->
         <TextView style="@style/MantraLabel" android:text="@string/peaking" />
         <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/peaking_hint" />
@@ -496,9 +533,13 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:paddingTop="6dp" />
-
-
-
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/pageMore"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
         <!-- The trace -->
         <TextView style="@style/MantraLabel" android:text="@string/trace" />
         <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/trace_hint" />
@@ -535,5 +576,7 @@
             android:paddingTop="8dp"
             android:paddingBottom="20dp"
             android:textColor="@color/quiet" />
-    </LinearLayout>
-</ScrollView>
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
