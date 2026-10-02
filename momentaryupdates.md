@@ -618,3 +618,11 @@ Needs the GPU stage (Settings → Picture path).
 40. Test the manual white balance fader on the white paper: does the colour shift as it should, or unnaturally? Screenshots and a report. — **Status:** started
 - **v125 MEASURED (2.10.2026 10:02–10:03, Pixel 7, screen recordings):** the exposure circle walks smoothly (picture Y 81 → 61 over 2 s, no frame step over ~1/255), but in two ramps with a pause: the phone's tone curve answered 0.58 of the first move. The triangle's ramps are smooth but the first step overshot (red answered at 4.2): the paper went cool and came back. **v126:** exposure learns the answer; white balance starts cautious and keeps what it learnt; the glide path in the trace. — **Status:** built, v126 on the Pixel, not yet measured
 - **Item 40 MEASURED (10:08–10:09, v126, lens 3):** the WB fader is WRONG. From 6500K down to 3200K the paper turns yellow-olive instead of blue (b/g 0.97 → 0.80), green creeps in (+12), and below 3600K it turns back (b/g 0.80 → 0.87). Cause: the Pixel's published colour matrices give a nearly flat, non-monotonic model (B/G gain 1.00 at 6500K, 0.84 at 3600K, 0.91 at 3200K, where a real sensor needs about 1.6–2× more blue at tungsten); the fader carries the anchor along that wrong curve. Also the range is only 3200–6500K. — **Status:** reported, fix proposed
+
+> yes white balance is priority
+
+- Go-ahead on the fader fix (item 40), white balance first.
+
+> please do the ramping when I change my shutter speed in degrees from button to button
+
+41. The shutter angle keys (0° 90° 180° 270° 360°): moving from one to another ramps, eased in and out, like the marks. — **Status:** after the white balance fader
