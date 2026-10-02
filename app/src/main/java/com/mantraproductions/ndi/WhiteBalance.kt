@@ -45,8 +45,9 @@ object WhiteBalance {
      * measurement stops. Every point on the fader is now inside the sensor's
      * own calibrated span.
      */
-    const val COOLEST_KELVIN = 3200
-    const val WARMEST_KELVIN = 6500
+    /** v127: 2000K (candle) to 10000K (blue sky): v126's 3200–6500K stopped where a camera's dial goes on. */
+    const val COOLEST_KELVIN = 2000
+    const val WARMEST_KELVIN = 10000
 
     /**
      * Mired, the unit white balance actually behaves in.
@@ -406,6 +407,115 @@ object WhiteBalance {
      * mapped to Camera2's constant by the caller, so this file stays pure.
      */
     val PRESETS = intArrayOf(2700, 3000, 4000, 5500, 6500, 7500, 12000)
+
+    // --- the measured curve (v127) ---------------------------------------------
+
+    /**
+     * The presets the curve is measured from: incandescent, daylight, cloudy, shade. Not the fluorescents
+     * (their gains also correct the green of a tube, which is not a temperature) nor twilight (no one agrees
+     * what temperature it is).
+     */
+    val CALIBRATION_PRESETS = intArrayOf(0, 3, 4, 5)
+
+    /**
+     * The curve if it can be walked: sorted by temperature, at least two points, and blue falling as the
+     * temperature rises (a point that breaks that order is dropped), red not falling. Null otherwise.
+     */
+    fun usableCurve(curve: List<Pair<Int, DoubleArray>>?): List<Pair<Int, DoubleArray>>? {
+        if (curve == null) return null
+        val sorted = curve.filter { it.second.size >= 2 && it.second[0] > 0 && it.second[1] > 0 }.sortedBy { it.first }
+        val kept = mutableListOf<Pair<Int, DoubleArray>>()
+        for (p in sorted) {
+            val last = kept.lastOrNull()
+            if (last == null || (p.second[1] < last.second[1] && p.second[0] >= last.second[0] * 0.98 && p.first > last.first)) kept += p
+        }
+        if (kept.size < 2) return null
+        // a curve with no real spread is the fault this replaces
+        val spread = kotlin.math.ln(kept.first().second[1] / kept.last().second[1])
+        return if (spread < 0.1) null else kept
+    }
+
+    /** Red and blue gain over green at [kelvin]: straight between points in mired and log gain, the end slopes beyond. */
+    fun curveAt(curve: List<Pair<Int, DoubleArray>>, kelvin: Int): DoubleArray {
+        val m = mired(kelvin)
+        // mired falls as the temperature rises; walk the segments
+        val i = (0 until curve.size - 1).firstOrNull { kelvin <= curve[it + 1].first } ?: (curve.size - 2)
+        val (k0, g0) = curve[i]
+        val (k1, g1) = curve[i + 1]
+        val t = (m - mired(k0)) / (mired(k1) - mired(k0))
+        return DoubleArray(2) { c -> kotlin.math.exp(kotlin.math.ln(g0[c]) + (kotlin.math.ln(g1[c]) - kotlin.math.ln(g0[c])) * t) }
+    }
+
+    /** Where measured gains sit on the curve, by blue and red together, across the fader's range. */
+    fun curveKelvin(curve: List<Pair<Int, DoubleArray>>, measured: FloatArray): Int {
+        if (measured.size < 4 || measured[1] <= 0f) return 5600
+        val wantR = measured[0].toDouble() / measured[1]
+        val wantB = measured[3].toDouble() / measured[1]
+        var best = 5600
+        var bestError = Double.MAX_VALUE
+        var m = mired(WARMEST_KELVIN)
+        while (m <= mired(COOLEST_KELVIN) + 0.5) {
+            val k = (1_000_000.0 / m).toInt()
+            val g = curveAt(curve, k)
+            val e = sq(kotlin.math.ln(g[0] / wantR)) + 2 * sq(kotlin.math.ln(g[1] / wantB))
+            if (e < bestError) { bestError = e; best = k }
+            m += 1.0
+        }
+        return best.coerceIn(COOLEST_KELVIN, WARMEST_KELVIN)
+    }
+
+    /**
+     * The fader's gains: the camera's own answer, carried along the curve from the temperature it amounts to
+     * ([anchor]) to the one asked for. Red and blue move by the curve's own ratio; both greens stay exactly as
+     * the camera had them, so the move is warm to cool and never towards green or magenta.
+     */
+    fun alongCurve(curve: List<Pair<Int, DoubleArray>>, measured: FloatArray, anchor: Int, wanted: Int): FloatArray {
+        val from = curveAt(curve, anchor)
+        val to = curveAt(curve, wanted)
+        return floatArrayOf(
+            (measured[0] * to[0] / from[0]).toFloat().coerceIn(SPOT_MIN_GAIN, SPOT_MAX_GAIN),
+            measured[1], measured[2],
+            (measured[3] * to[1] / from[1]).toFloat().coerceIn(SPOT_MIN_GAIN, SPOT_MAX_GAIN)
+        )
+    }
+
+    /**
+     * The curve of the light itself, for a lens that measured none: the gains that make a light at each
+     * temperature white in linear Rec.709, von Kries. The direction and size of a real camera's move, if not
+     * its exact numbers.
+     */
+    private val physics: List<Pair<Int, DoubleArray>> by lazy {
+        intArrayOf(2000, 2500, 3000, 3500, 4000, 4500, 5000, 5600, 6500, 7500, 8500, 10000).map { k ->
+            val xyz = planckianXyz(k)
+            val r = 3.2406 * xyz[0] - 1.5372 * xyz[1] - 0.4986 * xyz[2]
+            val g = -0.9689 * xyz[0] + 1.8758 * xyz[1] + 0.0415 * xyz[2]
+            val b = 0.0557 * xyz[0] - 0.2040 * xyz[1] + 1.0570 * xyz[2]
+            k to doubleArrayOf(g / r.coerceAtLeast(1e-6), g / b.coerceAtLeast(1e-6))
+        }
+    }
+    fun physicsCurve(): List<Pair<Int, DoubleArray>> = physics
+
+    /** A published calibration is real when tungsten needs clearly more blue than daylight (and less red). */
+    fun calibrationIsReal(atTungsten: FloatArray, atDaylight: FloatArray): Boolean {
+        if (atTungsten.size < 4 || atDaylight.size < 4) return false
+        val blue = (atTungsten[3] / atTungsten[1]) / (atDaylight[3] / atDaylight[1])
+        val red = (atTungsten[0] / atTungsten[1]) / (atDaylight[0] / atDaylight[1])
+        return blue > 1.3 && red < 0.9
+    }
+
+    /** "2700:1.200,2.600;5500:…", for keeping a lens's curve. */
+    fun encodeCurve(curve: List<Pair<Int, DoubleArray>>): String =
+        curve.joinToString(";") { String.format(java.util.Locale.ROOT, "%d:%.4f,%.4f", it.first, it.second[0], it.second[1]) }
+
+    fun decodeCurve(text: String?): List<Pair<Int, DoubleArray>>? = text?.takeIf { it.isNotBlank() }?.let {
+        runCatching {
+            it.split(";").map { p ->
+                val (k, g) = p.split(":")
+                val (r, b) = g.split(",")
+                k.toInt() to doubleArrayOf(r.toDouble(), b.toDouble())
+            }
+        }.getOrNull()
+    }
 
     /** Which preset is nearest [kelvin], in mired, among those [available]. */
     fun nearestPreset(kelvin: Int, available: IntArray = IntArray(PRESETS.size) { it }): Int {

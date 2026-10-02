@@ -384,6 +384,7 @@ class MainActivity : AppCompatActivity() {
                     focus.resume()
                     // A new session is a new GPU stage: the mark is set again where it is.
                     if (tracking) ui.postDelayed({ if (tracking) startTrack() }, 400)
+                    loadWbCurve()
                     if (!wbMeasuredOnce) probeWhiteBalance()
                     refreshZones()
                     refreshKeys()
@@ -2108,6 +2109,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun nudge(index: Int, delta: Float) {
         val engine = pipeline.engine
+        // v127: a hand on the fader takes over from a preset's ramp, where it is
+        if (index == 0 || index == 1) glider?.cancel()
         when (index) {
             0 -> {
                 if (isoAuto) setParamAuto(0, false, quiet = true)
@@ -2182,8 +2185,40 @@ class MainActivity : AppCompatActivity() {
      * comes back is applied through the anchor, and the anchor is the very
      * measurement just taken.
      */
+    /** v127: which lenses have had their curve measured this run, and whether one is being measured now. */
+    private val curveTried = HashSet<String>()
+    private var calibrating = false
+
+    /** The open lens's measured white balance curve, from settings, onto the engine (or none). */
+    private fun loadWbCurve() {
+        pipeline.engine.presetCurve = WhiteBalance.usableCurve(WhiteBalance.decodeCurve(settings.wbCurve(lensKey())))
+    }
+
     private fun probeWhiteBalance() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
+        if (calibrating) return
+        // v127: a lens with no curve yet measures it first, once: its presets, a few frames each
+        val engine = pipeline.engine
+        val lens = lensKey()
+        if (engine.presetCurve == null && curveTried.add(lens)) {
+            say("Measuring this lens's white balance curve…")
+            calibrating = engine.calibratePresets { found ->
+                ui.post {
+                    calibrating = false
+                    val usable = WhiteBalance.usableCurve(found)
+                    if (usable != null && lensKey() == lens) {
+                        engine.presetCurve = usable
+                        settings.setWbCurve(lens, WhiteBalance.encodeCurve(usable))
+                        Trace.control("white balance curve", WhiteBalance.encodeCurve(usable), "kept for lens $lens")
+                    } else {
+                        Trace.refused("white balance curve", "the presets gave no usable curve (" +
+                            WhiteBalance.encodeCurve(found) + "): the physics of the light instead")
+                    }
+                    probeWhiteBalance()
+                }
+            }
+            if (calibrating) return
+        }
         say("Measuring white balance…")
         // v90: A on WB is a measurement, not a mode. *"When I press auto, it
         // will just stay auto for a few seconds until it finds the white
@@ -2294,11 +2329,18 @@ class MainActivity : AppCompatActivity() {
 
     private var glider: android.animation.ValueAnimator? = null
 
-    /** Moves a fader from [from] to [to], applying exposure on the way, then [land]s exactly. */
+    /**
+     * Moves a fader from [from] to [to], applying exposure on the way, then [land]s exactly.
+     *
+     * v127, THE RAMP: *"please do the ramping when I change my shutter speed in degrees from button to
+     * button"* (Marko, 2.10.2026). Over the ramp time, eased in and out (smootherstep), the fader's own
+     * travel being even in stops; v126 took a quarter of a second, too quick to be a hand. Zero snaps.
+     */
     private fun glide(from: Float, to: Float, step: (Float) -> Unit, land: () -> Unit) {
         glider?.cancel()
         glider = android.animation.ValueAnimator.ofFloat(from, to.coerceIn(0f, 1f)).apply {
-            duration = 250
+            duration = settings.focusRackMs.coerceAtLeast(0L)
+            interpolator = android.animation.TimeInterpolator { Mechanism.rampEase(it) }
             addUpdateListener {
                 step(it.animatedValue as Float)
                 applyDragExposure()

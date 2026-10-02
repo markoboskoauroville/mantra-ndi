@@ -37,6 +37,10 @@ class Settings(context: Context) {
         get() = prefs.getLong(HOLD, 2000L)
         set(value) = prefs.edit().putLong(HOLD, value.coerceIn(0L, 10_000L)).apply()
 
+    /** v127: a lens's measured white balance curve ([WhiteBalance.encodeCurve]), by camera and lens. */
+    fun wbCurve(lens: String): String? = prefs.getString("wbCurve.$lens", null)
+    fun setWbCurve(lens: String, curve: String) = prefs.edit().putString("wbCurve.$lens", curve).apply()
+
     /** How long a rack takes. Zero is a snap, for anybody who wants a phone. */
     var focusRackMs: Long
         get() = prefs.getLong(RACK, 2000L)

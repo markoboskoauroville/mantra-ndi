@@ -1,6 +1,7 @@
 package com.mantraproductions.ndi
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,15 +34,79 @@ class WhiteBalanceTest {
      * works in and the range the measurement covers.
      */
     @Test
-    fun `the fader covers tungsten to daylight and no further`() {
-        assertEquals(3200, WhiteBalance.COOLEST_KELVIN)
-        assertEquals(6500, WhiteBalance.WARMEST_KELVIN)
-        // The two numbers an operator actually works in are both on it.
-        assertTrue(WhiteBalance.travel(3200) < 0.001f)
+    fun `the fader covers a candle to the blue sky`() {
+        // v127: the curve is measured (or physics), not the calibration's two points, so it goes on past them
+        assertEquals(2000, WhiteBalance.COOLEST_KELVIN)
+        assertEquals(10000, WhiteBalance.WARMEST_KELVIN)
+        assertTrue(WhiteBalance.travel(3200) in 0.1f..0.99f)
         assertTrue(WhiteBalance.travel(5600) in 0.1f..0.99f)
-        // And every point of it is inside his sensor's calibrated span.
-        assertTrue(WhiteBalance.COOLEST_KELVIN >= 2856)
-        assertTrue(WhiteBalance.WARMEST_KELVIN <= 6504 + 1)
+    }
+
+    // --- the measured curve (v127) ---------------------------------------------
+
+    /** A curve the shape a real sensor's presets have: tungsten wants much more blue and less red. */
+    private val real = listOf(
+        2700 to doubleArrayOf(1.30, 2.70), 5500 to doubleArrayOf(2.00, 1.55),
+        6500 to doubleArrayOf(2.15, 1.42), 7500 to doubleArrayOf(2.25, 1.35)
+    )
+
+    @Test
+    fun `down the fader the paper goes blue, never yellow`() {
+        val camera = floatArrayOf(2.056f, 1f, 1f, 2.027f)
+        val anchor = WhiteBalance.curveKelvin(real, camera)
+        var lastBlue = 0f
+        var lastRed = Float.MAX_VALUE
+        // from the warm end of the dial to the cool end: tungsten setting = most blue gain
+        for (k in intArrayOf(2000, 2700, 3200, 3600, 4500, 5600, 6500, 7500, 10000)) {
+            val g = WhiteBalance.alongCurve(real, camera, anchor, k)
+            if (lastBlue != 0f) {
+                assertTrue("${k}K: blue gain must fall as the setting rises", g[3] < lastBlue)
+                assertTrue("${k}K: red gain must rise as the setting rises", g[0] > lastRed)
+            }
+            lastBlue = g[3]; lastRed = g[0]
+            // and no green creeps in: both greens are the camera's own
+            assertEquals(1f, g[1], 0f); assertEquals(1f, g[2], 0f)
+        }
+    }
+
+    @Test
+    fun `at the camera's own temperature the picture does not move`() {
+        val camera = floatArrayOf(2.0f, 1f, 1f, 1.55f)
+        val anchor = WhiteBalance.curveKelvin(real, camera)
+        val g = WhiteBalance.alongCurve(real, camera, anchor, anchor)
+        assertEquals(2.0f, g[0], 1e-4f); assertEquals(1.55f, g[3], 1e-4f)
+        assertTrue("anchor $anchor", anchor in 5300..5700)
+    }
+
+    @Test
+    fun `the Pixel's flat calibration is refused, a real one kept`() {
+        // what the Pixel 7's published matrices give (measured 2.10.2026): B/G 0.907 at 3200K, 1.000 at 6500K
+        assertFalse(WhiteBalance.calibrationIsReal(floatArrayOf(1.004f, 1f, 1f, 0.907f), floatArrayOf(1.001f, 1f, 1f, 1.0f)))
+        assertTrue(WhiteBalance.calibrationIsReal(floatArrayOf(1.30f, 1f, 1f, 2.70f), floatArrayOf(2.15f, 1f, 1f, 1.42f)))
+        // a measured curve with no spread, or blue rising with temperature, is not walked
+        assertEquals(null, WhiteBalance.usableCurve(listOf(3200 to doubleArrayOf(1.0, 0.91), 6500 to doubleArrayOf(1.0, 1.0))))
+        assertEquals(4, WhiteBalance.usableCurve(real)?.size)
+    }
+
+    @Test
+    fun `the physics curve goes the right way everywhere`() {
+        val c = WhiteBalance.physicsCurve()
+        assertEquals(c.size, WhiteBalance.usableCurve(c)?.size)
+        for (i in 1 until c.size) {
+            assertTrue(c[i].second[1] < c[i - 1].second[1])
+            assertTrue(c[i].second[0] > c[i - 1].second[0])
+        }
+    }
+
+    @Test
+    fun `a kept curve comes back the same`() {
+        val back = WhiteBalance.decodeCurve(WhiteBalance.encodeCurve(real))!!
+        assertEquals(real.size, back.size)
+        for (i in real.indices) {
+            assertEquals(real[i].first, back[i].first)
+            assertEquals(real[i].second[1], back[i].second[1], 1e-4)
+        }
+        assertEquals(null, WhiteBalance.decodeCurve("nonsense"))
     }
 
     @Test

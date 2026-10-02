@@ -549,6 +549,7 @@ class CaptureEngine(private val context: Context) {
                     autoTransform = it
                 }
             }
+            if (onCalibrated != null) calibrationFrame(lensResult)
             // The probe: count the frames down and answer once the camera's
             // own algorithm has had time to settle on this light.
             if (probeFrames > 0) {
@@ -1426,6 +1427,65 @@ class CaptureEngine(private val context: Context) {
      * temperature that comes back is applied through the anchor and the anchor
      * is the very measurement just taken.
      */
+    /**
+     * THE MEASURED CURVE (v127). The fader's shape, from this lens's own presets.
+     *
+     * v126 measured on white paper (2.10.2026 10:09): the published calibration of the Pixel 7 gives a nearly
+     * flat, non-monotonic curve, so the fader turned the paper yellow-olive where it should turn blue, and back
+     * again below 3600K. The presets are tuned by the phone's makers for this sensor: each one is held for a
+     * few frames and the gains it uses are read. That is a real curve, red and blue gain against temperature,
+     * which the fader then walks along. Done once per lens and kept ([presetCurve]).
+     */
+    @Volatile var presetCurve: List<Pair<Int, DoubleArray>>? = null
+    private var calibQueue: MutableList<Pair<Int, Int>> = mutableListOf()
+    private val calibFound = mutableListOf<Pair<Int, DoubleArray>>()
+    @Volatile private var calibFrames = 0
+    @Volatile private var onCalibrated: ((List<Pair<Int, DoubleArray>>) -> Unit)? = null
+
+    fun calibratePresets(onDone: (List<Pair<Int, DoubleArray>>) -> Unit): Boolean {
+        val request = builder ?: return false
+        val available = awbPresetsAvailable()
+        calibQueue = WhiteBalance.CALIBRATION_PRESETS.filter { it in available }
+            .map { WhiteBalance.PRESETS[it] to presetMode(it) }.toMutableList()
+        if (calibQueue.size < 2) return false
+        calibFound.clear()
+        manualWhiteBalance = false
+        onCalibrated = onDone
+        Trace.control("white balance curve", "measuring the presets", calibQueue.joinToString { "${it.first}K" })
+        return nextPreset(request)
+    }
+
+    private fun nextPreset(request: CaptureRequest.Builder): Boolean {
+        val (_, mode) = calibQueue.firstOrNull() ?: return false
+        setWb(request, CaptureRequest.CONTROL_AWB_MODE, mode)
+        setWb(request, CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY)
+        calibFrames = 0
+        return apply()
+    }
+
+    /** One frame of the calibration: the preset's gains once it has been on for a few frames. */
+    private fun calibrationFrame(lensResult: CaptureResult) {
+        val (kelvin, mode) = calibQueue.firstOrNull() ?: return
+        if (lensResult.get(CaptureResult.CONTROL_AWB_MODE) != mode) { if (++calibFrames > 60) finishPreset(kelvin, null); return }
+        if (++calibFrames < CALIB_FRAMES) return
+        finishPreset(kelvin, lensResult.get(CaptureResult.COLOR_CORRECTION_GAINS))
+    }
+
+    private fun finishPreset(kelvin: Int, g: RggbChannelVector?) {
+        if (g != null && g.greenEven > 0f) {
+            calibFound += kelvin to doubleArrayOf((g.red / g.greenEven).toDouble(), (g.blue / g.greenEven).toDouble())
+        }
+        Trace.state(String.format(java.util.Locale.ROOT, "white balance curve: preset %dK, gains %s", kelvin,
+            g?.let { String.format(java.util.Locale.ROOT, "%.3f/%.3f/%.3f", it.red, it.greenEven, it.blue) } ?: "NOT REPORTED"))
+        calibQueue.removeAt(0)
+        val request = builder
+        if (calibQueue.isNotEmpty() && request != null && nextPreset(request)) return
+        val done = onCalibrated
+        onCalibrated = null
+        calibQueue.clear()
+        done?.invoke(calibFound.toList())
+    }
+
     fun probeWhiteBalance(frames: Int = 90, onResult: (Int?) -> Unit): Boolean {
         val request = builder ?: run {
             Trace.refused("white balance probe", "the camera has no request to change")
@@ -1461,6 +1521,9 @@ class CaptureEngine(private val context: Context) {
      */
     fun measuredKelvin(): Int? {
         val measured = autoGains ?: return null
+        // v127: on the measured curve when there is one, else on the physics of the light
+        WhiteBalance.usableCurve(presetCurve)?.let { return WhiteBalance.curveKelvin(it, measured) }
+        if (!calibrationTrusted()) return WhiteBalance.curveKelvin(WhiteBalance.physicsCurve(), measured)
         val colour = colourCharacteristics() ?: return null
         val cm1 = matrix(colour.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1)) ?: return null
         val cm2 = matrix(colour.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2)) ?: cm1
@@ -1473,6 +1536,21 @@ class CaptureEngine(private val context: Context) {
         return WhiteBalance.anchorKelvin(measured) { k ->
             WhiteBalance.mix(cm1, cm2, WhiteBalance.blend(k, k1, k2))
         }
+    }
+
+    /**
+     * v127: is the published calibration a real one? On the Pixel 7 it puts tungsten and daylight at nearly
+     * the same gains (a real sensor needs well over 1.3x more blue at tungsten): then it is not used for the
+     * fader's shape.
+     */
+    fun calibrationTrusted(): Boolean {
+        val colour = colourCharacteristics() ?: return false
+        val cm1 = matrix(colour.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1)) ?: return false
+        val cm2 = matrix(colour.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2)) ?: cm1
+        val k1 = WhiteBalance.kelvinForIlluminant(colour.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1) ?: 17)
+        val k2 = WhiteBalance.kelvinForIlluminant(colour.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT2)?.toInt() ?: 21)
+        val at = { k: Int -> WhiteBalance.gains(k, WhiteBalance.mix(cm1, cm2, WhiteBalance.blend(k, k1, k2))) }
+        return WhiteBalance.calibrationIsReal(at(3000), at(6500))
     }
 
     /** The presets this camera offers, as indices into [WhiteBalance.PRESETS]. */
@@ -1676,6 +1754,32 @@ class CaptureEngine(private val context: Context) {
         val colour = colourCharacteristics()
         val wanted = kelvin.coerceIn(WhiteBalance.COOLEST_KELVIN, WhiteBalance.WARMEST_KELVIN)
 
+        // v127: along the measured curve (or the physics of the light when the calibration is not to be
+        // trusted), carried from the camera's own answer; only red and blue move, so no green creeps in
+        val measuredAnchor = autoGains
+        val curve = WhiteBalance.usableCurve(presetCurve) ?: if (!calibrationTrusted()) WhiteBalance.physicsCurve() else null
+        if (curve != null && measuredAnchor != null && !gainsIgnored) {
+            val anchor = WhiteBalance.curveKelvin(curve, measuredAnchor)
+            val gains = WhiteBalance.alongCurve(curve, measuredAnchor, anchor, wanted)
+            val transform = autoTransform
+            setWb(request, CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+            setWb(request, CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
+            setWb(request, CaptureRequest.COLOR_CORRECTION_GAINS, RggbChannelVector(gains[0], gains[1], gains[2], gains[3]))
+            if (transform != null) setWb(request, CaptureRequest.COLOR_CORRECTION_TRANSFORM, transformOf(transform))
+            sentTransform = transform
+            sentGains = gains.copyOf()
+            checkFrames = GAIN_CHECK_FRAMES
+            manualWhiteBalance = true
+            val ok = apply()
+            whiteBalanceIsContinuous = ok
+            lastAnchorKelvin = anchor
+            Trace.control("white balance", String.format(java.util.Locale.ROOT, "%dK on the %s curve from the camera's %dK",
+                wanted, if (curve === WhiteBalance.physicsCurve()) "physics" else "measured", anchor),
+                if (ok) String.format(java.util.Locale.ROOT, "gains %.3f/%.3f/%.3f", gains[0], gains[1], gains[3]) else "refused")
+            if (ok) return true
+            manualWhiteBalance = false
+        }
+
         if (supportsContinuousWhiteBalance() && colour != null && !gainsIgnored) {
             val k1 = WhiteBalance.kelvinForIlluminant(
                 colour.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1) ?: 17
@@ -1877,6 +1981,8 @@ class CaptureEngine(private val context: Context) {
         const val AE_MAX_FRAMES = 60
         /** v125: a glide that shows no scan has this long to say it is already there; then 6 s at most. */
         const val GLIDE_MIN_FRAMES = 15
+        /** v127: frames a preset is held before its gains are read. */
+        const val CALIB_FRAMES = 10
         const val GLIDE_MAX_FRAMES = 180
         const val AE_MIN_FRAMES = 6
         const val FREEZE_MS = 1200L
