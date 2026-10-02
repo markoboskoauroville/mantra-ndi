@@ -519,3 +519,12 @@ Needs the GPU stage (Settings → Picture path).
 27. The two bit rates move to the CAMERA tab, labelled RECORDING and STREAMING (the number says Mbit/s). — **Status:** v112
 28. Settings margins: nothing touches the screen's edges; switches not glued to the right. — **Status:** v112
 - **v112 (2.10.2026):** RECORDING and STREAMING (the two bit rates) open the CAMERA tab; settings margins 28 dp inside the bars' insets (items 27, 28). — **Status:** proven on his Pixel 05:21 (CAMERA opens with RECORDING 50 Mbit/s and STREAMING 16 Mbit/s; OUTPUTS and FILE inset, switches off the edge)
+
+## 2.10.2026, 05:25 — the sister app: an NDI monitor that remote-controls this camera
+
+> After building this, please make a sister app. A sister app is just one NDI monitor which can connect to this camera when NDI is enabled, and then user choose this NDI stream. So user can choose NDI stream very simple, double tapping in the middle of the screen. It reads all the streams from the network And user can choose this camera, and then this camera is just giving all the same interface to remote user, but nothing is recorded. Everything is remote controlling. So let's build NDI monitor for this camera and any, and any other NDI stream in the network. This camera is just one of NDI streams, but since we have its code, we can automatically go to remote controlling mode.
+
+29. A SISTER APP: an NDI monitor for any NDI source on the network; a double tap in the middle lists the sources
+    and one is chosen. When the source is this camera, the monitor shows the camera's whole interface and drives
+    it remotely (nothing is recorded on the monitor). REBUILD.md's Phase 4 (remote control over NDI metadata) and
+    Phase 5 (monitor). — **Status:** open; platform to confirm with Marko
