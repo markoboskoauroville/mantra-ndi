@@ -24,6 +24,7 @@ import com.mantraproductions.ndi.CameraState
 import com.mantraproductions.ndi.MonitorEngine
 import com.mantraproductions.ndi.NdiFinder
 import com.mantraproductions.ndi.NdiReceiver
+import com.mantraproductions.ndi.RailButton
 import kotlin.concurrent.thread
 
 /**
@@ -46,6 +47,13 @@ class MonitorActivity : Activity() {
     private var output: Surface? = null
     private lateinit var turnKey: TextView
     private var turns = 0
+    // v117, REMOTE CONTROL: the camera's own keys, top and bottom, and its marks over the picture
+    private lateinit var railTop: LinearLayout
+    private lateinit var railBottom: LinearLayout
+    private lateinit var overlay: MarksOverlay
+    private var fitMatrix: Matrix? = null
+    private var keysShown = ""
+    private var remote = false
     private lateinit var status: TextView
     private lateinit var picker: ScrollView
     private lateinit var list: LinearLayout
@@ -69,7 +77,13 @@ class MonitorActivity : Activity() {
             typeface = Typeface.MONOSPACE; gravity = Gravity.CENTER
             setBackgroundColor(Color.parseColor("#66000000")); setPadding(dp(6), dp(3), dp(6), dp(3))
         }
+        overlay = MarksOverlay(this)
+        root.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(status, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP).apply { topMargin = dp(28) })
+        railTop = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.BLACK); visibility = View.GONE }
+        railBottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.BLACK); visibility = View.GONE }
+        root.addView(railTop, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(56), Gravity.TOP).apply { topMargin = dp(24) })
+        root.addView(railBottom, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(56), Gravity.BOTTOM).apply { bottomMargin = dp(48) })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(40), dp(24), dp(16)) }
         picker = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#E60B0D10")); visibility = View.GONE; addView(list)
@@ -91,6 +105,15 @@ class MonitorActivity : Activity() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 val w = root.width.toFloat(); val h = root.height.toFloat()
                 if (e.x in w * 0.25f..w * 0.75f && e.y in h * 0.25f..h * 0.75f) showPicker(true)
+                return true
+            }
+            // v117: in remote mode a single tap goes to the camera, which moves its armed mark there and corrects
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                if (!remote) return false
+                val inv = Matrix(); if (fitMatrix?.invert(inv) != true) return true
+                val p = floatArrayOf(e.x, e.y); inv.mapPoints(p)
+                val u = p[0] / surface.width; val v = p[1] / surface.height
+                if (u in 0f..1f && v in 0f..1f) NdiReceiver.sendCommand(CameraCommand(tapX = u, tapY = v))
                 return true
             }
             override fun onDown(e: MotionEvent) = true
@@ -194,6 +217,8 @@ class MonitorActivity : Activity() {
         m.postScale(scale, scale)
         m.postTranslate(w / 2f, h / 2f)
         surface.setTransform(m)
+        fitMatrix = m
+        overlay.toScreen = m
         turnKey.setTextColor(if (turns != 0) Color.parseColor("#33D17A") else Color.parseColor("#7A8087"))
     }
 
@@ -201,6 +226,9 @@ class MonitorActivity : Activity() {
         engine?.stop()
         current = source
         turns = prefs.getInt("turns:$source", 0)
+        remote = false; keysShown = ""; railTop.visibility = View.GONE; railBottom.visibility = View.GONE
+        overlay.marks = emptyList(); turnKey.visibility = View.VISIBLE
+        (status.layoutParams as FrameLayout.LayoutParams).topMargin = dp(28); status.requestLayout()
         fittedW = 0; fittedH = 0
         cameraSeen = false
         prefs.edit().putString("source", source).apply()
@@ -217,12 +245,54 @@ class MonitorActivity : Activity() {
         }, 1500)
     }
 
-    @Suppress("UNUSED_PARAMETER")
+    /**
+     * v117: a Mantra camera answered. From now on the monitor wears its interface: the same keys (RailButton, shared
+     * with the camera), its status line, its marks; and it stands the picture up as the camera holds it.
+     */
     private fun onCamera(st: CameraState) {
         if (!cameraSeen) {
-            cameraSeen = true
-            say("MANTRA CAMERA — remote control comes in the next build")
+            cameraSeen = true; remote = true; turnKey.visibility = View.GONE
+            // the status line goes under the camera's top rail
+            (status.layoutParams as FrameLayout.LayoutParams).topMargin = dp(24 + 56 + 2); status.requestLayout()
         }
+        if (st.turns != turns) { turns = st.turns; fit() }
+        status.text = st.status.ifEmpty { st.cameraName }
+        if (st.keys != keysShown) { keysShown = st.keys; drawKeys(st.keys) }
+        overlay.marks = st.marks.split("|").mapNotNull { m ->
+            val f = m.split(","); if (f.size < 7) null else runCatching {
+                MarksOverlay.Mark(f[0].toInt(), f[1].toFloat(), f[2].toFloat(), f[3].toFloat(), f[4].toFloat(), f[5].toInt(), f[6] == "1")
+            }.getOrNull()
+        }
+    }
+
+    /** The camera's keys, the left rail on top and the right rail at the bottom, each a tap that presses it there. */
+    private fun drawKeys(line: String) {
+        val parts = line.split("|")
+        val split = parts.indexOf("--").let { if (it < 0) parts.size else it }
+        fun fill(rail: LinearLayout, items: List<String>) {
+            rail.removeAllViews()
+            for (it in items) {
+                val f = it.split("~"); if (f.size < 4) continue
+                val name = f[0]
+                val key = RailButton(this).apply {
+                    label = f[1]
+                    sub = f[2].ifEmpty { null }
+                    state = runCatching { RailButton.State.valueOf(f[3]) }.getOrDefault(RailButton.State.OFF)
+                    tint = f.getOrNull(4)?.toIntOrNull()
+                    glyph = when (name) {
+                        "MARK0" -> RailButton.Glyph.SQUARE; "MARK1" -> RailButton.Glyph.CIRCLE; "MARK2" -> RailButton.Glyph.TRIANGLE
+                        "gear" -> RailButton.Glyph.GEAR; "camera" -> RailButton.Glyph.CAMERA
+                        else -> RailButton.Glyph.NONE
+                    }
+                    marked = false
+                    setOnClickListener { NdiReceiver.sendCommand(CameraCommand(key = name)) }
+                }
+                rail.addView(key, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+            }
+            rail.visibility = if (rail.childCount > 0) View.VISIBLE else View.GONE
+        }
+        fill(railTop, parts.take(split))
+        fill(railBottom, parts.drop(split + 1))
     }
 
     private fun say(text: String) {

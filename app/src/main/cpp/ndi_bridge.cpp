@@ -386,3 +386,33 @@ Java_com_mantraproductions_ndi_NdiSender_nativeTally(JNIEnv*, jobject, jint time
     if (tally.on_preview) result |= 2;
     return result;
 }
+
+/**
+ * v117, REMOTE CONTROL: a command a receiver (Mantra Monitor) sent up this source, or null. Polled, never blocking
+ * (timeout 0, under the sender's lock), so it can never hold up a video frame nor outlive a sender being torn down.
+ */
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_mantraproductions_ndi_NdiSender_nativePollMetadata(JNIEnv* env, jobject) {
+    std::lock_guard<std::mutex> lock(g_send_mutex);
+    if (!g_send_instance) return nullptr;
+    NDIlib_metadata_frame_t frame = {};
+    if (NDIlib_send_capture(g_send_instance, &frame, 0) != NDIlib_frame_type_metadata) return nullptr;
+    jstring out = frame.p_data ? env->NewStringUTF(frame.p_data) : nullptr;
+    NDIlib_send_free_metadata(g_send_instance, &frame);
+    return out;
+}
+
+/** v117: the camera's state, down the wire to every receiver, as one metadata frame. */
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_mantraproductions_ndi_NdiSender_nativeSendMetadata(JNIEnv* env, jobject, jstring xml) {
+    std::lock_guard<std::mutex> lock(g_send_mutex);
+    if (!g_send_instance || xml == nullptr) return JNI_FALSE;
+    const char* data = env->GetStringUTFChars(xml, nullptr);
+    NDIlib_metadata_frame_t frame = {};
+    frame.length = (int) strlen(data) + 1;
+    frame.timecode = NDIlib_send_timecode_synthesize;
+    frame.p_data = const_cast<char*>(data);
+    NDIlib_send_send_metadata(g_send_instance, &frame);
+    env->ReleaseStringUTFChars(xml, data);
+    return JNI_TRUE;
+}

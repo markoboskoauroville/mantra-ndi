@@ -110,5 +110,14 @@ object NdiSender {
         width: Int, height: Int, ptsUs: Long
     )
     private external fun nativeConnections(timeoutMs: Int): Int
+
+    /** v117, REMOTE CONTROL: the next command a monitor sent up this source, or null. Never blocks. */
+    fun pollCommand(): String? = if (available) runCatching { nativePollMetadata() }.getOrNull() else null
+
+    /** v117: the camera's state to every receiver. */
+    fun sendState(xml: String): Boolean = if (available) runCatching { nativeSendMetadata(xml) }.getOrDefault(false) else false
+
+    private external fun nativePollMetadata(): String?
+    private external fun nativeSendMetadata(xml: String): Boolean
     private external fun nativeTally(timeoutMs: Int): Int
 }

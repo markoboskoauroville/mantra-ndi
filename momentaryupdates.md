@@ -565,3 +565,10 @@ Needs the GPU stage (Settings → Picture path).
 
 32. REMOTE CONTROL is the priority: the monitor drives the camera. The camera stays on the Nothing (works without
     log); close it there and bring the monitor up. — **Status:** started
+- **v117 (2.10.2026): REMOTE CONTROL.** The camera reads commands from the monitor 10×/s (NDI metadata, polled
+  without blocking under the sender's lock) and does exactly what its own key or tap does; twice a second it sends
+  its state: keys (name, label, whisper, state, tint), status line, marks in stream coordinates, the armed mark,
+  the turn. The monitor wears that interface: the camera's own RailButton (now shared) top and bottom, the marks
+  over the picture, the status line; a key tap presses it on the camera, a picture tap goes to the camera's armed
+  mark (focus / exposure / white balance there), the turn follows the camera. Nothing is recorded on the monitor.
+  RemoteTest: the vocabulary round-trips. — **Status:** built, to test between the phones

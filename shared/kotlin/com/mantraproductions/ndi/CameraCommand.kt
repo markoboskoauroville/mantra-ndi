@@ -33,7 +33,16 @@ data class CameraCommand(
     /** "start" or "stop" */
     val record: String? = null,
     /** Ask the camera to report its current state back. */
-    val requestState: Boolean = false
+    val requestState: Boolean = false,
+    /**
+     * v117, REMOTE CONTROL: a key of the camera's rails pressed from the monitor, by the name its own key shows
+     * ("LOG", "M", "AF", "L", "L2", "CTRL", "FULL", "MARK0".."MARK2", "REC", "PEAK"…). The camera does exactly what its
+     * own key does, so the remote can do everything the camera can and nothing it cannot.
+     */
+    val key: String? = null,
+    /** v117: a tap on the picture, in the STREAM's coordinates (fractions of the NDI frame); the camera turns it. */
+    val tapX: Float? = null,
+    val tapY: Float? = null
 ) {
     fun toXml(): String {
         val sb = StringBuilder("<$ROOT")
@@ -52,6 +61,9 @@ data class CameraCommand(
         logCurve?.let { sb.append(" log=\"$it\"") }
         record?.let { sb.append(" record=\"$it\"") }
         if (requestState) sb.append(" request_state=\"1\"")
+        key?.let { sb.append(" key=\"${esc(it)}\"") }
+        tapX?.let { sb.append(" tap_x=\"$it\"") }
+        tapY?.let { sb.append(" tap_y=\"$it\"") }
         sb.append("/>")
         return sb.toString()
     }
@@ -76,9 +88,16 @@ data class CameraCommand(
                 focusAuto = attr(xml, "focus_auto")?.let { it == "1" },
                 logCurve = attr(xml, "log"),
                 record = attr(xml, "record"),
-                requestState = attr(xml, "request_state") == "1"
+                requestState = attr(xml, "request_state") == "1",
+                key = attr(xml, "key")?.let { unesc(it) },
+                tapX = attr(xml, "tap_x")?.toFloatOrNull(),
+                tapY = attr(xml, "tap_y")?.toFloatOrNull()
             )
         }
+
+        /** XML attribute escaping, so a status line with quotes or ampersands cannot break the frame. */
+        fun esc(t: String) = t.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+        fun unesc(t: String) = t.replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
 
         private fun attr(xml: String, name: String): String? {
             val marker = "$name=\""
@@ -110,7 +129,20 @@ data class CameraState(
     val whiteBalanceSupported: Boolean = false,
     val whiteBalanceKelvin: Int? = null,
     /** What this camera calls itself, so the operator knows which phone replied. */
-    val cameraName: String = ""
+    val cameraName: String = "",
+    /** v117: the camera's status line, as it shows it. */
+    val status: String = "",
+    /**
+     * v117: the rail keys, in order: "NAME~LABEL~SUB~STATE~TINT" joined by "|". NAME is what a command presses; STATE
+     * is OFF ON DEAD ARMED SHOWN; TINT an ARGB number or empty. The monitor draws them the same way.
+     */
+    val keys: String = "",
+    /** v117: the three marks on the picture: "kind,left,top,right,bottom,argb,shown" by "|", in STREAM coordinates. */
+    val marks: String = "",
+    /** v117: which mark a tap and a pinch serve: 0 square, 1 circle, 2 triangle. */
+    val armed: Int = 0,
+    /** v117: the quarter turns from the stream to the camera's own view, so the monitor can stand it upright. */
+    val turns: Int = 0
 ) {
     fun toXml(): String = "<$ROOT iso_min=\"$isoMin\" iso_max=\"$isoMax\"" +
             " shutter_min=\"$shutterMinNs\" shutter_max=\"$shutterMaxNs\"" +
@@ -119,7 +151,9 @@ data class CameraState(
             " manual=\"${if (manualSupported) 1 else 0}\"" +
             " wb=\"${if (whiteBalanceSupported) 1 else 0}\"" +
             " wb_kelvin=\"${whiteBalanceKelvin ?: -1}\"" +
-            " name=\"$cameraName\"/>"
+            " name=\"${CameraCommand.esc(cameraName)}\"" +
+            " status=\"${CameraCommand.esc(status)}\" keys=\"${CameraCommand.esc(keys)}\"" +
+            " marks=\"$marks\" armed=\"$armed\" turns=\"$turns\"/>"
 
     companion object {
         const val ROOT = "mantra_cam_state"
@@ -146,7 +180,12 @@ data class CameraState(
                 manualSupported = a("manual") == "1",
                 whiteBalanceSupported = a("wb") == "1",
                 whiteBalanceKelvin = a("wb_kelvin")?.toIntOrNull()?.takeIf { it >= 0 },
-                cameraName = a("name") ?: ""
+                cameraName = a("name")?.let { CameraCommand.unesc(it) } ?: "",
+                status = a("status")?.let { CameraCommand.unesc(it) } ?: "",
+                keys = a("keys")?.let { CameraCommand.unesc(it) } ?: "",
+                marks = a("marks") ?: "",
+                armed = a("armed")?.toIntOrNull() ?: 0,
+                turns = a("turns")?.toIntOrNull() ?: 0
             )
         }
     }

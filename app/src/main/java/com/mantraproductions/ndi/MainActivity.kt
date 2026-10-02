@@ -707,6 +707,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         ui.removeCallbacks(logExposureTick)
         ui.post(logExposureTick)
+        ui.removeCallbacks(remoteTick)
+        ui.post(remoteTick)
         displays?.registerDisplayListener(displayListener, ui)
         if (fullScreen) hideSystemBars(true)
         // The camera session is lost while backgrounded even with a foreground
@@ -734,6 +736,7 @@ class MainActivity : AppCompatActivity() {
         ui.removeCallbacks(rateTick)
         ui.removeCallbacks(focusWatch)
         ui.removeCallbacks(logExposureTick)
+        ui.removeCallbacks(remoteTick)
         focus.stop()
         // The file is closed before the camera goes, not after: a take whose
         // encoder disappeared underneath it has no moov atom and opens nowhere.
@@ -1478,6 +1481,98 @@ class MainActivity : AppCompatActivity() {
         }
         bmp.recycle()
         return if (n == 0) null else sum / n
+    }
+
+    // --- REMOTE CONTROL (v117) -------------------------------------------------
+    //
+    // Marko, 2.10.2026: "this camera is just giving all the same interface to remote user, but nothing is recorded.
+    // Everything is remote controlling"; "remote control is a priority". Mantra Monitor sends KEYS by name and TAPS on
+    // the picture up the NDI stream as metadata; the camera does exactly what its own key or tap does. Twice a second,
+    // and at once after a command, it sends back what the monitor needs to draw the same interface: the keys with
+    // their labels and colours, the status line, the marks, and how the stream is turned.
+
+    private var remoteSent = 0L
+    private var remoteDirty = false
+
+    private val remoteTick = object : Runnable {
+        override fun run() {
+            ui.postDelayed(this, 100)
+            if (!pipeline.isRunning || pipeline.mode == CameraPipeline.Mode.OFF) return
+            var n = 0
+            while (n++ < 20) {
+                val xml = NdiSender.pollCommand() ?: break
+                if (xml.contains(CameraState.ROOT)) continue          // our own state, never a command
+                val c = CameraCommand.parse(xml) ?: continue
+                Trace.control("remote", xml.take(120), "from the monitor")
+                c.key?.let { pressKey(it) }
+                if (c.tapX != null && c.tapY != null) streamToView(c.tapX, c.tapY)?.let { (x, y) -> tapAt(x, y) }
+                remoteDirty = true
+            }
+            val now = android.os.SystemClock.uptimeMillis()
+            if (remoteDirty || now - remoteSent > 500) {
+                remoteDirty = false
+                remoteSent = now
+                NdiSender.sendState(remoteState().toXml())
+            }
+        }
+    }
+
+    /** The quarter turns from the stream to this screen, and back. */
+    private fun streamDegrees(): Int {
+        val e = pipeline.engine
+        return Mechanism.sensorToViewDegrees(e.sensorOrientation, displayDegrees(), e.isFrontFacing, manualQuarterTurns)
+    }
+
+    private fun streamToView(u: Float, v: Float): Pair<Float, Float>? {
+        if (!pipeline.isRunning) return null
+        val p = Mechanism.viewRegionToSensor(u, v, u, v, (360 - streamDegrees()) % 360, false)
+        val x = if (previewMirrored) 1f - p[0] else p[0]
+        return x to p[1]
+    }
+
+    /** A key pressed from the monitor: the very key on this screen, clicked. */
+    private fun pressKey(name: String) {
+        when {
+            name == "REC" -> recKey.performClick()
+            name.startsWith("MARK") -> name.removePrefix("MARK").toIntOrNull()?.let { markKeys.getOrNull(it)?.performClick() }
+            else -> {
+                val all = (0 until railLeft.childCount).map { railLeft.getChildAt(it) } +
+                    (0 until railRight.childCount).map { railRight.getChildAt(it) }
+                all.filterIsInstance<RailButton>().firstOrNull { keyName(it) == name }?.performClick()
+                    ?: Trace.refused("remote", "no key called $name")
+            }
+        }
+    }
+
+    private fun keyName(k: RailButton): String = when (k.glyph) {
+        RailButton.Glyph.SQUARE -> "MARK0"
+        RailButton.Glyph.CIRCLE -> "MARK1"
+        RailButton.Glyph.TRIANGLE -> "MARK2"
+        RailButton.Glyph.NONE -> k.label
+        else -> k.glyph.name.lowercase()
+    }
+
+    private fun remoteState(): CameraState {
+        fun keyLine(k: RailButton) = listOf(keyName(k), k.label, k.sub ?: "", k.state.name, k.tint?.toString() ?: "").joinToString("~")
+        val left = (0 until railLeft.childCount).map { railLeft.getChildAt(it) }
+            .filterIsInstance<RailButton>().filter { it.visibility == View.VISIBLE }.map { keyLine(it) }
+        val right = (0 until railRight.childCount).map { railRight.getChildAt(it) }
+            .filterIsInstance<RailButton>().filter { it.visibility == View.VISIBLE }.map { keyLine(it) }
+        val keys = (left + listOf("--") + right + listOf("REC~REC~~${if (rolling) "ARMED" else "OFF"}~")).joinToString("|")
+        val d = streamDegrees()
+        fun mark(kind: Int, b: FloatArray, colour: Int, shown: Boolean): String {
+            val s = Mechanism.viewRegionToSensor(b[0], b[1], b[2], b[3], d, previewMirrored)
+            return String.format(java.util.Locale.ROOT, "%d,%.4f,%.4f,%.4f,%.4f,%d,%d", kind, s[0], s[1], s[2], s[3], colour, if (shown) 1 else 0)
+        }
+        val marks = listOf(
+            mark(0, focusSquare.normalisedBounds(), focusSquare.colour(), settings.marksShown and 1 != 0),
+            mark(1, exposureCircle.normalisedBounds(), exposureCircle.colour(), settings.marksShown and 2 != 0),
+            mark(2, wbBox.normalisedBounds(), wbBox.colour(), settings.marksShown and 4 != 0)
+        ).joinToString("|")
+        return CameraState(
+            recording = rolling, cameraName = settings.sourceName, status = status.text.toString(),
+            keys = keys, marks = marks, armed = settings.pinchTarget, turns = (d / 90) % 4
+        )
     }
 
     // --- the three marks (v103) ------------------------------------------------
