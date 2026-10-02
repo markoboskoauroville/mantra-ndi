@@ -604,3 +604,7 @@ Needs the GPU stage (Settings → Picture path).
 
 36. The rule, in MANTRA_MANIFEST: a recalibration (focus, exposure, white balance) never jumps; it ramps like a hand on analog equipment, pleasant to record. — **Status:** started
 37. The camera: focus SQUARE, exposure CIRCLE, white balance TRIANGLE all ramp to their new value. — **Status:** started
+
+> also, you need to encounter overlapping of circle, square, and triangle. If they're overlapping and the user clicks basically on all three at the same time, all three are doing their thing. So it's possible to click multiple of them if they are in proximity or overlapping
+
+38. One tap where the square, circle and triangle overlap (or touch) sets every mark under the finger: focus, exposure and white balance together. — **Status:** started
