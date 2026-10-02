@@ -1541,4 +1541,13 @@ class MechanismTest {
         // nowhere left to go: held at the ends
         assertEquals(3200 to fiftieth, Mechanism.splitExposure(4.0, 1600, fiftieth, 50, 3200, 100_000L, fiftieth))
     }
+
+    @Test fun theSpringEasesInAndNeverOvershoots() {
+        var x = 0.0; var v = 0.0
+        val path = (1..60).map { val (nx, nv) = Mechanism.springStep(x, v, 1.0, 0.033, 5.0); x = nx; v = nv; x }
+        assertTrue("eases in: the first frame moves under 3%", path[0] < 0.03)
+        for (i in 1 until path.size) assertTrue("never back", path[i] >= path[i - 1] - 1e-9)
+        assertTrue("never past the goal", path.all { it <= 1.0 + 1e-9 })
+        assertTrue("there within two seconds", path.last() > 0.97)
+    }
 }

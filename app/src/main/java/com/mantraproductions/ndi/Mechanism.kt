@@ -1206,6 +1206,17 @@ object Mechanism {
     }
 
     /**
+     * v129: one frame of a critically damped spring towards [goal]: it starts gently, never overshoots, and
+     * settles — the ease in and out of a loop that keeps changing its mind (the half-manual exposure).
+     * Returns the new position and speed.
+     */
+    fun springStep(x: Double, v: Double, goal: Double, dt: Double, omega: Double): Pair<Double, Double> {
+        val a = omega * omega * (goal - x) - 2.0 * omega * v
+        val nv = v + a * dt
+        return (x + nv * dt) to nv
+    }
+
+    /**
      * A ramp for a quantity the eye reads in ratios — ISO, shutter, a colour gain: eased in stops, not in
      * units, so the first half of a move from ISO 100 to 1600 looks like the second half.
      */

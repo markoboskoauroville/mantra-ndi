@@ -1424,27 +1424,55 @@ class MainActivity : AppCompatActivity() {
             if (measured != null && loopTarget <= 0.0) loopTarget = measured
             if (measured != null && loopTarget > 0.0) {
                 val engine = pipeline.engine
+                // v129, THE RAMP: the loop chooses where the automatic half should go; the spring walks it
+                // there every frame (v128 stepped it four times a second: ISO 247 → 259 → 280 → 322 → 374)
+                val current = kotlin.math.exp(springX.takeIf { springLive } ?: kotlin.math.ln(autoHalf(mode)))
                 if (mode == Mechanism.Exposure.ISO_PRIORITY) {
                     shutterBounds()?.let { (low, high) ->
-                        shutterNs = Mechanism.priorityStep(
-                            shutterNs.toDouble(), measured, loopTarget, low.toDouble(), high.toDouble()
-                        ).toLong()
+                        loopGoal = Mechanism.priorityStep(current, measured, loopTarget, low.toDouble(), high.toDouble())
                     }
                 } else {
                     engine.isoRange()?.let {
-                        iso = Mechanism.priorityStep(
-                            iso.toDouble(), measured, loopTarget, it.lower.toDouble(), it.upper.toDouble()
-                        ).toInt()
+                        loopGoal = Mechanism.priorityStep(current, measured, loopTarget, it.lower.toDouble(), it.upper.toDouble())
                     }
                 }
+                if (!springLive) { springX = kotlin.math.ln(autoHalf(mode)); springV = 0.0; springLive = true; ui.post(springTick) }
+            }
+            ui.postDelayed(this, 250)
+        }
+    }
+
+    /** v129: where the loop wants the automatic half (ISO or shutter), and the spring that walks it there. */
+    private var loopGoal = 0.0
+    private var springX = 0.0
+    private var springV = 0.0
+    private var springLive = false
+    /** True while a preset key's ramp carries the automatic half itself (exposure held constant). */
+    private var presetCarries = false
+
+    private fun autoHalf(mode: Mechanism.Exposure): Double =
+        if (mode == Mechanism.Exposure.ISO_PRIORITY) shutterNs.toDouble() else iso.toDouble()
+
+    /** Every frame: the automatic half follows the loop's goal on a critically damped spring, eased in and out. */
+    private val springTick = object : Runnable {
+        override fun run() {
+            val mode = Mechanism.exposureMode(isoAuto, shutterAuto)
+            if (loopNative || !pipeline.isRunning ||
+                (mode != Mechanism.Exposure.ISO_PRIORITY && mode != Mechanism.Exposure.SHUTTER_PRIORITY)
+            ) { springLive = false; return }
+            if (!presetCarries && loopGoal > 0.0) {
+                val (x, v) = Mechanism.springStep(springX, springV, kotlin.math.ln(loopGoal), SPRING_FRAME_S, SPRING_OMEGA)
+                springX = x; springV = v
+                if (mode == Mechanism.Exposure.ISO_PRIORITY) shutterNs = kotlin.math.exp(x).toLong()
+                else iso = Math.round(kotlin.math.exp(x)).toInt()
                 if (Mechanism.exposureChanged(iso, shutterNs, loopSentIso, loopSentShutterNs)) {
-                    engine.setManualExposure(iso, shutterNs)
+                    pipeline.engine.setManualExposure(iso, shutterNs, trace = false)
                     loopSentIso = iso
                     loopSentShutterNs = shutterNs
                     refreshZones()
                 }
             }
-            ui.postDelayed(this, 250)
+            ui.postDelayed(this, (SPRING_FRAME_S * 1000).toLong())
         }
     }
 
@@ -2300,25 +2328,31 @@ class MainActivity : AppCompatActivity() {
                 val (name, target) = isoPresets().getOrNull(preset) ?: return
                 val range = pipeline.engine.isoRange() ?: return
                 if (isoAuto) setParamAuto(0, false, quiet = true)
+                // v129: with the shutter on A, it moves against ISO every frame so the exposure holds
+                val carry = carryFrom()
                 glide(isoPosition, Mechanism.positionOfValue(
                     target.toDouble(), range.lower.toDouble(), range.upper.toDouble()
                 ), { p ->
                     isoPosition = p
                     iso = Mechanism.valueAtPosition(p, range.lower.toDouble(), range.upper.toDouble())
                         .toInt().coerceIn(range.lower, range.upper)
-                }) { iso = target }
+                    carry?.let { (iso0, sh0) -> carryShutter(iso0, sh0) }
+                }) { iso = target; carry?.let { (iso0, sh0) -> carryShutter(iso0, sh0) }; landCarry() }
                 say("ISO $target ($name)")
             }
             1 -> {
                 val target = shutterPresets().getOrNull(preset) ?: return
                 val (low, high) = shutterBounds() ?: return
                 if (shutterAuto) setParamAuto(1, false, quiet = true)
+                // v129: with ISO on A, it moves against the shutter every frame so the exposure holds
+                val carry = carryFrom()
                 glide(shutterPosition, Mechanism.positionOfValue(
                     target.toDouble(), low.toDouble(), high.toDouble()
                 ), { p ->
                     shutterPosition = p
                     shutterNs = Mechanism.valueAtPosition(p, low.toDouble(), high.toDouble()).toLong()
-                }) { shutterNs = target }
+                    carry?.let { (iso0, sh0) -> carryIso(iso0, sh0) }
+                }) { shutterNs = target; carry?.let { (iso0, sh0) -> carryIso(iso0, sh0) }; landCarry() }
                 say("${Mechanism.SHUTTER_ANGLES[preset]}° = ${Mechanism.formatShutter(target)}")
             }
         }
@@ -2328,6 +2362,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var glider: android.animation.ValueAnimator? = null
+
+    /**
+     * v129: a preset key moves one half; when the other half is on A (the app's loop), that half moves against
+     * it every frame so ISO × shutter, the exposure, stays where it was — what a camera on auto ISO does when
+     * the shutter is turned. Returns the starting ISO and shutter, or null when nothing is to be carried.
+     */
+    private fun carryFrom(): Pair<Int, Long>? {
+        val mode = Mechanism.exposureMode(isoAuto, shutterAuto)
+        if (loopNative || (mode != Mechanism.Exposure.ISO_PRIORITY && mode != Mechanism.Exposure.SHUTTER_PRIORITY)) return null
+        presetCarries = true
+        return iso to shutterNs
+    }
+
+    private fun carryIso(iso0: Int, sh0: Long) {
+        val r = pipeline.engine.isoRange() ?: return
+        iso = Math.round(iso0.toDouble() * sh0 / shutterNs.coerceAtLeast(1L)).toInt().coerceIn(r.lower, r.upper)
+    }
+
+    private fun carryShutter(iso0: Int, sh0: Long) {
+        val (low, high) = shutterBounds() ?: return
+        shutterNs = (sh0.toDouble() * iso0 / iso.coerceAtLeast(1)).toLong().coerceIn(low, high)
+    }
+
+    /** The carried half is where the spring starts from, at rest: the loop goes on from there, smoothly. */
+    private fun landCarry() {
+        val mode = Mechanism.exposureMode(isoAuto, shutterAuto)
+        presetCarries = false
+        springX = kotlin.math.ln(autoHalf(mode))
+        springV = 0.0
+        loopGoal = autoHalf(mode)
+        loopSentIso = iso
+        loopSentShutterNs = shutterNs
+    }
 
     /**
      * Moves a fader from [from] to [to], applying exposure on the way, then [land]s exactly.
@@ -2968,6 +3035,9 @@ private const val SPOT_DARK = 25
 private const val SPOT_CLIPPED = 245
 private const val SPOT_MIN_PIXELS = 12
 private const val SPOT_SETTLE_MS = 450L
+/** v129: the auto half's spring: a frame, and how quick (critically damped; settles in about a second). */
+private const val SPRING_FRAME_S = 0.033
+private const val SPRING_OMEGA = 5.0
 /** v125: the exposure circle is there inside a fifth of a stop; three rounds at most; a read after each ramp. */
 private const val CIRCLE_TOLERANCE_STOPS = 0.2
 private const val CIRCLE_ROUNDS = 3
