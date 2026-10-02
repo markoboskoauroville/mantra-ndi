@@ -464,3 +464,11 @@ Needs the GPU stage (Settings → Picture path).
     searching, green locked, red failed); grey when the shape is off. The armed one (the pinch's and the tap's)
     is then told by a bar under its key, since orange now means "searching". — **Status:** v107
 - **v107 (2.10.2026):** the □ ○ △ keys wear their shape's colour of the moment (white, orange searching, green locked, red failed), grey when off; a bar under the armed one (item 17). — **Status:** proven on his Pixel 04:44 (white → orange with the bar → green; the circle locked after 34 frames)
+
+## 2.10.2026, 04:55 — letters inside the shapes
+
+> you need to write mnemonics inside the shapes. So first square is F, then the second circle is E, and third one triangle is W
+
+18. A letter inside each mark key: F in the square (focus), E in the circle (exposure), W in the triangle (white
+    balance), in the key's own colour. — **Status:** v108 (the rail keys; the shapes on the picture stay empty so
+    they cover nothing of the subject, unless he asks)
