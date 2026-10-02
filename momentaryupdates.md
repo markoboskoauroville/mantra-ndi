@@ -608,3 +608,7 @@ Needs the GPU stage (Settings → Picture path).
 > also, you need to encounter overlapping of circle, square, and triangle. If they're overlapping and the user clicks basically on all three at the same time, all three are doing their thing. So it's possible to click multiple of them if they are in proximity or overlapping
 
 38. One tap where the square, circle and triangle overlap (or touch) sets every mark under the finger: focus, exposure and white balance together. — **Status:** started
+
+> in any ramping algorithm you need to implement ease-in and ease-out curves. Please
+
+39. Every ramp eases in and eases out: it leaves slowly, travels, and arrives slowly — never a linear start or stop. — **Status:** started
