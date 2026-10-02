@@ -572,3 +572,11 @@ Needs the GPU stage (Settings → Picture path).
   over the picture, the status line; a key tap presses it on the camera, a picture tap goes to the camera's armed
   mark (focus / exposure / white balance there), the turn follows the camera. Nothing is recorded on the monitor.
   RemoteTest: the vocabulary round-trips. — **Status:** PROVEN 07:47 between his phones: the monitor showed the camera's keys, status line and marks, upright by itself; PEAK pressed on the Nothing switched peaking on the Pixel (and back); a tap on the keyboard in the monitor moved the Pixel's white balance triangle there and locked neutral in 2 steps, both screens green
+
+## 2.10.2026, 08:00 — keep testing; stream bit rate from the monitor; the monitor's own data rate and frame rate
+
+> yes continue testing and optimising , also add buttons to sister to toggle between streaminf data rates so basicaly adjusing ndi hx bit rate to compromise between quality and frame rates also on monitor side add status of monitor dta radte frame rate
+
+33. On the monitor: keys to step the camera's NDI HX bit rate (quality against smoothness). — **Status:** v118
+34. On the monitor: its own status — the data rate it receives (Mbit/s) and the frame rate it shows (fps). — **Status:** v118
+35. Keep testing and optimising the remote. — **Status:** ongoing
