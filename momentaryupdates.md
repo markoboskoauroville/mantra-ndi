@@ -484,3 +484,14 @@ Needs the GPU stage (Settings → Picture path).
 
 20. Correction of 19: the triangle's FILL is always white; only its OUTLINE follows the shape's colour (white,
     orange, green, red). Off: grey outline and a grey fill. — **Status:** v110
+    — v110 PROVEN 05:12 on his Pixel: white inside, outline orange while reading, green locked.
+
+## 2.10.2026, 05:12 — the torch, and the top of settings as one line of toggles
+
+> so the torch is actually not working, and in the torch line next to the settings we need to add the basic parameters of the camera. That's the frame rate, bit depth, resolution. Right there at the top, and all buttons now will be toggle. So we need only one button per setting, and focus square, exposure circle, and white balance triangle. I am missing the icon behind each on the left side of each, and everything can fit in one line because the size will be a drop-down menu. You go by 25% that's the scale. Every 25% you add value inside the drop-down menu
+
+21. The torch does not work for him: find out why and fix. — **Status:** investigating
+22. Settings' top line, beside the torch: FRAME RATE, BIT DEPTH, RESOLUTION, each ONE toggle button (a tap steps
+    to the next value). — **Status:** v111
+23. Focus square, exposure circle, white balance triangle: their shape icon on the left of each, all three in ONE
+    line, the size a drop-down in steps of 25 % (25, 50, 75, 100). — **Status:** v111
