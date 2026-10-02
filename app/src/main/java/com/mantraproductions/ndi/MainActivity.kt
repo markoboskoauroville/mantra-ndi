@@ -398,7 +398,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             override fun onRate(fps: Double, megabitsPerSecond: Double, connections: Int) {
-                ui.post { showRate(fps, megabitsPerSecond, connections); refreshZones() }
+                ui.post { showRate(fps, megabitsPerSecond, connections); refreshZones(); watchEncoder(fps) }
             }
         }
 
@@ -1481,6 +1481,29 @@ class MainActivity : AppCompatActivity() {
         }
         bmp.recycle()
         return if (n == 0) null else sum / n
+    }
+
+    /**
+     * v124: THE ENCODER WATCHDOG. While NDI goes out, an encoder that gives no frame for two reports running is
+     * restarted with the whole pipeline (at most three times a minute). MEASURED 2.10.2026: after a live bit-rate drop
+     * the Pixel's HEVC encoder went silent with no error, and the monitor saw nothing until the camera was restarted.
+     */
+    private var quietReports = 0
+
+    private fun watchEncoder(fps: Double) {
+        if (!pipeline.isRunning || pipeline.mode == CameraPipeline.Mode.OFF) { quietReports = 0; return }
+        quietReports = if (fps < 0.5) quietReports + 1 else 0
+        if (quietReports < 2) return
+        quietReports = 0
+        val now = android.os.SystemClock.uptimeMillis()
+        while (reopenTimes.isNotEmpty() && now - reopenTimes.first() > 60_000) reopenTimes.removeFirst()
+        if (reopenTimes.size >= 3) { say("The encoder keeps stopping — not restarted again"); return }
+        reopenTimes.addLast(now)
+        Trace.refused("encoder", "no frame out of the encoder while streaming: the pipeline is restarted")
+        say("The encoder stopped — restarted")
+        restoreMode = pipeline.mode
+        pipeline.stop(keepSource = true)
+        ui.postDelayed({ if (preview.isAvailable) openCamera() }, 400)
     }
 
     // --- REMOTE CONTROL (v117) -------------------------------------------------

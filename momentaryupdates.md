@@ -586,3 +586,9 @@ Needs the GPU stage (Settings → Picture path).
 - **v121:** the monitor logs each second what arrives, what it shows and what the decoder had no room for; the decoder asks for low latency and real-time priority. HX − measured: 50 → 32 → 24 → 16 Mbit/s live on the Pixel. — **Status:** built
 - **v122:** MEASURED v121 broke video on the Nothing (its decoder refused low latency, the loop returned, the camera stopped sending: Pixel 0 Mbit/s; with v120's monitor back, 44 Mbit/s). Now low latency is tried, then the plain setup, and a failed decoder never ends the connection. — **Status:** built
 - **v122 measured:** the low-latency decoder WORKS on the Nothing; the real fault: video flowed 10–19 fps for ~5 s, then the camera stopped sending (since v117's metadata). **v123:** the metadata gets its own native lock; create/destroy take both. — **Status:** built
+- **MEASURED after v123 (08:30–08:45):** at 50 Mbit/s steady ~25 fps for 20 s, but over 40 s dropouts of 2–4 s:
+  the PIXEL stops sending (0 Mbit/s) at those moments. Both phones on 2.4 GHz channel 2, the Pixel at −68 dBm with an
+  86 Mbit/s link: a 50 Mbit/s stream through the router needs ~100 Mbit/s of air. Separately, a live drop to 16
+  Mbit/s made the Pixel's HEVC encoder go silent (no frames, no error) — twice. **v124:** a keyframe is requested
+  after every rate change; the camera's ENCODER WATCHDOG restarts the pipeline when no frame leaves the encoder for
+  two seconds while streaming (max 3 a minute), and a restart keeps the monitor's chosen rate. — **Status:** built

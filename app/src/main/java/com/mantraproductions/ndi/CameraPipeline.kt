@@ -100,9 +100,16 @@ class CameraPipeline(private val context: Context) {
     /** v120: what the stream is really encoded at: on the direct path the take's encoder is the stream's. */
     val actualStreamBitRate: Int get() = if (gpu == null) videoBitRate else streamBitRate
 
+    /** v124: the monitor chose a stream rate; on the direct path it then also governs the shared encoder's restarts. */
+    var directUsesStreamRate = false
+
     fun setStreamBitRateLive(bps: Int) {
         streamBitRate = bps
+        directUsesStreamRate = true
         encoder?.setBitRate(bps)
+        // v124: a fresh keyframe after the change; MEASURED on his Pixel the encoder went quiet after a live drop
+        // from 50 to 16 Mbit/s (no output, no error). The camera's encoder watchdog restarts it if it stays quiet.
+        encoder?.requestKeyframe()
         if (gpu == null) videoBitRate = bps
         Trace.control("stream bit rate", "${bps / 1_000_000} Mbit/s", if (gpu == null) "live, the take too (direct path)" else "live")
     }
@@ -376,6 +383,8 @@ class CameraPipeline(private val context: Context) {
             codec.onEncodedSample = { buffer, info -> recorder?.writeVideo(buffer, info) }
         }
         if (stage != null) codec.setBitRate(streamBitRate)
+        // v124: on the direct path, once the monitor has chosen a stream rate, a restarted encoder starts at it
+        else if (directUsesStreamRate) codec.setBitRate(streamBitRate)
         val surface = codec.start()
         if (surface == null) {
             listener?.onError("This phone will not encode ${size.width}x${size.height}")
