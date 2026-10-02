@@ -21,8 +21,10 @@ working state of *this* app.
   red failed; grey off), and a bar under a key marks the armed one. Proven on his Pixel 04:44.
 - **v108/v109: F in the square, E in the circle, the triangle FILLED** (the W was too small). Proven 05:05.
 - **Status line** names the armed shape and its locked numbers (focus m/dpt, ISO·shutter·EV, K·gains).
-- **Settings:** the torch at the top (proven: the desk lit), the three sizes, then depth and resolution;
-  "Turn the preview" removed (turn always 0); SHOW ON THE CAMERA hides the outputs line.
+- **Settings (v111):** no title; QUICK row: torch (lights at once — the camera is closed while settings shows,
+  so the phone's own torch switch is used there), FPS / BIT / RESOLUTION as one-tap toggles, MIN, version; the
+  marks row: □F ○E △ with 25 % size drop-downs; TABS CAMERA · OUTPUTS · DISPLAY · MORE. "Turn the preview"
+  removed; SHOW ON THE CAMERA (DISPLAY tab) hides the outputs line and the status line moves up into its place.
 - **Freeze watch for every change** (v104): frames stopping 1.2 s after a change put back the last request
   that made a picture and say the setting is not available. **Not proven** — nothing freezes on the Pixel.
   Next: his Nothing Phone 2a on the screen copy, to make it freeze on purpose.
