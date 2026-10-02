@@ -370,6 +370,7 @@ class MainActivity : AppCompatActivity() {
                     holdBufferSize()
                     applyPreviewTransform()
                     say("${size.width}x${size.height} ${if (tenBit) "10-bit" else "8-bit"} $codec")
+                    reopenTries = -1                // v116: up again, the recovery is over
                     // v104: the light, switched in settings, is put on whenever the camera opens
                     if (settings.torch) pipeline.engine.setTorch(true)
                     if (restoreMode != CameraPipeline.Mode.OFF) {
@@ -393,6 +394,7 @@ class MainActivity : AppCompatActivity() {
                     say(message); Trace.refused("pipeline", message)
                     // v115: a dead camera is opened again, and a risky step that killed it is taken back
                     if (message.startsWith("Camera error")) onCameraDied(message)
+                    else retryOpen(message)
                 }
             }
             override fun onRate(fps: Double, megabitsPerSecond: Double, connections: Int) {
@@ -1254,7 +1256,24 @@ class MainActivity : AppCompatActivity() {
         reopenTimes.addLast(now)
         restoreMode = pipeline.mode
         pipeline.stop(keepSource = restoreMode != CameraPipeline.Mode.OFF)
+        reopenTries = 0
         ui.postDelayed({ if (preview.isAvailable) openCamera() }, 600)
+    }
+
+    /**
+     * v116: after a driver crash the phone's camera service restarts, and an open in the first seconds answers "Could
+     * not read lens 0" (MEASURED on the Nothing Phone 2a, v115). So the reopening tries again, later each time.
+     */
+    private var reopenTries = -1
+
+    private fun retryOpen(message: String): Boolean {
+        if (reopenTries < 0 || reopenTries >= 4) return false
+        if (!message.startsWith("Could not read") && !message.startsWith("Could not open")) return false
+        reopenTries++
+        val wait = 1500L * reopenTries
+        say("The camera is restarting — trying again in ${wait / 1000.0} s")
+        ui.postDelayed({ if (preview.isAvailable && !pipeline.isRunning) openCamera() }, wait)
+        return true
     }
 
     private var previousCurve = LogCurves.Curve.REC709

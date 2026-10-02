@@ -551,3 +551,4 @@ Needs the GPU stage (Settings → Picture path).
   (a curve) takes the step back, marks that curve refused for this lens FOR GOOD (kept across starts), says "<curve>
   is not available on this phone — back as it was", and opens the camera again; any other fatal error also reopens
   it (at most 3 a minute). — **Status:** built
+- **v116 (2.10.2026):** measured v115 on the Nothing: the crash was caught and blamed ("S-Log3 is not available on this phone — back as it was"), but the reopen came too soon ("Could not read lens 0"; by hand a few seconds later it opened). The reopen now retries at 1.5, 3, 4.5, 6 s. — **Status:** built
