@@ -518,4 +518,4 @@ Needs the GPU stage (Settings → Picture path).
 
 27. The two bit rates move to the CAMERA tab, labelled RECORDING and STREAMING (the number says Mbit/s). — **Status:** v112
 28. Settings margins: nothing touches the screen's edges; switches not glued to the right. — **Status:** v112
-- **v112 (2.10.2026):** RECORDING and STREAMING (the two bit rates) open the CAMERA tab; settings margins 28 dp inside the bars' insets (items 27, 28). — **Status:** built
+- **v112 (2.10.2026):** RECORDING and STREAMING (the two bit rates) open the CAMERA tab; settings margins 28 dp inside the bars' insets (items 27, 28). — **Status:** proven on his Pixel 05:21 (CAMERA opens with RECORDING 50 Mbit/s and STREAMING 16 Mbit/s; OUTPUTS and FILE inset, switches off the edge)
