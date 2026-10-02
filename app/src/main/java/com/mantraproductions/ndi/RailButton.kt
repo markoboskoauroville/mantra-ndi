@@ -241,21 +241,27 @@ class RailButton @JvmOverloads constructor(
                 mark.strokeWidth = density(1.4f)
             }
             // v103: the three marks' keys draw the mark itself (square focus, circle exposure, triangle white balance)
+            // v108: a letter inside each (Marko, 2.10.2026: "square is F, circle is E, triangle is W"). The marks
+            // are drawn a little larger than v103's so the letter has room and stays readable.
             Glyph.SQUARE -> {
                 mark.strokeWidth = density(1.8f)
-                canvas.drawRect(cx - r * 0.85f, cy - r * 0.85f, cx + r * 0.85f, cy + r * 0.85f, mark)
+                canvas.drawRect(cx - r * 1.05f, cy - r * 1.05f, cx + r * 1.05f, cy + r * 1.05f, mark)
+                letter(canvas, "F", cx, cy, r * 1.15f, tint)
             }
             Glyph.CIRCLE -> {
                 mark.strokeWidth = density(1.8f)
-                canvas.drawCircle(cx, cy, r * 0.9f, mark)
+                canvas.drawCircle(cx, cy, r * 1.1f, mark)
+                letter(canvas, "E", cx, cy, r * 1.15f, tint)
             }
             Glyph.TRIANGLE -> {
                 mark.strokeWidth = density(1.8f)
-                markPath.moveTo(cx, cy - r * 0.9f)
-                markPath.lineTo(cx + r, cy + r * 0.8f)
-                markPath.lineTo(cx - r, cy + r * 0.8f)
+                markPath.moveTo(cx, cy - r * 1.15f)
+                markPath.lineTo(cx + r * 1.25f, cy + r * 1.0f)
+                markPath.lineTo(cx - r * 1.25f, cy + r * 1.0f)
                 markPath.close()
                 canvas.drawPath(markPath, mark)
+                // the triangle's middle is low: the letter sits in its wide part
+                letter(canvas, "W", cx, cy + r * 0.38f, r * 0.85f, tint)
             }
             Glyph.NONE -> Unit
         }
@@ -265,6 +271,19 @@ class RailButton @JvmOverloads constructor(
             whisper.color = Color.argb(150, Color.red(tint), Color.green(tint), Color.blue(tint))
             canvas.drawText(it, cx, height - density(3f), whisper)
         }
+    }
+
+    private val letterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+    }
+
+    /** A letter centred on (x, y), [size] tall, in the key's colour. */
+    private fun letter(canvas: Canvas, text: String, x: Float, y: Float, size: Float, tint: Int) {
+        letterPaint.color = tint
+        letterPaint.textSize = size
+        val m = letterPaint.fontMetrics
+        canvas.drawText(text, x, y - (m.ascent + m.descent) / 2f, letterPaint)
     }
 
     override fun performClick(): Boolean {
