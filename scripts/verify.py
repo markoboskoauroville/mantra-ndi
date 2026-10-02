@@ -131,7 +131,9 @@ def main():
     # G9 — custom views used in layouts actually exist
     missing_views = []
     for view in set(re.findall(r"<com\.mantraproductions\.ndi\.(\w+)", layouts)):
-        if not (ROOT / f"app/src/main/java/com/mantraproductions/ndi/{view}.kt").exists():
+        # v117: a view both apps draw (RailButton) lives in shared/kotlin
+        if not any((ROOT / d / f"{view}.kt").exists() for d in
+                   ("app/src/main/java/com/mantraproductions/ndi", "shared/kotlin/com/mantraproductions/ndi")):
             missing_views.append(view)
     check("G9 custom views exist", not missing_views, ", ".join(missing_views))
 
