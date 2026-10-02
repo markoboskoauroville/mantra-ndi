@@ -241,7 +241,8 @@ class RailButton @JvmOverloads constructor(
                 mark.strokeWidth = density(1.4f)
             }
             // v103: the three marks' keys draw the mark itself (square focus, circle exposure, triangle white balance)
-            // v108: a letter inside each (Marko, 2.10.2026: "square is F, circle is E, triangle is W"). The marks
+            // v108: a letter inside the square and the circle (Marko, 2.10.2026: "square is F, circle is E"); the
+            // triangle is filled instead of a W since v109. The marks
             // are drawn a little larger than v103's so the letter has room and stays readable.
             Glyph.SQUARE -> {
                 mark.strokeWidth = density(1.8f)
@@ -259,9 +260,10 @@ class RailButton @JvmOverloads constructor(
                 markPath.lineTo(cx + r * 1.25f, cy + r * 1.0f)
                 markPath.lineTo(cx - r * 1.25f, cy + r * 1.0f)
                 markPath.close()
+                // v109: filled, not a W ("w doesn't look good because it's smaller ... fill the triangle inside")
+                mark.style = Paint.Style.FILL_AND_STROKE
                 canvas.drawPath(markPath, mark)
-                // the triangle's middle is low: the letter sits in its wide part
-                letter(canvas, "W", cx, cy + r * 0.38f, r * 0.85f, tint)
+                mark.style = Paint.Style.STROKE
             }
             Glyph.NONE -> Unit
         }
