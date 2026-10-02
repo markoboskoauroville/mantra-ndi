@@ -132,3 +132,19 @@ Dropouts of 2–7 s were the PIXEL not sending (/proc/net/dev), with both phones
 wifi: frequency, RSSI, link speed) and the sender's own byte counter before changing code; on 2.4 GHz keep HX at
 12–16 Mbit/s, or use 5 GHz / the camera phone's hotspot. Also: adb `input tap` twice cannot make a double tap; a real
 double click on the scrcpy window can.
+
+## 17. A published colour calibration can be flat; measure the lens's own presets (v126–v128)
+
+On white paper the v126 fader turned the picture yellow-olive from 6500K down to 3600K and back below it. The Pixel 7's
+SENSOR_COLOR_TRANSFORM1/2 give almost the same gains at tungsten and daylight (B/G 0.91 at 3200K, 1.00 at 6500K), so a
+fader built on them goes nowhere and the wrong way. Its own presets do not lie: incandescent R 1.33 B 2.88, daylight
+R 2.15 B 1.77. **Rule:** hold each preset (incandescent, daylight, cloudy, shade) a few frames once per lens, keep the
+gains as the curve, carry the camera's answer along it, red and blue only; refuse a calibration whose tungsten does not
+want at least 1.3× more blue than daylight.
+
+## 18. Judge colour on the recorded file, not on the HDR screen (2.10.2026)
+
+At 2800K the phone's screen showed the paper cyan (screen red near zero) while the recorded HLG file, decoded to linear,
+had it plainly blue (r/g 0.41, b/g 1.75, as the physics predicts). The HDR preview and screencap exaggerate strong
+shifts. **Rule:** for colour, record a few seconds and decode the file (`ffmpeg ... format=rgb48le`, inverse HLG OETF)
+before calling the picture right or wrong. Ramps (time, smoothness) can be judged from `adb screenrecord`.
