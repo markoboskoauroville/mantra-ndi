@@ -211,6 +211,8 @@ class MonitorActivity : Activity() {
             val fps = (t.first - lastTotals.first) / dt
             val mbps = (t.second - lastTotals.second) * 8 / dt / 1_000_000.0
             lastTotals = t; lastTotalsAt = now
+            android.util.Log.i("MonitorStats", String.format(java.util.Locale.ROOT,
+                "shown %.1f fps, %.1f Mbit/s, arrived %d, no room %d", fps, mbps, e.arrived.get(), e.noRoom.get()))
             stats.text = String.format(java.util.Locale.ROOT, "MONITOR  %.1f fps · %.1f Mbit/s", fps, mbps)
             stats.setTextColor(if (fps < 1) Color.parseColor("#FF3B30") else Color.parseColor("#E6E8EA"))
             if (!remote) info.visibility = View.VISIBLE

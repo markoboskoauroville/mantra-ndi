@@ -85,6 +85,10 @@ class MonitorEngine(
     // v118: what this monitor actually receives and shows, for its own status line
     private val shown = java.util.concurrent.atomic.AtomicLong()
     private val received = java.util.concurrent.atomic.AtomicLong()
+    /** v121: frames the decoder had no input buffer for (dropped), and frames that arrived at all. */
+    val noRoom = java.util.concurrent.atomic.AtomicLong()
+    val arrived = java.util.concurrent.atomic.AtomicLong()
+
     /** v118: running totals, never reset; whoever reads them takes the difference (two readers cannot spoil it). */
     fun totals(): Pair<Long, Long> = shown.get() to received.get()
 
@@ -139,6 +143,7 @@ class MonitorEngine(
                     }
 
                     received.addAndGet(size.toLong())
+                    arrived.incrementAndGet()
                     feedDecoder(buffer, size, ptsUs)
                     drainDecoder()
 
@@ -173,6 +178,9 @@ class MonitorEngine(
         val mime = if (isHevc) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
         return try {
             val format = MediaFormat.createVideoFormat(mime, width, height)
+            // v121: a monitor wants the newest frame now, not a smooth queue: low latency, real-time priority
+            if (android.os.Build.VERSION.SDK_INT >= 30) format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
+            format.setInteger(MediaFormat.KEY_PRIORITY, 0)
             val c = MediaCodec.createDecoderByType(mime)
             c.configure(format, surface, null, 0)
             c.start()
@@ -192,7 +200,7 @@ class MonitorEngine(
         val c = codec ?: return
         try {
             val index = c.dequeueInputBuffer(10_000)
-            if (index < 0) return
+            if (index < 0) { noRoom.incrementAndGet(); return }
             val input = c.getInputBuffer(index) ?: return
             input.clear()
             buffer.position(0)
