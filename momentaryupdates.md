@@ -455,3 +455,11 @@ Needs the GPU stage (Settings → Picture path).
 16. At the end: remind Marko to plug the Nothing Phone 2a into the screen copy, to test the freeze watch on a
     phone that really freezes. — **Status:** reminder pending
 - **v106 (2.10.2026):** settings switch SHOW ON THE CAMERA for the outputs line; the status line starts with the armed shape (FOCUSING SQUARE / EXPOSURE CIRCLE / WHITE BALANCE TRIANGLE) and, once locked, its numbers: focus distance in m and dioptres, ISO + shutter + EV, K + gains (items 14, 15). — **Status:** built
+
+## 2.10.2026, 04:50 — the rail keys wear the colour of their shape
+
+> please add another feature so the side buttons of circle square, triangle should follow the colors on the screen. They should be in sync with the same icons. Of course, when it's off, it's grayed out, so let them be in sync
+
+17. The □ ○ △ keys take the colour their shape has on the picture at that moment (white idle, orange
+    searching, green locked, red failed); grey when the shape is off. The armed one (the pinch's and the tap's)
+    is then told by a bar under its key, since orange now means "searching". — **Status:** v107
