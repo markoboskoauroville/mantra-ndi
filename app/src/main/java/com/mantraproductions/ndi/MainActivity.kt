@@ -1371,8 +1371,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun sampleSpotRgb(choose: Boolean): DoubleArray? {
         if (!preview.isAvailable) return null
-        val w = 192
-        val h = 108
+        // v102: at half the view's OWN size and shape. v101 read a 192x108 landscape thumbnail of a portrait
+        // view, so each sample row averaged ~17 screen rows and a keyboard's thin lit legends blended into the
+        // black around them: "nothing lit in the triangle" over a lit keyboard (trace 2.10.2026 03:47).
+        val w = (preview.width / 2).coerceAtLeast(64)
+        val h = (preview.height / 2).coerceAtLeast(64)
         val bmp = runCatching { preview.getBitmap(w, h) }.getOrNull() ?: return null
         val bd = wbBox.normalisedBounds()
         val x0 = (bd[0] * w).toInt().coerceIn(0, w - 1)
@@ -2324,10 +2327,10 @@ class MainActivity : AppCompatActivity() {
 }
 
 // The spot (v100, v101). Out of 255 on the monitor texture: below DARK is the black around a lit thing, above
-// CLIPPED a channel has hit the top and no longer says how bright it is. MIN_PIXELS of 192x108 is enough
-// lit legend to average. SETTLE: gains sent now reach the texture some frames later (8 at 30 fps ~ 270 ms).
-private const val SPOT_DARK = 40
+// CLIPPED a channel has hit the top and no longer says how bright it is. MIN_PIXELS: enough lit legend to
+// average (read at half the view's size since v102). SETTLE: gains sent now reach the texture some frames later (8 at 30 fps ~ 270 ms).
+private const val SPOT_DARK = 25
 private const val SPOT_CLIPPED = 245
-private const val SPOT_MIN_PIXELS = 6
+private const val SPOT_MIN_PIXELS = 12
 private const val SPOT_SETTLE_MS = 450L
 private const val SPOT_TOLERANCE = 0.03
