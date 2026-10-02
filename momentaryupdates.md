@@ -344,3 +344,10 @@ its scene does not move, so **following a moving subject is for his phone.** Fou
 copy (glCopyTexSubImage2D) came back flat (LESSONS 9). Also fixed on the way: the AF region mapped the
 screen through "front camera" instead of what the monitor shows (they differ since the GPU stage).
 Needs the GPU stage (Settings → Picture path).
+
+## 2.10.2026, 02:20 — white balance, calibrated against the G815's LEDs (asked in the G815_LIGHTS session)
+
+> Also, I'm using my own app. This is my own camera NDI camera. If colors don't match, you need to also update my camera because white balancing is not functioning now. We can use opportunity with these LED lights which are the colors of the light pure spectrum to also calibrate my camera so it gives the true colors. Now white balance is a bit off, it's almost there but it's bit off. So fix my camera and fix my keyboard application.
+
+- The camera looks down on the Logitech G815; the keyboard can show known pure colours per key (G815_LIGHTS).
+  Use them as a reference to measure and correct the white balance. — **Status:** open (after the keyboard app)
