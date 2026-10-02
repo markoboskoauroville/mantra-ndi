@@ -469,6 +469,6 @@ Needs the GPU stage (Settings → Picture path).
 
 > you need to write mnemonics inside the shapes. So first square is F, then the second circle is E, and third one triangle is W
 
-18. A letter inside each mark key: F in the square (focus), E in the circle (exposure), W in the triangle (white
+18. A letter inside each mark key — PROVEN v108 on his Pixel 04:58: F in the square (focus), E in the circle (exposure), W in the triangle (white
     balance), in the key's own colour. — **Status:** v108 (the rail keys; the shapes on the picture stay empty so
     they cover nothing of the subject, unless he asks)

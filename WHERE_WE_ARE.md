@@ -19,6 +19,7 @@ working state of *this* app.
   white on it, orange = the one a pinch resizes AND a tap anywhere serves (also in FULL).
 - **v107: the □ ○ △ keys wear their shape's colour** of the moment (white idle, orange searching, green locked,
   red failed; grey off), and a bar under a key marks the armed one. Proven on his Pixel 04:44.
+- **v108: F, E, W** inside the square, circle and triangle keys. Proven 04:58.
 - **Status line** names the armed shape and its locked numbers (focus m/dpt, ISO·shutter·EV, K·gains).
 - **Settings:** the torch at the top (proven: the desk lit), the three sizes, then depth and resolution;
   "Turn the preview" removed (turn always 0); SHOW ON THE CAMERA hides the outputs line.
