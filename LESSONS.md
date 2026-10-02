@@ -106,3 +106,29 @@ a new metering region or trigger, ignore the state for a few frames (6) before b
 The first white-balance proof ran on his ORANGE keyboard bank (he had switched banks), so the camera made
 orange white and everything leaned blue. **Rule:** before a colour test, confirm the reference really is the
 reference (here: set the keys white and read the bank back).
+
+## 13. A camera driver can crash and close the camera; the app must open it again (v115/v116)
+
+**Measured on the Nothing Phone 2a:** a log curve stops the picture, then "Camera error 4" closes the device; the app
+went on sending to a closed camera — the freeze he saw. **Rule:** after a fatal camera error, take back the risky step
+that preceded it (refused for good, kept across starts), say so, and reopen the camera with growing waits — the camera
+service needs seconds to come back ("Could not read lens 0" on an immediate retry).
+
+## 14. Never share a lock between the video and anything that can wait on the network (v123)
+
+v117 polled and sent the remote control's metadata under the native lock the video frames use. A metadata send that
+waited on the network held the video behind it: 10–19 fps for five seconds, then nothing. **Rule:** metadata on its own
+lock; creating or destroying the sender takes both.
+
+## 15. A live bit-rate drop can silence an encoder without an error (v124)
+
+The Pixel's HEVC encoder (VBR) gave no more frames after setParameters from 50 to 16 Mbit/s. **Rule:** request a
+keyframe after a rate change, and watch the encoder's output while streaming: no frame for two seconds → restart.
+
+## 16. Measure the air before blaming the app (2.10.2026)
+
+Dropouts of 2–7 s were the PIXEL not sending (/proc/net/dev), with both phones on 2.4 GHz channel 2 and the Pixel at
+−68 dBm (86 Mbit/s link): a stream through the router crosses the air twice. **Rule:** read both phones' link (dumpsys
+wifi: frequency, RSSI, link speed) and the sender's own byte counter before changing code; on 2.4 GHz keep HX at
+12–16 Mbit/s, or use 5 GHz / the camera phone's hotspot. Also: adb `input tap` twice cannot make a double tap; a real
+double click on the scrcpy window can.

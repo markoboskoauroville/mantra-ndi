@@ -592,3 +592,8 @@ Needs the GPU stage (Settings → Picture path).
   Mbit/s made the Pixel's HEVC encoder go silent (no frames, no error) — twice. **v124:** a keyframe is requested
   after every rate change; the camera's ENCODER WATCHDOG restarts the pipeline when no frame leaves the encoder for
   two seconds while streaming (max 3 a minute), and a restart keeps the monitor's chosen rate. — **Status:** MEASURED 08:45 at 16 Mbit/s: the encoder kept going (no restart needed), 25 fps at 17–18 Mbit/s for most of 40 s, one 7 s gap where the Pixel stopped sending and resumed by itself (2.4 GHz air, not the app)
+
+> (08:50) We are closing the session. Write all necessary documents and go to sleep
+
+- Session closed 2.10.2026 08:50. Open for next time: remote pinch; the camera's settings over the wire; put FILE back
+  on his Pixel (disarmed since the NDI tests); the 16 KB-alignment notice of the NDI libraries.

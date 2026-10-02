@@ -283,3 +283,12 @@ The NDI Advanced SDK lives in the private repo
 time. Its licence forbids redistribution, so it is never committed here.
 
 Powered by NDI. NDI is a registered trademark of Vizrt NDI AB.
+
+## Mantra Monitor, the sister app (since v113, 2.10.2026)
+
+Every release carries two APKs: `N-mantra-manual-camera-vN.apk` and `N-mantra-monitor-vN.apk`. **Mantra Monitor**
+(`monitor/`, `com.mantraproductions.ndi.monitor`) watches any NDI HX source on the network — a double tap in the middle
+lists them — and when the source is this camera it becomes its remote control: the camera's own keys, status line and
+marks, a key tap presses it on the camera, a picture tap goes to the camera's armed mark, HX − / + set the stream's bit
+rate live, and its own line shows the fps and Mbit/s it receives. Nothing is recorded on the monitor. Shared code:
+`shared/kotlin` (CameraCommand/CameraState, RailButton). Stress test: `scripts/stress.py <serial>`.
