@@ -61,8 +61,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <!-- v101: the white balance triangle, over the focus square; it claims only touches on itself -->
-            <com.mantraproductions.ndi.WhiteBalanceBoxView
+            <!-- v101/v103: the white balance triangle and the exposure circle, over the focus square;
+                 each claims only touches on itself -->
+            <com.mantraproductions.ndi.MarkView
+                android:id="@+id/exposureCircle"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+            <com.mantraproductions.ndi.MarkView
                 android:id="@+id/wbBox"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />

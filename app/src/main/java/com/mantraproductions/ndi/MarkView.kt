@@ -10,7 +10,10 @@ import android.view.MotionEvent
 import android.view.View
 
 /**
- * THE WHITE BALANCE TRIANGLE (v101): the third shape on the picture.
+ * THE MARKS (v101, v103): the white balance TRIANGLE and the exposure CIRCLE, beside the focus SQUARE
+ * (FocusSquareView). One class, two shapes: the same touch rules, the same colours.
+ *
+ * The triangle, v101:
  *
  * Marko, 2.10.2026: *"to the white balance, we need to add a 3rd rectangle, and that's the white balance
  * rectangle. So I can point that rectangle or anything gray or white in the scene, tap on it, and it will
@@ -24,13 +27,18 @@ import android.view.View
  * A hold, or a long sweep, drags it. It claims only touches that land on it: everything else falls through to the focus
  * square and the picture underneath, exactly as before it existed.
  */
-class WhiteBalanceBoxView @JvmOverloads constructor(
+class MarkView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyle: Int = 0
 ) : View(context, attrs, defStyle) {
 
     enum class State { IDLE, MEASURING, NEUTRAL, FAILED }
+    enum class Kind { TRIANGLE, CIRCLE }
+
+    /** Which shape this is: set once, from the layout's place in MainActivity. */
+    var kind = Kind.TRIANGLE
+        set(value) { field = value; invalidate() }
 
     private val density = resources.displayMetrics.density
 
@@ -58,9 +66,9 @@ class WhiteBalanceBoxView @JvmOverloads constructor(
     }
     private val path = Path()
 
-    /** Half the triangle's base, and half its height (equilateral), in pixels. */
+    /** Half the shape across and down, in pixels: an equilateral triangle, or a circle. */
     private fun halfW() = size * width / 2f
-    private fun halfH() = halfW() * 0.866f
+    private fun halfH() = if (kind == Kind.CIRCLE) halfW() else halfW() * 0.866f
 
     /**
      * Is the normalised point inside the triangle (apex at the top centre, base at the bottom)? The spot
@@ -71,6 +79,7 @@ class WhiteBalanceBoxView @JvmOverloads constructor(
         val x = nx * width - width * centreX
         val y = ny * height - height * centreY
         val hw = halfW(); val hh = halfH()
+        if (kind == Kind.CIRCLE) return x * x + y * y <= hw * hw
         if (y < -hh || y > hh) return false
         // at height y the triangle spans ±hw * (y + hh) / (2 hh)
         return Math.abs(x) <= hw * (y + hh) / (2f * hh)
@@ -99,10 +108,14 @@ class WhiteBalanceBoxView @JvmOverloads constructor(
         val cx = width * centreX
         val cy = height * centreY
         path.reset()
-        path.moveTo(cx, cy - halfH())
-        path.lineTo(cx + halfW(), cy + halfH())
-        path.lineTo(cx - halfW(), cy + halfH())
-        path.close()
+        if (kind == Kind.CIRCLE) {
+            path.addCircle(cx, cy, halfW(), Path.Direction.CW)
+        } else {
+            path.moveTo(cx, cy - halfH())
+            path.lineTo(cx + halfW(), cy + halfH())
+            path.lineTo(cx - halfW(), cy + halfH())
+            path.close()
+        }
         line.color = when (state) {
             State.IDLE -> Color.WHITE
             State.MEASURING -> Color.parseColor("#E8A33D")

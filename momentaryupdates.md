@@ -421,3 +421,7 @@ Needs the GPU stage (Settings → Picture path).
 - **Re-measured 03:52 with truly white keys** (the first run had his orange M2 bank under the triangle — he had
   switched banks): locked neutral after 6 steps (r/g 1.018, b/g 0.998). Through the camera then: red, orange,
   yellow, green, cyan, blue, magenta and white all read as themselves. — **Status: white balance DONE.**
+- **v103 (2.10.2026):** the three marks — square focus, CIRCLE exposure (tap: meters there, locks; orange then
+  green), TRIANGLE white balance — and their keys on the left rail drawn as the marks: grey off the picture,
+  white on it, orange = the one a pinch resizes; a tap steps grey → white → orange → grey. One L key (whisper:
+  the lens in use) opens the lens keys and choosing one closes them. Items 3, 8, 9, 12. — **Status:** built

@@ -585,6 +585,20 @@ class CaptureEngine(private val context: Context) {
             checkGainsFollowed(lensResult)
             listener?.onCaptureValues(lastIso, lastExposureNs, lastFocusDistance)
 
+            // v103: the exposure circle's metering, answered when auto exposure has settled on it
+            pendingExposure?.let { waiting ->
+                val st = result.get(CaptureResult.CONTROL_AE_STATE)
+                aeFrames++
+                if (st == CaptureResult.CONTROL_AE_STATE_CONVERGED || st == CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED ||
+                    st == CaptureResult.CONTROL_AE_STATE_LOCKED || aeFrames > AE_MAX_FRAMES) {
+                    pendingExposure = null
+                    val settled = aeFrames <= AE_MAX_FRAMES
+                    builder?.let { b -> b.set(CaptureRequest.CONTROL_AE_LOCK, true); apply() }
+                    Trace.control("exposure circle", "metered and locked after $aeFrames frames",
+                        if (settled) "settled" else "did not settle, locked where it was")
+                    waiting(settled)
+                }
+            }
             pendingFocus?.let { waiting ->
                 when (result.get(CaptureResult.CONTROL_AF_STATE)) {
                     CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED -> {
@@ -811,6 +825,54 @@ class CaptureEngine(private val context: Context) {
      */
     @Volatile var focusRegion: FloatArray? = null
 
+    /**
+     * THE EXPOSURE CIRCLE (v103), in the sensor's coordinates like [focusRegion]. Marko, 2.10.2026: *"a circle in
+     * the image, which is actually point of exposure, automatic exposure"*; *"when I tap, it reads and it locks
+     * ... While searching, it's orange. When it's locked, then it's green."*
+     */
+    @Volatile var exposureRegion: FloatArray? = null
+    private var pendingExposure: ((Boolean) -> Unit)? = null
+    private var aeFrames = 0
+
+    /**
+     * Meter on the circle and lock. With the camera's own auto exposure on: the region goes in, the lock comes
+     * off, a precapture trigger asks it to measure, and the answer (or 60 frames) locks it there. In a manual
+     * mode there is nothing for the camera to meter; the caller's own loop reads the circle instead.
+     */
+    fun meterExposureHere(onResult: (Boolean) -> Unit): Boolean {
+        val request = builder ?: return false
+        val array = activeArray() ?: return false
+        if (manualExposure) return false
+        val r = exposureRegion ?: return false
+        val rect = Rect((r[0].coerceIn(0f, 1f) * array.width()).toInt(), (r[1].coerceIn(0f, 1f) * array.height()).toInt(),
+            (r[2].coerceIn(0f, 1f) * array.width()).toInt(), (r[3].coerceIn(0f, 1f) * array.height()).toInt())
+        if (rect.width() < 1 || rect.height() < 1) return false
+        request.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(MeteringRectangle(rect, MeteringRectangle.METERING_WEIGHT_MAX)))
+        request.set(CaptureRequest.CONTROL_AE_LOCK, false)
+        if (!apply()) return false
+        aeFrames = 0
+        pendingExposure = onResult
+        return try {
+            request.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START)
+            session?.capture(request.build(), captureCallback, handler)
+            request.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE)
+            true
+        } catch (e: Throwable) {
+            Trace.fault("exposure circle trigger", e)
+            pendingExposure = null
+            false
+        }
+    }
+
+    /** The lock off again, e.g. when the circle is put away: the camera's auto exposure goes back to the frame. */
+    fun releaseExposureLock() {
+        val request = builder ?: return
+        pendingExposure = null
+        request.set(CaptureRequest.CONTROL_AE_LOCK, false)
+        request.set(CaptureRequest.CONTROL_AE_REGIONS, null)
+        apply()
+    }
+
     /** The sensor's active array, in pixels: what a focus region is a fraction of. */
     fun activeArray(): android.graphics.Rect? =
         characteristics?.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
@@ -1011,6 +1073,7 @@ class CaptureEngine(private val context: Context) {
         manualExposure = false
         if (hasNativePriority(1) || hasNativePriority(2)) clearPriority(request)
         request.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+        request.set(CaptureRequest.CONTROL_AE_LOCK, false)
         request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(targetFps, targetFps))
         val ok = apply()
         Trace.control("exposure", "auto", if (ok) "auto" else "refused")
@@ -1691,5 +1754,6 @@ class CaptureEngine(private val context: Context) {
         const val PROBE_MIN_FRAMES = 20
         /** Frames after a white balance change before its gains are checked. */
         const val GAIN_CHECK_FRAMES = 8
+        const val AE_MAX_FRAMES = 60
     }
 }

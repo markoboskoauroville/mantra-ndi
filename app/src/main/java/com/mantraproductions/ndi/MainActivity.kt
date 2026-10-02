@@ -68,7 +68,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var preview: TextureView
     private lateinit var focusSquare: FocusSquareView
-    private lateinit var wbBox: WhiteBalanceBoxView
+    private lateinit var wbBox: MarkView
+    private lateinit var exposureCircle: MarkView
     private lateinit var zones: ControlZones
     private lateinit var fullScreenCatcher: View
     private lateinit var status: TextView
@@ -200,6 +201,9 @@ class MainActivity : AppCompatActivity() {
     private var falseColour = false
     private var zebra = false
     private lateinit var focusKey: RailButton
+    private lateinit var lensChooser: RailButton
+    private var lensesOpen = false
+    private var markKeys: List<RailButton> = emptyList()
     private lateinit var peakKey: RailButton
     private lateinit var snapKey: RailButton
     private lateinit var logKey: RailButton
@@ -219,6 +223,7 @@ class MainActivity : AppCompatActivity() {
         preview = findViewById(R.id.preview)
         focusSquare = findViewById(R.id.focusSquare)
         wbBox = findViewById(R.id.wbBox)
+        exposureCircle = findViewById(R.id.exposureCircle)
         zones = findViewById(R.id.zones)
         fullScreenCatcher = findViewById(R.id.fullScreenCatcher)
         status = findViewById(R.id.status)
@@ -275,7 +280,16 @@ class MainActivity : AppCompatActivity() {
         pipeline.trackListener = GpuStage.TrackListener { x, y, score -> ui.post { onTracked(x, y, score) } }
         focusSquare.onTapped = { focus.focusHereAndHold() }
         // v101: the white balance triangle. A tap balances on what is inside; where it is dragged is kept.
+        wbBox.kind = MarkView.Kind.TRIANGLE
+        wbBox.size = settings.wbSize
         wbBox.post { wbBox.moveTo(settings.wbBoxX, settings.wbBoxY) }
+        // v103: the exposure circle. A tap meters there and locks; where it is dragged is kept.
+        exposureCircle.kind = MarkView.Kind.CIRCLE
+        exposureCircle.size = settings.circleSize
+        exposureCircle.post { exposureCircle.moveTo(settings.circleX, settings.circleY) }
+        exposureCircle.onMoved = { x, y -> settings.circleX = x; settings.circleY = y; exposureCircle.state = MarkView.State.IDLE }
+        exposureCircle.onTapped = { meterExposure() }
+        refreshMarks()
         wbBox.onMoved = { x, y -> settings.wbBoxX = x; settings.wbBoxY = y }
         wbBox.onTapped = { spotWhiteBalance() }
 
@@ -421,10 +435,19 @@ class MainActivity : AppCompatActivity() {
         // As many lens keys as this phone has lenses, and no more. Four were
         // always drawn with the missing ones dark; a key for a lens that does
         // not exist is not a control.
+        // v103: ONE key, L (Marko, 2.10.2026: "This lenses chooser is taking too much space ... L, only one
+        // icon. When user press L, they uncollapse. User choose one lens and then it collapse again"). Its
+        // whisper is the lens in use; the lens keys appear beside it only while it is open.
+        lensChooser = newKey("L") { lensesOpen = !lensesOpen; refreshKeys() }.also { railLeft.addView(it) }
         for (i in 1..lenses.size) {
-            val key = newKey("L$i") { chooseLens(i - 1) }
+            val key = newKey("L$i") { lensesOpen = false; chooseLens(i - 1); refreshKeys() }
             lensKeys.add(key)
             railLeft.addView(key)
+        }
+        // v103: the three marks' keys, drawn as their marks. Grey = not on the picture, white = on it,
+        // orange = the one a pinch resizes (only one). A tap steps grey → white → orange → grey.
+        markKeys = listOf(RailButton.Glyph.SQUARE, RailButton.Glyph.CIRCLE, RailButton.Glyph.TRIANGLE).mapIndexed { i, g ->
+            newKey("") { stepMark(i) }.also { it.glyph = g; railLeft.addView(it) }
         }
         focusKey = newKey("AF") { toggleAutoFocus() }.also { railLeft.addView(it) }
         logKey = newKey("LOG") { nextCurve() }.also { railLeft.addView(it) }
@@ -1340,7 +1363,9 @@ class MainActivity : AppCompatActivity() {
         val w = 48
         val h = 27
         val bmp = runCatching { preview.getBitmap(w, h) }.getOrNull() ?: return null
-        val b = if (focusSquare.visibility == View.VISIBLE) focusSquare.normalisedBounds()
+        // v103: the exposure circle is where exposure is read, when it is on the picture
+        val b = if (exposureCircle.visibility == View.VISIBLE) exposureCircle.normalisedBounds()
+            else if (focusSquare.visibility == View.VISIBLE) focusSquare.normalisedBounds()
             else floatArrayOf(0.4f, 0.4f, 0.6f, 0.6f)
         val x0 = (b[0] * w).toInt().coerceIn(0, w - 1)
         val x1 = (b[2] * w).toInt().coerceIn(x0 + 1, w)
@@ -1357,6 +1382,98 @@ class MainActivity : AppCompatActivity() {
         }
         bmp.recycle()
         return if (n == 0) null else sum / n
+    }
+
+    // --- the three marks (v103) ------------------------------------------------
+
+    /** Grey → white → orange → grey, for the square (0), the circle (1), the triangle (2). */
+    private fun stepMark(i: Int) {
+        val bit = 1 shl i
+        val shown = settings.marksShown and bit != 0
+        when {
+            !shown -> settings.marksShown = settings.marksShown or bit
+            settings.pinchTarget != i -> settings.pinchTarget = i
+            else -> {
+                settings.marksShown = settings.marksShown and bit.inv()
+                // the orange goes to the next mark still on the picture, or stays (a pinch with none is nothing)
+                (0..2).firstOrNull { settings.marksShown and (1 shl it) != 0 }?.let { settings.pinchTarget = it }
+                if (i == 1 && pipeline.isRunning) { pipeline.engine.releaseExposureLock(); exposureCircle.state = MarkView.State.IDLE }
+            }
+        }
+        Trace.control("marks", "shown ${settings.marksShown}, pinch ${settings.pinchTarget}", "key ${i}")
+        refreshMarks()
+        refreshKeys()
+    }
+
+    /** What is drawn and what takes a pinch, from the keys' state, the controls and the clean feed. */
+    private fun refreshMarks() {
+        val canShow = !zonesOn && !fullScreen
+        val shown = settings.marksShown
+        // the square always takes the tap that focuses; grey only stops it being drawn
+        focusSquare.visibility = if (canShow) View.VISIBLE else View.GONE
+        focusSquare.drawn = shown and 1 != 0
+        exposureCircle.visibility = if (canShow && shown and 2 != 0) View.VISIBLE else View.GONE
+        wbBox.visibility = if (canShow && shown and 4 != 0) View.VISIBLE else View.GONE
+        focusSquare.pinchResizesMe = settings.pinchTarget == 0
+    }
+
+    /** A pinch anywhere resizes the orange mark, when that is the circle or the triangle. */
+    private val markPinch by lazy {
+        android.view.ScaleGestureDetector(this, object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(d: android.view.ScaleGestureDetector): Boolean {
+                when (settings.pinchTarget) {
+                    1 -> exposureCircle.size *= d.scaleFactor
+                    2 -> wbBox.size *= d.scaleFactor
+                }
+                return true
+            }
+            override fun onScaleEnd(d: android.view.ScaleGestureDetector) {
+                when (settings.pinchTarget) {
+                    1 -> settings.circleSize = exposureCircle.size
+                    2 -> settings.wbSize = wbBox.size
+                }
+                Trace.control("mark size", settings.pinchTarget, "pinched")
+            }
+        }).apply { isQuickScaleEnabled = false }
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (settings.pinchTarget != 0 && !zonesOn && !fullScreen) markPinch.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** The circle, as the camera's own region: the same turn from screen to sensor as the focus box. */
+    private fun sensorRegionOf(b: FloatArray): FloatArray? {
+        if (!pipeline.isRunning) return null
+        val engine = pipeline.engine
+        val degrees = Mechanism.sensorToViewDegrees(engine.sensorOrientation, displayDegrees(), engine.isFrontFacing, manualQuarterTurns)
+        val onStream = Mechanism.viewRegionToSensor(b[0], b[1], b[2], b[3], degrees, previewMirrored)
+        val array = engine.activeArray() ?: return onStream
+        return Mechanism.streamRegionToArray(onStream, bufferSize.width, bufferSize.height, array.width(), array.height())
+    }
+
+    /** A tap on the circle: exposure is read there and locks. Orange while it reads, green when locked. */
+    private fun meterExposure() {
+        if (!pipeline.isRunning) { say("The camera is not open"); return }
+        val engine = pipeline.engine
+        if (engine.manualExposure) {
+            exposureCircle.state = MarkView.State.NEUTRAL
+            say("Manual exposure: the circle is where the grey card is read")
+            return
+        }
+        engine.exposureRegion = sensorRegionOf(exposureCircle.normalisedBounds())
+        exposureCircle.state = MarkView.State.MEASURING
+        say("Exposure: reading the circle…")
+        val started = engine.meterExposureHere { settled ->
+            ui.post {
+                exposureCircle.state = if (settled) MarkView.State.NEUTRAL else MarkView.State.FAILED
+                say(if (settled) "Exposure locked on the circle" else "Exposure locked where it was (the camera did not settle)")
+            }
+        }
+        if (!started) {
+            exposureCircle.state = MarkView.State.FAILED
+            say("The camera would not meter on the circle")
+        }
     }
 
     /**
@@ -1415,7 +1532,7 @@ class MainActivity : AppCompatActivity() {
         val ticket = ++spotTicket
         probeTicket++                       // a running A gives way
         spotLearn = WhiteBalance.SpotLearn()
-        wbBox.state = WhiteBalanceBoxView.State.MEASURING
+        wbBox.state = MarkView.State.MEASURING
         say("White balance: reading the triangle…")
         spotRound(1, ticket)
     }
@@ -1432,7 +1549,7 @@ class MainActivity : AppCompatActivity() {
         val gains = engine.currentGains()
         val learn = spotLearn ?: return
         if (rgb == null || gains == null) {
-            wbBox.state = WhiteBalanceBoxView.State.FAILED
+            wbBox.state = MarkView.State.FAILED
             say(if (round == 1) "Nothing lit in the triangle (all dark or clipped) — point it at something white or grey"
                 else "White balance: the triangle went dark or clipped at round $round")
             Trace.refused("white balance spot", "round $round: nothing in the triangle between dark and clipped")
@@ -1445,7 +1562,7 @@ class MainActivity : AppCompatActivity() {
             val k = engine.adoptSpotAsAnchor()
             if (k != null) wbKelvin = k
             wbAuto = false
-            wbBox.state = if (neutral) WhiteBalanceBoxView.State.NEUTRAL else WhiteBalanceBoxView.State.FAILED
+            wbBox.state = if (neutral) MarkView.State.NEUTRAL else MarkView.State.FAILED
             say(if (neutral) "White balance locked: neutral after ${round - 1} step${if (round == 2) "" else "s"}"
                 else String.format(java.util.Locale.ROOT, "White balance: closest after %d steps (r/g %.2f, b/g %.2f)",
                     round - 1, rgb[0] / rgb[1], rgb[2] / rgb[1]))
@@ -1454,7 +1571,7 @@ class MainActivity : AppCompatActivity() {
         }
         val next = learn.next(gains, rgb)
         if (!engine.setWhiteBalanceGains(next, round)) {
-            wbBox.state = WhiteBalanceBoxView.State.FAILED
+            wbBox.state = MarkView.State.FAILED
             say("White balance: the camera refused the gains")
             return
         }
@@ -1545,8 +1662,7 @@ class MainActivity : AppCompatActivity() {
         zonesOn = !zonesOn
         zones.visibility = if (zonesOn) View.VISIBLE else View.GONE
         iris.visibility = if (zonesOn) View.VISIBLE else View.GONE
-        focusSquare.visibility = if (zonesOn) View.GONE else View.VISIBLE
-        wbBox.visibility = focusSquare.visibility
+        refreshMarks()
         Trace.control("controls", if (zonesOn) "on" else "off",
             if (zonesOn) "focus box put away" else "focus box back")
         refreshZones()
@@ -1981,8 +2097,7 @@ class MainActivity : AppCompatActivity() {
         timecode.visibility = hidden
         // The zones and the focus box come back to whichever of them was up.
         zones.visibility = if (!on && zonesOn) View.VISIBLE else View.GONE
-        focusSquare.visibility = if (!on && !zonesOn) View.VISIBLE else View.GONE
-        wbBox.visibility = focusSquare.visibility
+        refreshMarks()
         iris.visibility = if (!on && zonesOn) View.VISIBLE else View.GONE
         fullScreenCatcher.visibility = if (on) View.VISIBLE else View.GONE
         leaveFullScreen.isEnabled = on
@@ -2200,6 +2315,17 @@ class MainActivity : AppCompatActivity() {
     // --- what the keys say ----------------------------------------------------
 
     private fun refreshKeys() {
+        lenses.getOrNull(activeLens)?.equivalentMm?.takeIf { it > 0 }?.let { lensChooser.sub = "${it}mm" }
+        lensChooser.state = if (lensesOpen) RailButton.State.ARMED else RailButton.State.ON
+        lensKeys.forEach { it.visibility = if (lensesOpen) View.VISIBLE else View.GONE }
+        markKeys.forEachIndexed { i, key ->
+            key.state = when {
+                settings.marksShown and (1 shl i) == 0 -> RailButton.State.OFF
+                settings.pinchTarget == i -> RailButton.State.ARMED
+                else -> RailButton.State.SHOWN
+            }
+            key.invalidate()
+        }
         lensKeys.forEachIndexed { i, key ->
             val lens = lenses.getOrNull(i)
             key.state = when {

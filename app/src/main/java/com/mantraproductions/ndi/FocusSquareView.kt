@@ -80,6 +80,16 @@ class FocusSquareView @JvmOverloads constructor(
         setShadowLayer(3f, 0f, 0f, Color.BLACK)
     }
 
+    /**
+     * v103: false when its key is grey ("not showing on the screen"). It still takes the tap that focuses
+     * where it lands — focusing is the camera's first job — it only stops being drawn.
+     */
+    var drawn = true
+        set(value) { if (field != value) { field = value; invalidate() } }
+
+    /** v103: false while the circle or the triangle is the armed mark: then a pinch is theirs. */
+    var pinchResizesMe = true
+
     /** Fired when a pinch ends, with the new size, so it can be remembered. */
     var onResized: ((Float) -> Unit)? = null
 
@@ -142,6 +152,7 @@ class FocusSquareView @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
+        if (!drawn) return
         val cx = width * drawnCentreX()
         val cy = height * drawnCentreY()
         val (hw, hh) = halves().let { it[0] to it[1] }
@@ -256,12 +267,15 @@ class FocusSquareView @JvmOverloads constructor(
             }
 
             override fun onScale(detector: ScaleGestureDetector): Boolean {
+                // v103: a pinch resizes whichever mark is armed (orange); MainActivity carries it to the others
+                if (!pinchResizesMe) return true
                 size *= detector.scaleFactor
                 onMoved?.invoke(centreX, centreY)
                 return true
             }
 
             override fun onScaleEnd(detector: ScaleGestureDetector) {
+                if (!pinchResizesMe) return
                 onResized?.invoke(size)
                 Trace.control("focus box", String.format("%.3f", size), "pinched")
             }

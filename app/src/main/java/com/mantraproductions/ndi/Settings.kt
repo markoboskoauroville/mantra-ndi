@@ -149,6 +149,32 @@ class Settings(context: Context) {
         get() = prefs.getFloat(WB_Y, 0.5f)
         set(value) = prefs.edit().putFloat(WB_Y, value.coerceIn(0f, 1f)).apply()
 
+    /** Where the exposure circle was left (v103), and the sizes of the circle and the triangle. */
+    var circleX: Float
+        get() = prefs.getFloat(CIRCLE_X, 0.3f)
+        set(value) = prefs.edit().putFloat(CIRCLE_X, value.coerceIn(0f, 1f)).apply()
+    var circleY: Float
+        get() = prefs.getFloat(CIRCLE_Y, 0.5f)
+        set(value) = prefs.edit().putFloat(CIRCLE_Y, value.coerceIn(0f, 1f)).apply()
+    var circleSize: Float
+        get() = prefs.getFloat(CIRCLE_SIZE, 0.16f)
+        set(value) = prefs.edit().putFloat(CIRCLE_SIZE, value.coerceIn(0.06f, 0.5f)).apply()
+    var wbSize: Float
+        get() = prefs.getFloat(WB_SIZE, 0.16f)
+        set(value) = prefs.edit().putFloat(WB_SIZE, value.coerceIn(0.06f, 0.5f)).apply()
+
+    /**
+     * Which of the three shapes are on the picture (bit 0 square, 1 circle, 2 triangle) and which one a pinch
+     * resizes (0 square, 1 circle, 2 triangle). Marko, 2.10.2026: grey = not on the picture, white = on it,
+     * orange = the one the pinch changes, only one at a time.
+     */
+    var marksShown: Int
+        get() = prefs.getInt(MARKS, 0b111)
+        set(value) = prefs.edit().putInt(MARKS, value and 0b111).apply()
+    var pinchTarget: Int
+        get() = prefs.getInt(PINCH, 0)
+        set(value) = prefs.edit().putInt(PINCH, value.coerceIn(0, 2)).apply()
+
     /** SHOOT: 0 follows the phone's own rotation, 1 landscape, 2 portrait. */
     var shootMode: Int
         get() = prefs.getInt(SHOOT, 0)
@@ -244,6 +270,12 @@ class Settings(context: Context) {
         const val FPS = "framesPerSecond"
         const val BOX = "focusBoxSize"
         const val WB_X = "wbBoxX"
+        const val CIRCLE_X = "circleX"
+        const val CIRCLE_Y = "circleY"
+        const val CIRCLE_SIZE = "circleSize"
+        const val WB_SIZE = "wbSize"
+        const val MARKS = "marksShown"
+        const val PINCH = "pinchTarget"
         const val WB_Y = "wbBoxY"
         const val SHOOT = "shootMode"
         const val FOLDER = "recordFolder"

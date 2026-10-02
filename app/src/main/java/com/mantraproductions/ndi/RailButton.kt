@@ -29,7 +29,7 @@ class RailButton @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyle: Int = 0
 ) : View(context, attrs, defStyle) {
 
-    enum class State { OFF, ON, DEAD, ARMED }
+    enum class State { OFF, ON, DEAD, ARMED, SHOWN }
 
     /**
      * A key can carry a mark instead of a word.
@@ -39,7 +39,7 @@ class RailButton @JvmOverloads constructor(
      * out on a shoot — a missing glyph is a hollow box, and a hollow box in the
      * corner of a camera is indistinguishable from a bug.
      */
-    enum class Glyph { NONE, GEAR, UP, DOWN, CAMERA }
+    enum class Glyph { NONE, GEAR, UP, DOWN, CAMERA, SQUARE, CIRCLE, TRIANGLE }
 
     var glyph: Glyph = Glyph.NONE
         set(value) { field = value; describe(); invalidate() }
@@ -66,6 +66,9 @@ class RailButton @JvmOverloads constructor(
     private fun describe() {
         val what = when {
             glyph == Glyph.CAMERA -> "snap"
+            glyph == Glyph.SQUARE -> "focus square"
+            glyph == Glyph.CIRCLE -> "exposure circle"
+            glyph == Glyph.TRIANGLE -> "white balance triangle"
             glyph != Glyph.NONE -> glyph.name.lowercase() + (sub?.let { " $it" } ?: "")
             sub.isNullOrBlank() -> label
             else -> "$label $sub"
@@ -111,6 +114,7 @@ class RailButton @JvmOverloads constructor(
             State.OFF -> GREY
             State.ARMED -> AMBER
             State.DEAD -> DEAD
+            State.SHOWN -> WHITE
         }
 
         word.color = tint
@@ -223,6 +227,23 @@ class RailButton @JvmOverloads constructor(
                 canvas.drawCircle(cx, y0 + 18f * u, 9f * u, mark)
                 mark.strokeWidth = density(1.4f)
             }
+            // v103: the three marks' keys draw the mark itself (square focus, circle exposure, triangle white balance)
+            Glyph.SQUARE -> {
+                mark.strokeWidth = density(1.8f)
+                canvas.drawRect(cx - r * 0.85f, cy - r * 0.85f, cx + r * 0.85f, cy + r * 0.85f, mark)
+            }
+            Glyph.CIRCLE -> {
+                mark.strokeWidth = density(1.8f)
+                canvas.drawCircle(cx, cy, r * 0.9f, mark)
+            }
+            Glyph.TRIANGLE -> {
+                mark.strokeWidth = density(1.8f)
+                markPath.moveTo(cx, cy - r * 0.9f)
+                markPath.lineTo(cx + r, cy + r * 0.8f)
+                markPath.lineTo(cx - r, cy + r * 0.8f)
+                markPath.close()
+                canvas.drawPath(markPath, mark)
+            }
             Glyph.NONE -> Unit
         }
 
@@ -246,5 +267,6 @@ class RailButton @JvmOverloads constructor(
         val GREY: Int = Color.parseColor("#7A8087")
         val AMBER: Int = Color.parseColor("#E8A33D")
         val DEAD: Int = Color.parseColor("#33383E")
+        val WHITE: Int = Color.parseColor("#F2F2F2")
     }
 }
