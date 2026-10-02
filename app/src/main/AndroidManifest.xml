@@ -13,6 +13,8 @@
          phone that streams perfectly and appears in nobody's source list is
          the failure these two prevent. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- v120: the low-latency Wi-Fi lock (no power save while NDI flows) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 

@@ -97,6 +97,9 @@ class CameraPipeline(private val context: Context) {
      * v118: the stream's bit rate changed LIVE, from the monitor's HX keys. The encoder takes a new rate without a
      * restart (PARAMETER_KEY_VIDEO_BITRATE). On the direct path the take shares that encoder, so it changes too.
      */
+    /** v120: what the stream is really encoded at: on the direct path the take's encoder is the stream's. */
+    val actualStreamBitRate: Int get() = if (gpu == null) videoBitRate else streamBitRate
+
     fun setStreamBitRateLive(bps: Int) {
         streamBitRate = bps
         encoder?.setBitRate(bps)
@@ -153,6 +156,11 @@ class CameraPipeline(private val context: Context) {
         private set
 
     private var multicast: WifiManager.MulticastLock? = null
+    /**
+     * v120: Wi-Fi kept out of power save while NDI goes out. MEASURED 2.10.2026 between his phones: with power save
+     * the stream arrived in bursts (near 0, then 46-82 Mbit/s catching up) and the monitor showed ~8 of 25 fps.
+     */
+    private var wifiLock: WifiManager.WifiLock? = null
     private var startedAtUs = 0L
     @Volatile private var frames = 0L
     @Volatile private var bits = 0L
@@ -533,6 +541,8 @@ class CameraPipeline(private val context: Context) {
             NdiSender.destroy()
             runCatching { multicast?.release() }
             multicast = null
+            runCatching { wifiLock?.release() }
+            wifiLock = null
             mode = Mode.OFF
             Trace.control("stream", "off", "off")
             return true
@@ -551,6 +561,15 @@ class CameraPipeline(private val context: Context) {
                 }
             }.onFailure { Trace.fault("multicast lock", it) }.getOrNull()
             Trace.state("multicast lock " + if (multicast?.isHeld == true) "held" else "NOT held")
+        }
+        if (wifiLock == null) {
+            wifiLock = runCatching {
+                val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                @Suppress("DEPRECATION")
+                val mode = if (android.os.Build.VERSION.SDK_INT >= 29) WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                wifi.createWifiLock(mode, "mantra-ndi-stream").apply { setReferenceCounted(false); acquire() }
+            }.onFailure { Trace.fault("wifi lock", it) }.getOrNull()
+            Trace.state("wifi low-latency lock " + if (wifiLock?.isHeld == true) "held" else "NOT held")
         }
 
         if (!NdiSender.available) {

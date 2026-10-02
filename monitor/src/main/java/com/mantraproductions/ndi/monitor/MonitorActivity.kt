@@ -160,15 +160,27 @@ class MonitorActivity : Activity() {
         }
     }
 
+    // v120: Wi-Fi out of power save while the monitor is in front (the stream came in bursts without it)
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+
     override fun onResume() {
         super.onResume()
         startFinding()
+        runCatching {
+            val wifi = applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager
+            @Suppress("DEPRECATION")
+            val mode = if (android.os.Build.VERSION.SDK_INT >= 29) android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                else android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            wifiLock = wifi.createWifiLock(mode, "mantra-monitor").apply { setReferenceCounted(false); acquire() }
+        }
     }
 
     override fun onPause() {
         super.onPause()
         finding = false
         NdiFinder.stop()
+        runCatching { wifiLock?.release() }
+        wifiLock = null
     }
 
     /** The finder runs while the app is in front; the list on screen follows it. */

@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:2:1-24:12
-INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:2:1-24:12
-INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:2:1-24:12
-INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:2:1-24:12
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:2:1-26:12
+INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:2:1-26:12
+INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:2:1-26:12
+INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:2:1-26:12
 MERGED from [androidx.appcompat:appcompat-resources:1.7.0] /Users/markobosko/.gradle/caches/8.14.2/transforms/be4353b58a40e5ce17822f099b54f437/transformed/appcompat-resources-1.7.0/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.appcompat:appcompat:1.7.0] /Users/markobosko/.gradle/caches/8.14.2/transforms/2926cc061ab6550a5df9ee4877d2cc52/transformed/appcompat-1.7.0/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.fragment:fragment:1.5.4] /Users/markobosko/.gradle/caches/8.14.2/transforms/4e9c1c92054fd4918c6501f6392868f7/transformed/fragment-1.5.4/AndroidManifest.xml:17:1-24:12
@@ -45,21 +45,25 @@ uses-permission#android.permission.INTERNET
 ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:3:5-67
 	android:name
 		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:3:22-64
+uses-permission#android.permission.WAKE_LOCK
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:5:5-68
+	android:name
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:5:22-65
 uses-permission#android.permission.ACCESS_NETWORK_STATE
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:4:5-79
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:6:5-79
 	android:name
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:4:22-76
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:6:22-76
 uses-permission#android.permission.ACCESS_WIFI_STATE
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:5:5-76
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:7:5-76
 	android:name
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:5:22-73
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:7:22-73
 uses-permission#android.permission.CHANGE_WIFI_MULTICAST_STATE
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:7:5-86
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:9:5-86
 	android:name
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:7:22-83
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:9:22-83
 application
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:9:5-23:19
-INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:9:5-23:19
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:11:5-25:19
+INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:11:5-25:19
 MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/markobosko/.gradle/caches/8.14.2/transforms/f53d0d5bc4d03f26bb44ca5c3afd3ad4/transformed/emoji2-1.3.0/AndroidManifest.xml:23:5-33:19
 MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/markobosko/.gradle/caches/8.14.2/transforms/f53d0d5bc4d03f26bb44ca5c3afd3ad4/transformed/emoji2-1.3.0/AndroidManifest.xml:23:5-33:19
 MERGED from [androidx.core:core:1.13.1] /Users/markobosko/.gradle/caches/8.14.2/transforms/381ee265ec7548c23263fea15567fa21/transformed/core-1.13.1/AndroidManifest.xml:28:5-89
@@ -77,31 +81,31 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/markobosko/.gradle/c
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.13.1] /Users/markobosko/.gradle/caches/8.14.2/transforms/381ee265ec7548c23263fea15567fa21/transformed/core-1.13.1/AndroidManifest.xml:28:18-86
 	android:label
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:10:9-39
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:12:9-39
 	android:icon
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:11:9-44
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:13:9-44
 	android:theme
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:12:9-51
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:14:9-51
 activity#com.mantraproductions.ndi.monitor.MonitorActivity
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:13:9-22:20
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:15:9-24:20
 	android:screenOrientation
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:16:13-51
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:18:13-51
 	android:exported
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:15:13-36
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:17:13-36
 	android:configChanges
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:17:13-87
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:19:13-87
 	android:name
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:14:13-44
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:16:13-44
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:18:13-21:29
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:20:13-23:29
 action#android.intent.action.MAIN
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:19:17-69
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:21:17-69
 	android:name
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:19:25-66
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:21:25-66
 category#android.intent.category.LAUNCHER
-ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:20:17-77
+ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:22:17-77
 	android:name
-		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:20:27-74
+		ADDED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml:22:27-74
 uses-sdk
 INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /Users/markobosko/Developer/MANTRA_NDI/monitor/src/main/AndroidManifest.xml

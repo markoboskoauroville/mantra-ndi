@@ -582,3 +582,4 @@ Needs the GPU stage (Settings → Picture path).
 35. Keep testing and optimising the remote. — **Status:** ongoing
 - **v118 (2.10.2026):** HX − / + on the monitor step the camera's stream bit rate live (4 8 12 16 24 32 50 Mbit/s; the encoder takes it without a restart; the camera reports the rate back); the monitor's own line: MONITOR fps shown · Mbit/s received, once a second (items 33, 34). — **Status:** built
 - **v119:** the monitor's numbers from running totals (v118 alternated 0.0 and 14 fps / 28 Mbit/s: a counter zeroed by its reader). — **Status:** built
+- **v120:** MEASURED the bursts: the Nothing's Wi-Fi in power save (throughput 0 then 46–82 Mbit/s catching up) and the real stream at 50 Mbit/s (direct path: the take's encoder), while the state said 16. Both apps now hold the low-latency Wi-Fi lock while NDI flows; the camera reports the bit rate actually encoded. — **Status:** built

@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mantraproductions.ndi.monitor"
-    android:versionCode="119"
-    android:versionName="119" >
+    android:versionCode="120"
+    android:versionName="120" >
 
     <uses-sdk
         android:minSdkVersion="26"
         android:targetSdkVersion="35" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- v120: the low-latency Wi-Fi lock (no power save while NDI flows) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- NDI finds sources by mDNS; Android drops multicast unless a lock is held (the old v28 lesson) -->

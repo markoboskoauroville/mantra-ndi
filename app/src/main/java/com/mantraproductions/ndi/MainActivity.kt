@@ -1578,7 +1578,7 @@ class MainActivity : AppCompatActivity() {
         return CameraState(
             recording = rolling, cameraName = settings.sourceName, status = status.text.toString(),
             keys = keys, marks = marks, armed = settings.pinchTarget, turns = (d / 90) % 4,
-            streamMbps = pipeline.streamBitRate / 1_000_000
+            streamMbps = pipeline.actualStreamBitRate / 1_000_000
         )
     }
 
