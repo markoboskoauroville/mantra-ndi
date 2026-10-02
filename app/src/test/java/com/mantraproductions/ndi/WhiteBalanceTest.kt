@@ -355,4 +355,22 @@ class WhiteBalanceTest {
         assertEquals(WhiteBalance.SPOT_MAX_GAIN, far[0], 1e-6f)
         assertEquals(WhiteBalance.SPOT_MIN_GAIN, far[3], 1e-6f)
     }
+
+    /** A pipeline that answers r/g ∝ gain^3 (as steep as the phone's was): the learned steps must close, not swing. */
+    @Test fun spotLearnClosesOnASteepPicture() {
+        val truth = doubleArrayOf(0.7, 1.0, 1.6)          // the light, before gains
+        fun seen(g: FloatArray) = doubleArrayOf(Math.pow(truth[0] * g[0], 3.0), 1.0, Math.pow(truth[2] * g[3], 3.0))
+        var gains = floatArrayOf(1.529f, 1f, 1f, 2.448f)
+        val learn = WhiteBalance.SpotLearn()
+        var last = 0.0
+        for (round in 1..WhiteBalance.SPOT_ROUNDS) {
+            val rgb = seen(gains)
+            if (WhiteBalance.spotNeutral(rgb, 0.03)) break
+            val err = Math.abs(Math.log(rgb[0])) + Math.abs(Math.log(rgb[2]))
+            if (round > 3) assertTrue("round $round got worse: $err after $last", err <= last + 1e-9)
+            last = err
+            gains = learn.next(gains, rgb)
+        }
+        assertTrue("neutral within the rounds: ${seen(gains).toList()}", WhiteBalance.spotNeutral(seen(gains), 0.03))
+    }
 }

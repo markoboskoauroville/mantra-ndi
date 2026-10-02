@@ -61,6 +61,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
+            <!-- v101: the white balance triangle, over the focus square; it claims only touches on itself -->
+            <com.mantraproductions.ndi.WhiteBalanceBoxView
+                android:id="@+id/wbBox"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
             <!--
                  The audio, down the inside edge of the picture.
 

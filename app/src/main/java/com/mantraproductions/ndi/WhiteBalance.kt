@@ -476,5 +476,36 @@ object WhiteBalance {
 
     const val SPOT_MIN_GAIN = 0.5f
     const val SPOT_MAX_GAIN = 8.0f
-    const val SPOT_ROUNDS = 5
+    const val SPOT_ROUNDS = 10
+
+    /**
+     * How strongly the picture answers a gain change, learned while it is measured (v101).
+     *
+     * A linear sensor would answer r/g in proportion to red gain, and one G/R step would land. The phone's
+     * pipeline does not: on 2.10.2026 doubling red gain moved the triangle's r/g from 0.16 to 3.19 (the HLG
+     * curve, read as linear, and the tone mapping between). So each channel keeps the exponent p in
+     * ratio ∝ gain^p, starts at 1, is re-estimated from every two rounds, and a step is ratio^(-1/p),
+     * never more than ×1.25 or ×0.8 a round — it cannot swing, and it still closes in a few rounds.
+     */
+    class SpotLearn {
+        private var lastLogGain = DoubleArray(2) { Double.NaN }
+        private var lastLogRatio = DoubleArray(2) { Double.NaN }
+        val p = doubleArrayOf(1.0, 1.0)
+
+        fun next(gains: FloatArray, rgb: DoubleArray): FloatArray {
+            val out = gains.copyOf()
+            for ((c, gi) in listOf(0 to 0, 1 to 3)) {
+                val ratio = (if (c == 0) rgb[0] else rgb[2]) / rgb[1]
+                val lr = kotlin.math.ln(ratio.coerceAtLeast(1e-6))
+                val lg = kotlin.math.ln(gains[gi].toDouble())
+                if (!lastLogGain[c].isNaN() && kotlin.math.abs(lg - lastLogGain[c]) > 1e-3) {
+                    p[c] = ((lr - lastLogRatio[c]) / (lg - lastLogGain[c])).coerceIn(0.3, 6.0)
+                }
+                lastLogGain[c] = lg; lastLogRatio[c] = lr
+                val step = kotlin.math.exp(-lr / p[c]).coerceIn(0.8, 1.25)
+                out[gi] = (gains[gi] * step).toFloat().coerceIn(SPOT_MIN_GAIN, SPOT_MAX_GAIN)
+            }
+            return out
+        }
+    }
 }

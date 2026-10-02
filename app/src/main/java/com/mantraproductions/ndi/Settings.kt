@@ -141,6 +141,14 @@ class Settings(context: Context) {
         get() = prefs.getFloat(BOX, 0.18f)
         set(value) = prefs.edit().putFloat(BOX, value.coerceIn(Mechanism.BOX_MIN, 4f)).apply()
 
+    /** Where the white balance rectangle was left (v101), as fractions of the picture. */
+    var wbBoxX: Float
+        get() = prefs.getFloat(WB_X, 0.78f)
+        set(value) = prefs.edit().putFloat(WB_X, value.coerceIn(0f, 1f)).apply()
+    var wbBoxY: Float
+        get() = prefs.getFloat(WB_Y, 0.5f)
+        set(value) = prefs.edit().putFloat(WB_Y, value.coerceIn(0f, 1f)).apply()
+
     /** SHOOT: 0 follows the phone's own rotation, 1 landscape, 2 portrait. */
     var shootMode: Int
         get() = prefs.getInt(SHOOT, 0)
@@ -235,6 +243,8 @@ class Settings(context: Context) {
         const val VERBOSE = "verboseSettings"
         const val FPS = "framesPerSecond"
         const val BOX = "focusBoxSize"
+        const val WB_X = "wbBoxX"
+        const val WB_Y = "wbBoxY"
         const val SHOOT = "shootMode"
         const val FOLDER = "recordFolder"
         const val LAST_TAKE = "lastTake"
