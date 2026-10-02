@@ -351,3 +351,10 @@ Needs the GPU stage (Settings → Picture path).
 
 - The camera looks down on the Logitech G815; the keyboard can show known pure colours per key (G815_LIGHTS).
   Use them as a reference to measure and correct the white balance. — **Status:** open (after the keyboard app)
+
+> (2.10.2026, 02:55) Please also fix my NDI camera white balance algorithm using this keyboard so it needs to recognize the right colors. Please fix my app camera app, it's in repository and we have here our tester which is an emulator of Android. Now we can do it all here. Please let's fix it.
+
+- MEASURED 2.10.2026 through scrcpy of his Pixel 7 (the camera looking down on the G815): keys sent magenta
+  (ff00ff) show BLUE, white shows bluish, orange (ff6000) shows red, yellow shows olive. To his own eye the keys
+  are right (magenta, white, orange), so the error is the camera's: too much blue, too little green/red balance.
+  — **Status:** started 2.10.2026
