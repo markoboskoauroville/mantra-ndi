@@ -533,3 +533,8 @@ Needs the GPU stage (Settings → Picture path).
 > (05:28) inside latest release of this app, there should be both apps listed— sister app and main app
 
 30. One release carries BOTH APKs: the camera and the sister monitor. — **Status:** open (with item 29)
+
+> (05:40) now you have both of my phones on screen through screen copy, and you can test connections between NDI remote monitoring. There is full control. Both have developer mode, and you are free to screenshot and develop this sister app. So two ADBs, two screen copies right here on the screen. Please check it out also, you can stress test my camera on noting phone a to see where it freezes
+
+31. Both phones on adb + scrcpy: test the sister app between them, and stress-test the camera on the Nothing
+    Phone 2a to find where it freezes (and prove the freeze watch). — **Status:** started
