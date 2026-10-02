@@ -581,3 +581,4 @@ Needs the GPU stage (Settings → Picture path).
 34. On the monitor: its own status — the data rate it receives (Mbit/s) and the frame rate it shows (fps). — **Status:** v118
 35. Keep testing and optimising the remote. — **Status:** ongoing
 - **v118 (2.10.2026):** HX − / + on the monitor step the camera's stream bit rate live (4 8 12 16 24 32 50 Mbit/s; the encoder takes it without a restart; the camera reports the rate back); the monitor's own line: MONITOR fps shown · Mbit/s received, once a second (items 33, 34). — **Status:** built
+- **v119:** the monitor's numbers from running totals (v118 alternated 0.0 and 14 fps / 28 Mbit/s: a counter zeroed by its reader). — **Status:** built

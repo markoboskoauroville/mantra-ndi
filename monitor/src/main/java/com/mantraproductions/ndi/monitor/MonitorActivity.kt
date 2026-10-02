@@ -103,6 +103,7 @@ class MonitorActivity : Activity() {
             visibility = View.GONE
         }
         root.addView(info, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(48 + 56) })
+        ui.removeCallbacks(statsTick)
         ui.post(statsTick)
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(40), dp(24), dp(16)) }
         picker = ScrollView(this).apply {
@@ -183,12 +184,21 @@ class MonitorActivity : Activity() {
         }
     }
 
-    /** Once a second: what this monitor receives and shows. */
+    /** Once a second: what this monitor receives and shows, from the engine's running totals. */
+    private var lastTotals = 0L to 0L
+    private var lastTotalsAt = 0L
+    private var lastEngine: MonitorEngine? = null
     private val statsTick = object : Runnable {
         override fun run() {
             ui.postDelayed(this, 1000)
             val e = engine ?: return
-            val (fps, mbps) = e.stats()
+            val now = android.os.SystemClock.elapsedRealtime()
+            val t = e.totals()
+            if (e !== lastEngine) { lastEngine = e; lastTotals = t; lastTotalsAt = now; return }
+            val dt = ((now - lastTotalsAt).coerceAtLeast(1)) / 1000.0
+            val fps = (t.first - lastTotals.first) / dt
+            val mbps = (t.second - lastTotals.second) * 8 / dt / 1_000_000.0
+            lastTotals = t; lastTotalsAt = now
             stats.text = String.format(java.util.Locale.ROOT, "MONITOR  %.1f fps · %.1f Mbit/s", fps, mbps)
             stats.setTextColor(if (fps < 1) Color.parseColor("#FF3B30") else Color.parseColor("#E6E8EA"))
             if (!remote) info.visibility = View.VISIBLE

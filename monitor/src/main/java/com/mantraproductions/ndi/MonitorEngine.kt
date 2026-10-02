@@ -85,15 +85,8 @@ class MonitorEngine(
     // v118: what this monitor actually receives and shows, for its own status line
     private val shown = java.util.concurrent.atomic.AtomicLong()
     private val received = java.util.concurrent.atomic.AtomicLong()
-    private var statsAt = android.os.SystemClock.elapsedRealtime()
-
-    /** Frames shown per second and Mbit/s received since the last call. */
-    fun stats(): Pair<Double, Double> {
-        val now = android.os.SystemClock.elapsedRealtime()
-        val dt = ((now - statsAt).coerceAtLeast(1)) / 1000.0
-        statsAt = now
-        return shown.getAndSet(0) / dt to received.getAndSet(0) * 8 / dt / 1_000_000.0
-    }
+    /** v118: running totals, never reset; whoever reads them takes the difference (two readers cannot spoil it). */
+    fun totals(): Pair<Long, Long> = shown.get() to received.get()
 
     fun stop() {
         // Stop claiming to watch something we are no longer watching, or the
