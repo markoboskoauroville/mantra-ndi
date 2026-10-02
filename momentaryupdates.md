@@ -509,3 +509,12 @@ Needs the GPU stage (Settings → Picture path).
     screen: peaking, zebra, the outputs line…), CAMERA (everything about the camera), and the rest by subject.
     — **Status:** v111
 - **v111 (2.10.2026):** settings rebuilt: no title; QUICK row (torch that lights at once through the camera manager, FPS / BIT / RESOLUTION toggles, MIN, version); the three marks' icons with 25 % size drop-downs in one line; TABS CAMERA · OUTPUTS · DISPLAY · MORE. Camera screen: the status line spans the width and moves up when the outputs line is hidden (items 21–26). — **Status:** proven on his Pixel 05:10: the torch lights from settings at once (Android: "Torch for camera id 0 turned on") and stays on in the camera; tabs, toggles and drop-downs shown; status line at the top with no gap. Why the torch "did not work": the camera is closed while settings shows, so v104 lit it only after returning
+
+## 2.10.2026, 05:12 — bit rates under CAMERA, named by what they are for; margins
+
+> bit rate should be part of the camera settings. Don't call it bitrate at all, because I can see it says megabits per second. That's the bitrate. Just say recording and streaming, and by the number I understand what it does
+
+> also, if you look at settings a graphical design, we can see that there is no margin between left and right side. So I'm looking at output and file touching the screen. The toggle switch is just glued to the right margin. Please adjust margins so they look decent, a few pixels
+
+27. The two bit rates move to the CAMERA tab, labelled RECORDING and STREAMING (the number says Mbit/s). — **Status:** v112
+28. Settings margins: nothing touches the screen's edges; switches not glued to the right. — **Status:** v112
