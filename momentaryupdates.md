@@ -454,3 +454,4 @@ Needs the GPU stage (Settings → Picture path).
     — **Status:** v106
 16. At the end: remind Marko to plug the Nothing Phone 2a into the screen copy, to test the freeze watch on a
     phone that really freezes. — **Status:** reminder pending
+- **v106 (2.10.2026):** settings switch SHOW ON THE CAMERA for the outputs line; the status line starts with the armed shape (FOCUSING SQUARE / EXPOSURE CIRCLE / WHITE BALANCE TRIANGLE) and, once locked, its numbers: focus distance in m and dioptres, ISO + shutter + EV, K + gains (items 14, 15). — **Status:** built

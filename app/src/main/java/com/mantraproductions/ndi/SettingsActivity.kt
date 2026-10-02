@@ -141,6 +141,11 @@ class SettingsActivity : AppCompatActivity() {
         showLuts()
         findViewById<Button>(R.id.addLut).setOnClickListener { pickLut.launch(arrayOf("*/*")) }
 
+        // v106: the outputs line on the camera, shown or hidden
+        findViewById<android.widget.Switch>(R.id.showOutputs).apply {
+            isChecked = settings.showOutputs
+            setOnCheckedChangeListener { _, on -> settings.showOutputs = on }
+        }
         // v104: the light at the top, and the three marks' sizes first (ROT, "Turn the preview", is gone).
         val torch = findViewById<android.widget.ImageButton>(R.id.torch)
         fun paintTorch() = torch.setColorFilter(if (settings.torch) RailButton.GREEN else RailButton.GREY)

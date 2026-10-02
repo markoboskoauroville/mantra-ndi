@@ -149,6 +149,11 @@ class Settings(context: Context) {
         get() = prefs.getFloat(WB_Y, 0.5f)
         set(value) = prefs.edit().putFloat(WB_Y, value.coerceIn(0f, 1f)).apply()
 
+    /** v106: the outputs line (FILE USB NDI YT) on the camera screen, or hidden. */
+    var showOutputs: Boolean
+        get() = prefs.getBoolean(SHOW_OUTPUTS, true)
+        set(value) = prefs.edit().putBoolean(SHOW_OUTPUTS, value).apply()
+
     /** The light (v104): the phone's lamp, kept on while the camera runs. Switched from the top of settings. */
     var torch: Boolean
         get() = prefs.getBoolean(TORCH, false)
@@ -276,6 +281,7 @@ class Settings(context: Context) {
         const val BOX = "focusBoxSize"
         const val WB_X = "wbBoxX"
         const val TORCH = "torch"
+        const val SHOW_OUTPUTS = "showOutputs"
         const val CIRCLE_X = "circleX"
         const val CIRCLE_Y = "circleY"
         const val CIRCLE_SIZE = "circleSize"

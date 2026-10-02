@@ -147,6 +147,16 @@
             android:text="@string/depth_hint" />
 
         <TextView style="@style/MantraLabel" android:text="@string/outputs" />
+        <!-- v106: "give me toggle in the settings to hide the streaming status display" -->
+        <Switch
+            android:id="@+id/showOutputs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:textColor="@color/sand"
+            android:text="SHOW ON THE CAMERA" />
         <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/outputs_hint" />
         <LinearLayout
             android:layout_width="match_parent"

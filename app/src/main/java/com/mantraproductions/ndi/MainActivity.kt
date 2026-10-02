@@ -249,7 +249,14 @@ class MainActivity : AppCompatActivity() {
 
         focus = FocusDirector(
             controls = { if (pipeline.isRunning) pipeline.engine else null },
-            onState = { s -> ui.post { focusSquare.state = s } }
+            onState = { s -> ui.post {
+                focusSquare.state = s
+                when (s) {
+                    FocusSquareView.State.LOCKED -> { focusLockedAt = focusLockText(); say("Focus locked") }
+                    FocusSquareView.State.SEEKING -> focusLockedAt = null
+                    else -> Unit
+                }
+            } }
         )
 
         buildRails()
@@ -694,6 +701,8 @@ class MainActivity : AppCompatActivity() {
         // The camera session is lost while backgrounded even with a foreground
         // service, so it is rebuilt rather than tested for.
         if (preview.isAvailable && !pipeline.isRunning) openCamera()
+        // v106: the outputs line, shown or hidden in settings
+        telemetry.visibility = if (!fullScreen && settings.showOutputs) View.VISIBLE else View.GONE
         // v104: back from settings — the marks take their sizes from there, and the light follows its switch
         focusSquare.size = settings.focusBoxSize
         exposureCircle.size = settings.circleSize
@@ -1418,6 +1427,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         Trace.control("marks", "shown ${settings.marksShown}, pinch ${settings.pinchTarget}", "key ${i}")
+        say(lastSaid)
         refreshMarks()
         refreshKeys()
     }
@@ -1503,10 +1513,12 @@ class MainActivity : AppCompatActivity() {
         }
         engine.exposureRegion = sensorRegionOf(exposureCircle.normalisedBounds())
         exposureCircle.state = MarkView.State.MEASURING
+        exposureLockedAt = null
         say("Exposure: reading the circle…")
         val started = engine.meterExposureHere { settled ->
             ui.post {
                 exposureCircle.state = if (settled) MarkView.State.NEUTRAL else MarkView.State.FAILED
+                exposureLockedAt = exposureLockText()
                 say(if (settled) "Exposure locked on the circle" else "Exposure locked where it was (the camera did not settle)")
             }
         }
@@ -1573,6 +1585,7 @@ class MainActivity : AppCompatActivity() {
         probeTicket++                       // a running A gives way
         spotLearn = WhiteBalance.SpotLearn()
         wbBox.state = MarkView.State.MEASURING
+        wbLockedAt = null
         say("White balance: reading the triangle…")
         spotRound(1, ticket)
     }
@@ -1603,6 +1616,7 @@ class MainActivity : AppCompatActivity() {
             if (k != null) wbKelvin = k
             wbAuto = false
             wbBox.state = if (neutral) MarkView.State.NEUTRAL else MarkView.State.FAILED
+            wbLockedAt = wbLockText()
             say(if (neutral) "White balance locked: neutral after ${round - 1} step${if (round == 2) "" else "s"}"
                 else String.format(java.util.Locale.ROOT, "White balance: closest after %d steps (r/g %.2f, b/g %.2f)",
                     round - 1, rgb[0] / rgb[1], rgb[2] / rgb[1]))
@@ -2132,7 +2146,7 @@ class MainActivity : AppCompatActivity() {
         railLeft.visibility = hidden
         railRight.visibility = hidden
         status.visibility = hidden
-        telemetry.visibility = hidden
+        telemetry.visibility = if (!on && settings.showOutputs) View.VISIBLE else View.GONE
         vu.visibility = hidden
         timecode.visibility = hidden
         // The zones and the focus box come back to whichever of them was up.
@@ -2421,8 +2435,39 @@ class MainActivity : AppCompatActivity() {
 
     private fun say(text: String) {
         lastSaid = text
-        status.text = text
+        status.text = markStatus() + text
         Trace.state(text)
+    }
+
+    // v106: the armed shape's name on the status line, and where it locked, in numbers (Marko, 2.10.2026:
+    // "at the top status line, you need to write exposure circle, white balance triangle, focusing square, and
+    // then when it reads the value and locks ... write exact number where is it locked").
+    private var focusLockedAt: String? = null
+    private var exposureLockedAt: String? = null
+    private var wbLockedAt: String? = null
+
+    private fun markStatus(): String = when (settings.pinchTarget) {
+        1 -> "EXPOSURE CIRCLE" + (exposureLockedAt?.let { " $it" } ?: "") + "  ·  "
+        2 -> "WHITE BALANCE TRIANGLE" + (wbLockedAt?.let { " $it" } ?: "") + "  ·  "
+        else -> "FOCUSING SQUARE" + (focusLockedAt?.let { " $it" } ?: "") + "  ·  "
+    }
+
+    private fun focusLockText(): String? {
+        val d = pipeline.engine.lastFocusDistance ?: return null
+        return if (d <= 0.001f) "locked at ∞" else String.format(java.util.Locale.ROOT, "locked at %.2f m (%.2f dpt)", 1f / d, d)
+    }
+
+    private fun exposureLockText(): String {
+        val e = pipeline.engine
+        val ev = e.aeCompensation * e.aeCompensationStep()
+        return "locked ISO ${e.lastIso ?: "?"} · " + (e.lastExposureNs?.let { Mechanism.formatShutter(it) } ?: "?") +
+            String.format(java.util.Locale.ROOT, " · EV %+.1f", ev)
+    }
+
+    private fun wbLockText(): String {
+        val g = pipeline.engine.currentGains()
+        return "locked ${WhiteBalance.format(wbKelvin)}" +
+            (g?.let { String.format(java.util.Locale.ROOT, " · gains R %.2f B %.2f", it[0], it[3]) } ?: "")
     }
 
     private var lastMbps = 0.0
@@ -2433,8 +2478,8 @@ class MainActivity : AppCompatActivity() {
         lastWatching = connections
         val depth = if (pipeline.isTenBit) "10-bit" else "8-bit"
         val grey = greyReadout?.let { " · $it" } ?: ""
-        status.text = if (fps > 0.5) String.format(java.util.Locale.ROOT, "%s · %.1f fps%s · %s", depth, fps, grey, lastSaid)
-            else "$depth$grey · $lastSaid"
+        status.text = if (fps > 0.5) String.format(java.util.Locale.ROOT, "%s%s · %.1f fps%s · %s", markStatus(), depth, fps, grey, lastSaid)
+            else "${markStatus()}$depth$grey · $lastSaid"
         refreshTelemetry()
     }
 
