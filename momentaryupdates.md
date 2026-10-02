@@ -518,3 +518,4 @@ Needs the GPU stage (Settings → Picture path).
 
 27. The two bit rates move to the CAMERA tab, labelled RECORDING and STREAMING (the number says Mbit/s). — **Status:** v112
 28. Settings margins: nothing touches the screen's edges; switches not glued to the right. — **Status:** v112
+- **v112 (2.10.2026):** RECORDING and STREAMING (the two bit rates) open the CAMERA tab; settings margins 28 dp inside the bars' insets (items 27, 28). — **Status:** built
