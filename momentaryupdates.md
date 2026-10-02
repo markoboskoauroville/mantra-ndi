@@ -552,3 +552,11 @@ Needs the GPU stage (Settings → Picture path).
   is not available on this phone — back as it was", and opens the camera again; any other fatal error also reopens
   it (at most 3 a minute). — **Status:** built
 - **v116 (2.10.2026):** measured v115 on the Nothing: the crash was caught and blamed ("S-Log3 is not available on this phone — back as it was"), but the reopen came too soon ("Could not read lens 0"; by hand a few seconds later it opened). The reopen now retries at 1.5, 3, 4.5, 6 s. — **Status:** built
+
+> (07:35) I don't know, did you understand me? We don't need the same app on both phones. On the A142 phone there should be a sister app only for monitoring. So we basically are extracting the monitor code. In the past there was an idea that one app will do the same everything, but right now what we need to do is have a separate app. I think you understood it, but I don't know what you are doing. Update me
+
+- Answer: yes — Mantra Monitor is its OWN app (monitor/, applicationId com.mantraproductions.ndi.monitor, its own
+  APK in each release), only for monitoring. The camera was put on the A142 only for item 31 (his stress test).
+- **Stress test on the A142, v116 (07:31):** after the curve fix, every other risky key ran without a freeze:
+  M ×3, focus ×3, PEAK/FALSE/ZEBRA ×2, lenses L1 and L2, FULL. Curves: S-Log3 and V-Log crash its camera driver
+  (now caught, refused for good, camera back in ~2 s). — **Status:** item 31 done
