@@ -323,4 +323,36 @@ class WhiteBalanceTest {
             assertEquals("element $i", measured[i].toDouble(), same[i].toDouble(), 0.0005)
         }
     }
+
+    // --- the spot (v100) ----------------------------------------------------------
+
+    /** The case that started it: a white key seen blue. Blue gain must fall, red must rise. */
+    @Test fun spotTurnsABlueWhiteNeutral() {
+        val gains = floatArrayOf(1.529f, 1f, 1f, 2.448f)      // the trace of 2.10.2026
+        val seenBlue = doubleArrayOf(0.30, 0.40, 0.70)        // the white key, through those gains
+        val next = WhiteBalance.spotGains(gains, seenBlue)
+        assertTrue("red rises", next[0] > gains[0])
+        assertTrue("blue falls", next[3] < gains[3])
+        assertEquals("green is the reference", 1f, next[1], 0f)
+        // a linear sensor answers in proportion: one round lands it
+        val r = seenBlue[0] / gains[0] * next[0]; val b = seenBlue[2] / gains[3] * next[3]
+        assertTrue(WhiteBalance.spotNeutral(doubleArrayOf(r, 0.40, b)))
+    }
+
+    @Test fun spotLeavesANeutralBoxAlone() {
+        val gains = floatArrayOf(2.0f, 1f, 1f, 1.6f)
+        val next = WhiteBalance.spotGains(gains, doubleArrayOf(0.5, 0.5, 0.5))
+        assertEquals(2.0f, next[0], 1e-6f); assertEquals(1.6f, next[3], 1e-6f)
+        assertTrue(WhiteBalance.spotNeutral(doubleArrayOf(0.5, 0.505, 0.495)))
+    }
+
+    /** A box full of one coloured light must not throw the picture across the room in one round. */
+    @Test fun spotMovesAtMostHalfOrDoublePerRound() {
+        val next = WhiteBalance.spotGains(floatArrayOf(2f, 1f, 1f, 2f), doubleArrayOf(0.01, 0.5, 0.9))
+        assertEquals(4f, next[0], 1e-6f)          // capped at double
+        assertEquals(1.111f, next[3], 1e-3f)       // 0.5/0.9 is inside the cap
+        val far = WhiteBalance.spotGains(floatArrayOf(6f, 1f, 1f, 0.6f), doubleArrayOf(0.01, 0.5, 5.0))
+        assertEquals(WhiteBalance.SPOT_MAX_GAIN, far[0], 1e-6f)
+        assertEquals(WhiteBalance.SPOT_MIN_GAIN, far[3], 1e-6f)
+    }
 }

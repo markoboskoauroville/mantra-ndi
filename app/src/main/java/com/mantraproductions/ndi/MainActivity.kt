@@ -1353,6 +1353,75 @@ class MainActivity : AppCompatActivity() {
         return if (n == 0) null else sum / n
     }
 
+    /**
+     * THE SPOT (v100): the mean LINEAR red, green and blue of the lit pixels inside the focus box. Dark pixels
+     * (the black between a keyboard's keys, a shadow) and clipped ones (a channel at the top, whose true value
+     * is unknown) are left out, so what is measured is the light of the thing in the box. Null when nothing in
+     * the box qualifies. Read off the monitor texture like the grey card, then undone through the active
+     * curve, because white balance gains act on linear light.
+     */
+    private fun sampleSpotRgb(): DoubleArray? {
+        if (!preview.isAvailable || focusSquare.visibility != View.VISIBLE) return null
+        val w = 192
+        val h = 108
+        val bmp = runCatching { preview.getBitmap(w, h) }.getOrNull() ?: return null
+        val b = focusSquare.normalisedBounds()
+        val x0 = (b[0] * w).toInt().coerceIn(0, w - 1)
+        val x1 = (b[2] * w).toInt().coerceIn(x0 + 1, w)
+        val y0 = (b[1] * h).toInt().coerceIn(0, h - 1)
+        val y1 = (b[3] * h).toInt().coerceIn(y0 + 1, h)
+        val curve = LogCurves.Curve.entries[curveIndex]
+        val sum = DoubleArray(3)
+        var n = 0
+        for (y in y0 until y1) for (x in x0 until x1) {
+            val c = bmp.getPixel(x, y)
+            val r = android.graphics.Color.red(c); val g = android.graphics.Color.green(c); val bl = android.graphics.Color.blue(c)
+            if (maxOf(r, g, bl) < SPOT_DARK || maxOf(r, g, bl) > SPOT_CLIPPED) continue
+            sum[0] += LogCurves.decode(curve, r / 255.0)
+            sum[1] += LogCurves.decode(curve, g / 255.0)
+            sum[2] += LogCurves.decode(curve, bl / 255.0)
+            n++
+        }
+        bmp.recycle()
+        return if (n < SPOT_MIN_PIXELS) null else doubleArrayOf(sum[0] / n, sum[1] / n, sum[2] / n)
+    }
+
+    /**
+     * One round of the spot: read the box, and either stop (neutral, or out of rounds) or move red and blue
+     * gain by G/R and G/B and come back when the picture has taken them.
+     */
+    private fun spotRound(round: Int, ticket: Int) {
+        if (probeTicket != ticket || !pipeline.isRunning) return
+        val engine = pipeline.engine
+        val rgb = sampleSpotRgb()
+        val gains = engine.currentGains()
+        if (rgb == null || gains == null) {
+            say(if (round == 1) "White balance ${WhiteBalance.format(wbKelvin)} — nothing lit in the box to make white"
+                else "White balance from the box: stopped at round $round, the box went dark or clipped")
+            Trace.refused("white balance spot", "round $round: nothing in the box between dark and clipped")
+            refreshZones(); refreshKeys()
+            return
+        }
+        Trace.state(String.format(java.util.Locale.ROOT,
+            "white balance spot: round %d, box linear r/g %.3f b/g %.3f", round, rgb[0] / rgb[1], rgb[2] / rgb[1]))
+        if (WhiteBalance.spotNeutral(rgb) || round > WhiteBalance.SPOT_ROUNDS) {
+            val k = engine.adoptSpotAsAnchor()
+            if (k != null) wbKelvin = k
+            wbAuto = false
+            say(if (WhiteBalance.spotNeutral(rgb)) "White balance from the box: white is white (${WhiteBalance.format(wbKelvin)})"
+                else String.format(java.util.Locale.ROOT, "White balance from the box: closest after %d rounds (r/g %.2f, b/g %.2f)",
+                    round - 1, rgb[0] / rgb[1], rgb[2] / rgb[1]))
+            refreshZones(); refreshKeys()
+            return
+        }
+        if (!engine.setWhiteBalanceGains(WhiteBalance.spotGains(gains, rgb), round)) {
+            say("White balance from the box: the camera refused the gains")
+            return
+        }
+        // the gains reach the picture a few frames later; the texture read must see the new ones
+        ui.postDelayed({ spotRound(round + 1, ticket) }, SPOT_SETTLE_MS)
+    }
+
     /** The last compensation move and the error before it, and the step it proved to be. */
     private var lastMove: Pair<Int, Double>? = null
     private var learntStep = 0.0
@@ -1576,7 +1645,14 @@ class MainActivity : AppCompatActivity() {
                     wbKelvin = kelvin
                     wbAuto = false
                     pipeline.engine.setWhiteBalanceKelvin(kelvin)
-                    say("White balance measured: ${WhiteBalance.format(kelvin)}, now manual")
+                    if (focusSquare.visibility == View.VISIBLE) {
+                        // v100: the box is out, so A goes on to make what is IN it white
+                        say("White balance: the camera's ${WhiteBalance.format(kelvin)}, now the box…")
+                        val spot = probeTicket
+                        ui.postDelayed({ spotRound(1, spot) }, SPOT_SETTLE_MS)
+                    } else {
+                        say("White balance measured: ${WhiteBalance.format(kelvin)}, now manual")
+                    }
                 }
                 refreshZones()
                 refreshKeys()
@@ -2215,3 +2291,11 @@ class MainActivity : AppCompatActivity() {
         pipeline.stop()
     }
 }
+
+// The spot (v100). Out of 255 on the monitor texture: below DARK is the black around a lit thing, above
+// CLIPPED a channel has hit the top and no longer says how bright it is. MIN_PIXELS of 192x108 is enough
+// lit legend to average. SETTLE: gains sent now reach the texture some frames later (8 at 30 fps ~ 270 ms).
+private const val SPOT_DARK = 40
+private const val SPOT_CLIPPED = 245
+private const val SPOT_MIN_PIXELS = 6
+private const val SPOT_SETTLE_MS = 450L

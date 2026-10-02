@@ -1420,6 +1420,51 @@ class CaptureEngine(private val context: Context) {
     @Volatile var lastAnchorKelvin: Int? = null
         private set
 
+    /** The matrix sent with the last manual gains, so the spot can keep it while it moves the gains. */
+    @Volatile private var sentTransform: FloatArray? = null
+
+    /** The gains on the picture now: the last sent, else the camera's own. */
+    fun currentGains(): FloatArray? = (sentGains ?: autoGains)?.copyOf()
+
+    /**
+     * THE SPOT (v100): exactly these gains, with the matrix already on the picture, no temperature model in
+     * between. MainActivity's rounds call it until the focus box reads neutral.
+     */
+    fun setWhiteBalanceGains(gains: FloatArray, round: Int): Boolean {
+        val request = builder ?: run {
+            Trace.refused("white balance spot", "the camera has no request to change")
+            return false
+        }
+        val transform = sentTransform ?: autoTransform
+        setWb(request, CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+        setWb(request, CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
+        setWb(request, CaptureRequest.COLOR_CORRECTION_GAINS, RggbChannelVector(gains[0], gains[1], gains[2], gains[3]))
+        if (transform != null) setWb(request, CaptureRequest.COLOR_CORRECTION_TRANSFORM, transformOf(transform))
+        sentGains = gains.copyOf()
+        sentTransform = transform
+        checkFrames = GAIN_CHECK_FRAMES
+        manualWhiteBalance = true
+        val ok = apply()
+        reportWhiteBalance = ok
+        Trace.control("white balance spot",
+            String.format(java.util.Locale.ROOT, "round %d, gains %.3f/%.3f/%.3f", round, gains[0], gains[1], gains[3]),
+            if (ok) "applied" else "refused")
+        return ok
+    }
+
+    /**
+     * The spot's answer becomes the anchor the fader hangs off, as the camera's own answer was: moving the
+     * fader afterwards starts from the white he measured, not from the room's lamp.
+     */
+    fun adoptSpotAsAnchor(): Int? {
+        val g = sentGains ?: return null
+        autoGains = g.copyOf()
+        sentTransform?.let { autoTransform = it.copyOf() }
+        val k = measuredKelvin()
+        lastAnchorKelvin = k
+        return k
+    }
+
     /** True while the camera's own white balance has been measured at least once. */
     val whiteBalanceAnchored: Boolean get() = autoGains != null
 
@@ -1511,6 +1556,7 @@ class CaptureEngine(private val context: Context) {
                 if (transform != null) {
                     setWb(request, CaptureRequest.COLOR_CORRECTION_TRANSFORM, transformOf(transform))
                 }
+                sentTransform = transform
                 // Checked a few frames on: did the lens take these gains?
                 sentGains = gains.copyOf()
                 checkFrames = GAIN_CHECK_FRAMES

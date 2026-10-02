@@ -369,3 +369,8 @@ Needs the GPU stage (Settings → Picture path).
   eats orange's green. Plan: A becomes a spot white balance on the focus box (sampleGreyCard,
   MainActivity.kt:1331, to return mean R G B, linearised, clipped pixels rejected; gains iterated until
   R=G=B in the box), Kelvin range widened to ~2500-10000 K.
+
+- **v100 (2.10.2026):** A with the focus box out = the camera's own measurement, then THE SPOT: the box's lit,
+  unclipped pixels read in linear light, red and blue gain moved by G/R and G/B, up to 5 rounds until the box
+  is neutral (±2 %); the result becomes the fader's anchor. With the box put away, A is as before.
+  — **Status:** built, unit-tested (3 new tests); to be tried on his Pixel against a white G815 key

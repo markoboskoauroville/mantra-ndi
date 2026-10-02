@@ -444,4 +444,37 @@ object WhiteBalance {
         24 -> 3200   // ISO studio tungsten
         else -> 6504
     }
+
+    // --- the spot: white on the focus box (v100) --------------------------------
+    //
+    // Marko, 2.10.2026: "fix my NDI camera white balance algorithm using this keyboard so it needs to
+    // recognize the right colors." The camera's own measurement balances the WHOLE picture, and in a dark
+    // room lit by a warm lamp it neutralises the lamp (MEASURED: gains 1.529/2.448, a strong blue boost), so
+    // a self-lit white key comes out blue. The spot makes what is IN THE BOX white instead: the mean linear
+    // R, G, B of its lit pixels is read, and red and blue gain are scaled by G/R and G/B, a few rounds,
+    // until the box is neutral. Pure arithmetic here; the reading and the rounds are MainActivity's.
+
+    /** A box is neutral when red and blue are each within [tolerance] of green. */
+    fun spotNeutral(rgb: DoubleArray, tolerance: Double = 0.02): Boolean =
+        rgb[1] > 0 && kotlin.math.abs(rgb[0] / rgb[1] - 1) <= tolerance && kotlin.math.abs(rgb[2] / rgb[1] - 1) <= tolerance
+
+    /**
+     * The next gains: red times G/R, blue times G/B, green untouched. One round never moves a gain by more
+     * than half or double (a box that caught a coloured light must not throw the picture across the room),
+     * and the result stays inside what Camera2 accepts.
+     */
+    fun spotGains(gains: FloatArray, rgb: DoubleArray): FloatArray {
+        require(gains.size == 4 && rgb.size == 3)
+        val fr = (rgb[1] / rgb[0]).coerceIn(0.5, 2.0)
+        val fb = (rgb[1] / rgb[2]).coerceIn(0.5, 2.0)
+        return floatArrayOf(
+            (gains[0] * fr).toFloat().coerceIn(SPOT_MIN_GAIN, SPOT_MAX_GAIN),
+            gains[1], gains[2],
+            (gains[3] * fb).toFloat().coerceIn(SPOT_MIN_GAIN, SPOT_MAX_GAIN)
+        )
+    }
+
+    const val SPOT_MIN_GAIN = 0.5f
+    const val SPOT_MAX_GAIN = 8.0f
+    const val SPOT_ROUNDS = 5
 }
