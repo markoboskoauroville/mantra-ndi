@@ -479,3 +479,8 @@ Needs the GPU stage (Settings → Picture path).
 
 19. No W: the triangle key is a FILLED triangle (white when idle; it keeps following its shape's colour —
     orange searching, green locked, grey off — so the keys stay in sync, item 17). F and E stay. — **Status:** proven v109 on his Pixel 05:05
+
+> (05:08) result is not good. The idea is that the triangle has a fill which is white, but the outline changes its color between green, white, and yellow. Now the whole triangle is green. What's going on
+
+20. Correction of 19: the triangle's FILL is always white; only its OUTLINE follows the shape's colour (white,
+    orange, green, red). Off: grey outline and a grey fill. — **Status:** v110

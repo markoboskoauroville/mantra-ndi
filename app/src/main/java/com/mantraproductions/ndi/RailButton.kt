@@ -260,10 +260,17 @@ class RailButton @JvmOverloads constructor(
                 markPath.lineTo(cx + r * 1.25f, cy + r * 1.0f)
                 markPath.lineTo(cx - r * 1.25f, cy + r * 1.0f)
                 markPath.close()
-                // v109: filled, not a W ("w doesn't look good because it's smaller ... fill the triangle inside")
-                mark.style = Paint.Style.FILL_AND_STROKE
+                // v110: a WHITE fill, and only the outline in the key's colour (Marko, 2.10.2026: "the triangle has a
+                // fill which is white, but the outline changes its color between green, white, and yellow"). v109
+                // filled it with the outline's colour. Off, both are grey.
+                mark.style = Paint.Style.FILL
+                mark.color = if (state == State.OFF || state == State.DEAD) tint else WHITE
                 canvas.drawPath(markPath, mark)
                 mark.style = Paint.Style.STROKE
+                mark.color = tint
+                mark.strokeWidth = density(2.6f)
+                canvas.drawPath(markPath, mark)
+                mark.strokeWidth = density(1.8f)
             }
             Glyph.NONE -> Unit
         }
