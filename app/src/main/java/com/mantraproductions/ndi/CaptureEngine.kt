@@ -508,6 +508,8 @@ class CaptureEngine(private val context: Context) {
             val built = request.build()
             session.setRepeatingRequest(built, captureCallback, handler)
             lastGood = built
+            lastApplyAt = android.os.SystemClock.uptimeMillis()
+            armFreezeWatch()
             true
         } catch (e: Throwable) {
             Trace.refused("repeating request", Trace.describe(e))
@@ -525,6 +527,8 @@ class CaptureEngine(private val context: Context) {
             result: TotalCaptureResult
         ) {
             framesCompleted++
+            lastFrameAt = android.os.SystemClock.uptimeMillis()
+            lastProducing = r
             // What the lens itself did (v98): on a physical sub-camera the
             // logical result can describe another sensor.
             val lensResult = lensResultOf(result)
@@ -589,8 +593,9 @@ class CaptureEngine(private val context: Context) {
             pendingExposure?.let { waiting ->
                 val st = result.get(CaptureResult.CONTROL_AE_STATE)
                 aeFrames++
-                if (st == CaptureResult.CONTROL_AE_STATE_CONVERGED || st == CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED ||
-                    st == CaptureResult.CONTROL_AE_STATE_LOCKED || aeFrames > AE_MAX_FRAMES) {
+                // v104: not before AE_MIN_FRAMES — v103 locked "after 1 frame" on the state left from before
+                if ((aeFrames >= AE_MIN_FRAMES && (st == CaptureResult.CONTROL_AE_STATE_CONVERGED ||
+                        st == CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED)) || aeFrames > AE_MAX_FRAMES) {
                     pendingExposure = null
                     val settled = aeFrames <= AE_MAX_FRAMES
                     builder?.let { b -> b.set(CaptureRequest.CONTROL_AE_LOCK, true); apply() }
@@ -678,6 +683,7 @@ class CaptureEngine(private val context: Context) {
      */
     private fun watchForFreeze(curve: LogCurves.Curve, previous: LogCurves.Curve, before: CaptureRequest?) {
         val h = handler ?: return
+        curveWatchUntil = android.os.SystemClock.uptimeMillis() + 1300
         val at = framesCompleted
         h.postDelayed({
             if (framesCompleted != at || session == null) return@postDelayed
@@ -691,6 +697,59 @@ class CaptureEngine(private val context: Context) {
             }
             onCurveRefused?.invoke(curve, previous)
         }, 1000)
+    }
+
+    // --- THE FREEZE WATCH FOR EVERYTHING (v104) ----------------------------------
+    //
+    // Marko, 2.10.2026: "on other phones it can freeze when using some features ... detect freezing and say
+    // just to user feature not supported and not freeze ... say this feature is not available and go back to
+    // the old settings." v83's watch covered the log curve only. This one covers every change sent to a running
+    // camera: the request that last produced a frame is remembered; when frames stop for FREEZE_MS right after
+    // a change, the builder is put back to that request's values, it is sent again, and the screen is told.
+
+    @Volatile private var lastFrameAt = 0L
+    @Volatile private var lastApplyAt = 0L
+    @Volatile private var lastProducing: CaptureRequest? = null
+    @Volatile private var watching = false
+    @Volatile private var curveWatchUntil = 0L
+
+    /** Told when a change froze the picture and was taken back, and what was put back. */
+    @Volatile var onRequestFroze: (() -> Unit)? = null
+
+    private fun armFreezeWatch() {
+        val h = handler ?: return
+        if (watching) return
+        watching = true
+        h.postDelayed(object : Runnable {
+            override fun run() {
+                val now = android.os.SystemClock.uptimeMillis()
+                if (session == null) { watching = false; return }
+                // the log curve has its own watch for its first second; let it answer
+                val frozen = lastFrameAt in 1 until lastApplyAt && now - lastApplyAt > FREEZE_MS && now > curveWatchUntil
+                if (frozen) {
+                    watching = false
+                    putBackLastProducing()
+                    return
+                }
+                if (now - lastApplyAt > FREEZE_WATCH_FOR_MS) { watching = false; return }
+                h.postDelayed(this, 300)
+            }
+        }, 300)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun putBackLastProducing() {
+        val good = lastProducing ?: return
+        val request = builder ?: return
+        Trace.refused("freeze", "no frame for ${FREEZE_MS} ms after a change: the last request that made a picture is put back")
+        runCatching { for (k in good.keys) request.set(k as CaptureRequest.Key<Any?>, good.get(k)) }
+        runCatching {
+            mirrorToLens(request)
+            val built = request.build()
+            session?.setRepeatingRequest(built, captureCallback, handler)
+            lastGood = built
+        }
+        onRequestFroze?.invoke()
     }
 
     /** Frames the camera has delivered, for the freeze watch. */
@@ -1755,5 +1814,8 @@ class CaptureEngine(private val context: Context) {
         /** Frames after a white balance change before its gains are checked. */
         const val GAIN_CHECK_FRAMES = 8
         const val AE_MAX_FRAMES = 60
+        const val AE_MIN_FRAMES = 6
+        const val FREEZE_MS = 1200L
+        const val FREEZE_WATCH_FOR_MS = 4000L
     }
 }

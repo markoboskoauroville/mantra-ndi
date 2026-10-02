@@ -425,3 +425,10 @@ Needs the GPU stage (Settings → Picture path).
   green), TRIANGLE white balance — and their keys on the left rail drawn as the marks: grey off the picture,
   white on it, orange = the one a pinch resizes; a tap steps grey → white → orange → grey. One L key (whisper:
   the lens in use) opens the lens keys and choosing one closes them. Items 3, 8, 9, 12. — **Status:** built
+- **v104 (2.10.2026):** settings start with the light (a torch icon at the top: grey off, green on, kept on
+  while the camera runs), then the sizes of the focus square, the exposure circle and the triangle, then
+  8-bit/10-bit and resolution; "Turn the preview" removed, the turn always 0. The exposure circle waits at least
+  6 frames before it believes "settled" (v103 locked after 1). THE FREEZE WATCH FOR EVERYTHING: the request that
+  last made a frame is kept; frames stopping 1.2 s after any change put it back and the screen says "That
+  setting is not available on this phone — put back as it was" (items 4, 5, 6, 7, 11). Not provable on the
+  Pixel (nothing freezes there); the curve's own v83 watch, proven on the Nothing, stays. — **Status:** built

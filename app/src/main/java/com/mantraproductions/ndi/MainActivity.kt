@@ -333,6 +333,13 @@ class MainActivity : AppCompatActivity() {
         // so it is always one long press away rather than behind a menu.
         status.setOnLongClickListener { exportTrace(); true }
 
+        // v104: any change that stopped the picture was taken back by the engine; say so, in his words
+        pipeline.engine.onRequestFroze = {
+            ui.post {
+                say("That setting is not available on this phone — put back as it was")
+                refreshZones(); refreshKeys()
+            }
+        }
         pipeline.engine.onCurveRefused = { refused, back ->
             ui.post {
                 curveIndex = back.ordinal
@@ -349,6 +356,8 @@ class MainActivity : AppCompatActivity() {
                     holdBufferSize()
                     applyPreviewTransform()
                     say("${size.width}x${size.height} ${if (tenBit) "10-bit" else "8-bit"} $codec")
+                    // v104: the light, switched in settings, is put on whenever the camera opens
+                    if (settings.torch) pipeline.engine.setTorch(true)
                     if (restoreMode != CameraPipeline.Mode.OFF) {
                         val want = restoreMode
                         restoreMode = CameraPipeline.Mode.OFF
@@ -629,7 +638,8 @@ class MainActivity : AppCompatActivity() {
         // sensor in a separate hole and is not always mounted the same way
         // round as the rear ones, so one global quarter turn meant fixing the
         // selfie lens broke the other three.
-        manualQuarterTurns = settings.quarterTurnsFor(lensKey())
+        // v104: "remove interface orientation from the settings. It can be always at 0" (Marko, 2.10.2026)
+        manualQuarterTurns = 0
         focusComplaintFor = ""
         // The buffer size has to be right before the session is built.
         bufferSize = pipeline.previewSizeFor(lens.id, lens.physicalId)
@@ -682,6 +692,11 @@ class MainActivity : AppCompatActivity() {
         // The camera session is lost while backgrounded even with a foreground
         // service, so it is rebuilt rather than tested for.
         if (preview.isAvailable && !pipeline.isRunning) openCamera()
+        // v104: back from settings — the marks take their sizes from there, and the light follows its switch
+        focusSquare.size = settings.focusBoxSize
+        exposureCircle.size = settings.circleSize
+        wbBox.size = settings.wbSize
+        if (pipeline.isRunning && pipeline.engine.hasFlash()) pipeline.engine.setTorch(settings.torch)
         // Settings may have removed the LUT that was on.
         if (activeSlot > 0 && !slots.slot(activeSlot).loaded) { activeSlot = 0; applyLook() }
         refreshStorage()

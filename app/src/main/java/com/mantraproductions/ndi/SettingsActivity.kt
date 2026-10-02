@@ -141,23 +141,19 @@ class SettingsActivity : AppCompatActivity() {
         showLuts()
         findViewById<Button>(R.id.addLut).setOnClickListener { pickLut.launch(arrayOf("*/*")) }
 
-        // ROT, for the lens the camera was on.
-        val lens = intent.getStringExtra(EXTRA_LENS)
-        val rot = findViewById<RadioGroup>(R.id.rot)
-        if (lens == null) {
-            rot.addView(TextView(this).apply { text = "Open settings from the camera to turn a lens" })
-        } else {
-            val turns = settings.quarterTurnsFor(lens)
-            (0..3).forEach { q ->
-                rot.addView(RadioButton(this).apply {
-                    id = 100 + q
-                    text = "${q * 90}°"
-                    textSize = 12f
-                    isChecked = q == turns
-                })
-            }
-            rot.setOnCheckedChangeListener { _, id -> settings.setQuarterTurnsFor(lens, id - 100) }
-        }
+        // v104: the light at the top, and the three marks' sizes first (ROT, "Turn the preview", is gone).
+        val torch = findViewById<android.widget.ImageButton>(R.id.torch)
+        fun paintTorch() = torch.setColorFilter(if (settings.torch) RailButton.GREEN else RailButton.GREY)
+        paintTorch()
+        torch.setOnClickListener { settings.torch = !settings.torch; paintTorch() }
+        fun pct(x: Float, lo: Float, hi: Float) = (((x - lo) / (hi - lo)) * 100).toInt().coerceIn(0, 100)
+        fun of(p: Int, lo: Float, hi: Float) = lo + (hi - lo) * p / 100f
+        slider(R.id.squareSize, R.id.squareSizeValue, pct(settings.focusBoxSize, Mechanism.BOX_MIN, 1f),
+            label = { "${it}%" }, onSet = { settings.focusBoxSize = of(it, Mechanism.BOX_MIN, 1f) })
+        slider(R.id.circleSize, R.id.circleSizeValue, pct(settings.circleSize, 0.06f, 0.5f),
+            label = { "${it}%" }, onSet = { settings.circleSize = of(it, 0.06f, 0.5f) })
+        slider(R.id.triangleSize, R.id.triangleSizeValue, pct(settings.wbSize, 0.06f, 0.5f),
+            label = { "${it}%" }, onSet = { settings.wbSize = of(it, 0.06f, 0.5f) })
 
         // Zebra from 50% to 100%.
         slider(

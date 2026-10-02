@@ -149,6 +149,11 @@ class Settings(context: Context) {
         get() = prefs.getFloat(WB_Y, 0.5f)
         set(value) = prefs.edit().putFloat(WB_Y, value.coerceIn(0f, 1f)).apply()
 
+    /** The light (v104): the phone's lamp, kept on while the camera runs. Switched from the top of settings. */
+    var torch: Boolean
+        get() = prefs.getBoolean(TORCH, false)
+        set(value) = prefs.edit().putBoolean(TORCH, value).apply()
+
     /** Where the exposure circle was left (v103), and the sizes of the circle and the triangle. */
     var circleX: Float
         get() = prefs.getFloat(CIRCLE_X, 0.3f)
@@ -270,6 +275,7 @@ class Settings(context: Context) {
         const val FPS = "framesPerSecond"
         const val BOX = "focusBoxSize"
         const val WB_X = "wbBoxX"
+        const val TORCH = "torch"
         const val CIRCLE_X = "circleX"
         const val CIRCLE_Y = "circleY"
         const val CIRCLE_SIZE = "circleSize"

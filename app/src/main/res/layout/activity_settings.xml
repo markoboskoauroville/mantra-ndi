@@ -48,6 +48,15 @@
                 android:fontFamily="monospace"
                 android:letterSpacing="0.08" />
 
+            <!-- v104: the light, the first thing in settings (grey off, green on) -->
+            <ImageButton
+                android:id="@+id/torch"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="light"
+                android:src="@drawable/ic_torch" />
+
             <Button
                 android:id="@+id/minimal"
                 style="?android:attr/borderlessButtonStyle"
@@ -81,6 +90,62 @@
              destination; the record key on the camera starts every armed one
              together, and stops them together.
         -->
+        <!--
+             v104, THE FIRST THINGS (Marko, 2.10.2026: "the first thing important in the settings are something
+             I'm using all the time ... the focus size, then this round exposure window, and then light. After that
+             we have 8-bit/10-bit switch, and after that we have a resolution"). The light is the lamp at the top.
+        -->
+        <TextView style="@style/MantraLabel" android:text="FOCUS SQUARE" />
+        <TextView android:id="@+id/squareSizeValue" style="@style/MantraValue" />
+        <SeekBar android:id="@+id/squareSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+        <TextView style="@style/MantraLabel" android:text="EXPOSURE CIRCLE" />
+        <TextView android:id="@+id/circleSizeValue" style="@style/MantraValue" />
+        <SeekBar android:id="@+id/circleSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+        <TextView style="@style/MantraLabel" android:text="WHITE BALANCE TRIANGLE" />
+        <TextView android:id="@+id/triangleSizeValue" style="@style/MantraValue" />
+        <SeekBar android:id="@+id/triangleSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:paddingTop="18dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="3"
+                android:orientation="vertical">
+                <TextView style="@style/MantraLabel"
+                    android:paddingTop="0dp"
+                    android:text="@string/depth" />
+                <RadioGroup
+                    android:id="@+id/depth"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="5"
+                android:orientation="vertical">
+                <TextView style="@style/MantraLabel"
+                    android:paddingTop="0dp"
+                    android:text="@string/resolution" />
+                <RadioGroup
+                    android:id="@+id/resolution"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView android:tag="hint" style="@style/MantraHint"
+            android:text="@string/depth_hint" />
+
         <TextView style="@style/MantraLabel" android:text="@string/outputs" />
         <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/outputs_hint" />
         <LinearLayout
@@ -275,13 +340,7 @@
             android:layout_width="match_parent"
             android:text="@string/add_lut" />
 
-        <TextView style="@style/MantraLabel" android:text="@string/rot" />
-        <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/rot_hint" />
-        <RadioGroup
-            android:id="@+id/rot"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal" />
+        <!-- v104: "Turn the preview" is gone; the turn is always 0 (Marko, 2.10.2026) -->
 
         <TextView style="@style/MantraLabel" android:text="@string/zebra" />
         <TextView android:id="@+id/zebraValue" style="@style/MantraValue" />
@@ -335,46 +394,7 @@
              picture", they are both two or three words wide, and stacking them
              cost half a screen for nothing.
         -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:baselineAligned="false"
-            android:paddingTop="18dp">
 
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="3"
-                android:orientation="vertical">
-                <TextView style="@style/MantraLabel"
-                    android:paddingTop="0dp"
-                    android:text="@string/depth" />
-                <RadioGroup
-                    android:id="@+id/depth"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="5"
-                android:orientation="vertical">
-                <TextView style="@style/MantraLabel"
-                    android:paddingTop="0dp"
-                    android:text="@string/resolution" />
-                <RadioGroup
-                    android:id="@+id/resolution"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <TextView android:tag="hint" style="@style/MantraHint"
-            android:text="@string/depth_hint" />
 
         <!--
              Frames a second: the first thing anybody sets on a camera.
