@@ -87,6 +87,14 @@ class FocusSquareView @JvmOverloads constructor(
     var drawn = true
         set(value) { if (field != value) { field = value; invalidate() } }
 
+    /**
+     * v105: false while the circle or the triangle is armed. Then a tap is theirs too (Marko, 2.10.2026:
+     * "tapping is always 2 actions: it moves the shape to the position and do automatic correction and then
+     * locks"): the square stays where it is and the tap's point goes to [onTapFor].
+     */
+    var tapMovesMe = true
+    var onTapFor: ((Float, Float) -> Unit)? = null
+
     /** v103: false while the circle or the triangle is the armed mark: then a pinch is theirs. */
     var pinchResizesMe = true
 
@@ -366,8 +374,12 @@ class FocusSquareView @JvmOverloads constructor(
                 if (event.actionMasked == MotionEvent.ACTION_UP &&
                     wasGrabbed && !wasDragging && !wasPinching
                 ) {
-                    takePending()
-                    onTapped?.invoke()
+                    if (tapMovesMe) {
+                        takePending()
+                        onTapped?.invoke()
+                    } else {
+                        onTapFor?.invoke((event.x / width).coerceIn(0f, 1f), (event.y / height).coerceIn(0f, 1f))
+                    }
                 }
                 pendingX = Float.NaN
                 pendingY = Float.NaN

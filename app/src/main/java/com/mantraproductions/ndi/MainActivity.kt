@@ -289,6 +289,7 @@ class MainActivity : AppCompatActivity() {
         exposureCircle.post { exposureCircle.moveTo(settings.circleX, settings.circleY) }
         exposureCircle.onMoved = { x, y -> settings.circleX = x; settings.circleY = y; exposureCircle.state = MarkView.State.IDLE }
         exposureCircle.onTapped = { meterExposure() }
+        focusSquare.onTapFor = { x, y -> tapAt(x, y) }
         refreshMarks()
         wbBox.onMoved = { x, y -> settings.wbBoxX = x; settings.wbBoxY = y }
         wbBox.onTapped = { spotWhiteBalance() }
@@ -312,7 +313,8 @@ class MainActivity : AppCompatActivity() {
                     val x = (e.rawX - at[0]) / picture.width.coerceAtLeast(1)
                     val y = (e.rawY - at[1]) / picture.height.coerceAtLeast(1)
                     // The black round the picture is not a place to focus on.
-                    if (x in 0f..1f && y in 0f..1f) focusAt(x, y)
+                    // v105: a tap serves the armed shape, in the clean feed as everywhere
+                    if (x in 0f..1f && y in 0f..1f) tapAt(x, y)
                     return true
                 }
                 override fun onDown(e: android.view.MotionEvent) = true
@@ -327,7 +329,7 @@ class MainActivity : AppCompatActivity() {
         zones.onGrab = { refreshZones() }
         zones.onToggle = { index -> toggleParam(index) }
         zones.onPreset = { index, preset -> applyPreset(index, preset) }
-        zones.onSingleTap = { x, y -> focusAt(x, y) }
+        zones.onSingleTap = { x, y -> tapAt(x, y) }
 
         // The trace is the only instrument that reaches a phone with no cable,
         // so it is always one long press away rather than behind a menu.
@@ -1430,6 +1432,29 @@ class MainActivity : AppCompatActivity() {
         exposureCircle.visibility = if (canShow && shown and 2 != 0) View.VISIBLE else View.GONE
         wbBox.visibility = if (canShow && shown and 4 != 0) View.VISIBLE else View.GONE
         focusSquare.pinchResizesMe = settings.pinchTarget == 0
+        focusSquare.tapMovesMe = settings.pinchTarget == 0
+    }
+
+    /**
+     * v105: a tap on the picture serves the ARMED shape (the orange key): it moves there, corrects, locks.
+     * Square: focus there. Circle: exposure read there. Triangle: white balance from there.
+     */
+    private fun tapAt(x: Float, y: Float) {
+        when (settings.pinchTarget) {
+            1 -> {
+                exposureCircle.moveTo(x, y)
+                settings.circleX = exposureCircle.centreX; settings.circleY = exposureCircle.centreY
+                Trace.control("tap", String.format("%.2f,%.2f", x, y), "exposure circle")
+                meterExposure()
+            }
+            2 -> {
+                wbBox.moveTo(x, y)
+                settings.wbBoxX = wbBox.centreX; settings.wbBoxY = wbBox.centreY
+                Trace.control("tap", String.format("%.2f,%.2f", x, y), "white balance triangle")
+                spotWhiteBalance()
+            }
+            else -> focusAt(x, y)
+        }
     }
 
     /** A pinch anywhere resizes the orange mark, when that is the circle or the triangle. */

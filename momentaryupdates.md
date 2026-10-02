@@ -440,3 +440,4 @@ Needs the GPU stage (Settings → Picture path).
 13. The armed shape (orange key — "red" in his words — the one the pinch resizes) is also the one a tap on the
     picture serves: the tap MOVES that shape to where it landed, runs its automatic correction (focus, exposure
     or white balance) and LOCKS. The same in FULL screen, where nothing is drawn. — **Status:** v105
+- **v105 (2.10.2026):** a tap anywhere on the picture serves the armed (orange) shape — square focus, circle exposure, triangle white balance — moving it there, correcting, locking; in the clean feed and under CTRL too (item 13). — **Status:** built
