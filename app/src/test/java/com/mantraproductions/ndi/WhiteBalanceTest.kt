@@ -1,5 +1,6 @@
 package com.mantraproductions.ndi
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -437,5 +438,22 @@ class WhiteBalanceTest {
             gains = learn.next(gains, rgb)
         }
         assertTrue("neutral within the rounds: ${seen(gains).toList()}", WhiteBalance.spotNeutral(seen(gains), 0.03))
+    }
+
+    @Test
+    fun `the matrix moves with the gains, as a preset moves it`() {
+        val warm = DoubleArray(9) { if (it % 4 == 0) 1.4 else -0.2 }
+        val cool = DoubleArray(9) { if (it % 4 == 0) 1.9 else -0.45 }
+        val curve = listOf(2700 to (doubleArrayOf(1.3, 2.9) + warm), 6500 to (doubleArrayOf(2.2, 1.7) + cool))
+        val camera = FloatArray(9) { cool[it].toFloat() }
+        // at the camera's own temperature nothing moves
+        assertArrayEquals(camera, WhiteBalance.matrixAlongCurve(curve, camera, 6500, 6500), 1e-6f)
+        // at the tungsten setting it is the tungsten preset's matrix, carried from the camera's
+        val t = WhiteBalance.matrixAlongCurve(curve, camera, 6500, 2700)
+        for (i in 0 until 9) assertEquals(warm[i], t[i].toDouble(), 1e-5)
+        // a curve without matrices leaves the camera's alone
+        assertArrayEquals(camera, WhiteBalance.matrixAlongCurve(real, camera, 5500, 3000), 0f)
+        // and a kept curve with matrices comes back whole
+        assertEquals(11, WhiteBalance.decodeCurve(WhiteBalance.encodeCurve(curve))!![0].second.size)
     }
 }

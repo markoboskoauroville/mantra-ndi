@@ -626,3 +626,4 @@ Needs the GPU stage (Settings → Picture path).
 > please do the ramping when I change my shutter speed in degrees from button to button
 
 41. The shutter angle keys (0° 90° 180° 270° 360°): moving from one to another ramps, eased in and out, like the marks. — **Status:** after the white balance fader
+- **v127 MEASURED (10:19–10:20, Pixel 7 lens 3, white paper):** the lens's presets give a real curve (2700K R 1.33 B 2.88; 5500K R 2.15 B 1.77; 6500K R 2.22 B 1.71; 7500K R 2.58 B 1.47); the room reads 4700K (v126 said 6500K). The fader now goes the RIGHT way all along (gains monotonic 10000K → 2000K) but too far in hue: at 2800K the paper's red falls to ~0 (cyan, not blue), at 10000K red clips (orange), because the gains moved under the room's matrix. **v128:** each preset's matrix is measured too and moves with the gains. — **Status:** built

@@ -479,6 +479,29 @@ object WhiteBalance {
         )
     }
 
+    /** The presets' matrix at [kelvin], straight between points in mired (clamped at the ends), or null. */
+    fun curveMatrix(curve: List<Pair<Int, DoubleArray>>, kelvin: Int): DoubleArray? {
+        if (curve.any { it.second.size < 11 }) return null
+        if (kelvin <= curve.first().first) return curve.first().second.copyOfRange(2, 11)
+        if (kelvin >= curve.last().first) return curve.last().second.copyOfRange(2, 11)
+        val i = (0 until curve.size - 1).first { kelvin <= curve[it + 1].first }
+        val (k0, a) = curve[i]
+        val (k1, b) = curve[i + 1]
+        val t = (mired(kelvin) - mired(k0)) / (mired(k1) - mired(k0))
+        return DoubleArray(9) { a[it + 2] + (b[it + 2] - a[it + 2]) * t }
+    }
+
+    /**
+     * v128: the camera's own matrix carried along the presets' matrices by the same move as the gains — what
+     * changes between the presets at the anchor and at the setting is added to what the camera chose. A curve
+     * without matrices leaves the camera's as it was.
+     */
+    fun matrixAlongCurve(curve: List<Pair<Int, DoubleArray>>, measured: FloatArray, anchor: Int, wanted: Int): FloatArray {
+        val from = curveMatrix(curve, anchor) ?: return measured
+        val to = curveMatrix(curve, wanted) ?: return measured
+        return FloatArray(9) { (measured[it] + (to[it] - from[it])).toFloat() }
+    }
+
     /**
      * The curve of the light itself, for a lens that measured none: the gains that make a light at each
      * temperature white in linear Rec.709, von Kries. The direction and size of a real camera's move, if not
@@ -505,14 +528,15 @@ object WhiteBalance {
 
     /** "2700:1.200,2.600;5500:…", for keeping a lens's curve. */
     fun encodeCurve(curve: List<Pair<Int, DoubleArray>>): String =
-        curve.joinToString(";") { String.format(java.util.Locale.ROOT, "%d:%.4f,%.4f", it.first, it.second[0], it.second[1]) }
+        curve.joinToString(";") { p -> "${p.first}:" + p.second.joinToString(",") { String.format(java.util.Locale.ROOT, "%.4f", it) } }
 
     fun decodeCurve(text: String?): List<Pair<Int, DoubleArray>>? = text?.takeIf { it.isNotBlank() }?.let {
         runCatching {
             it.split(";").map { p ->
                 val (k, g) = p.split(":")
-                val (r, b) = g.split(",")
-                k.toInt() to doubleArrayOf(r.toDouble(), b.toDouble())
+                val v = g.split(",").map { x -> x.toDouble() }.toDoubleArray()
+                require(v.size == 2 || v.size == 11)
+                k.toInt() to v
             }
         }.getOrNull()
     }

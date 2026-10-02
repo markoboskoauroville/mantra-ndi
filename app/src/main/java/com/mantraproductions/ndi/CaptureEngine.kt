@@ -1466,17 +1466,25 @@ class CaptureEngine(private val context: Context) {
     /** One frame of the calibration: the preset's gains once it has been on for a few frames. */
     private fun calibrationFrame(lensResult: CaptureResult) {
         val (kelvin, mode) = calibQueue.firstOrNull() ?: return
-        if (lensResult.get(CaptureResult.CONTROL_AWB_MODE) != mode) { if (++calibFrames > 60) finishPreset(kelvin, null); return }
+        if (lensResult.get(CaptureResult.CONTROL_AWB_MODE) != mode) { if (++calibFrames > 60) finishPreset(kelvin, null, null); return }
         if (++calibFrames < CALIB_FRAMES) return
-        finishPreset(kelvin, lensResult.get(CaptureResult.COLOR_CORRECTION_GAINS))
+        finishPreset(kelvin, lensResult.get(CaptureResult.COLOR_CORRECTION_GAINS),
+            matrix(lensResult.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)))
     }
 
-    private fun finishPreset(kelvin: Int, g: RggbChannelVector?) {
+    /**
+     * v128: the preset's matrix is kept beside its gains. v127 moved the gains along the curve under the room's
+     * matrix, and that matrix takes green and blue away from red: at 2800K the paper's red fell to nothing and
+     * it went cyan, not blue (measured 10:20). A preset changes both; so does the fader now.
+     */
+    private fun finishPreset(kelvin: Int, g: RggbChannelVector?, m: FloatArray?) {
         if (g != null && g.greenEven > 0f) {
-            calibFound += kelvin to doubleArrayOf((g.red / g.greenEven).toDouble(), (g.blue / g.greenEven).toDouble())
+            val gains = doubleArrayOf((g.red / g.greenEven).toDouble(), (g.blue / g.greenEven).toDouble())
+            calibFound += kelvin to (if (m != null) gains + DoubleArray(9) { m[it].toDouble() } else gains)
         }
-        Trace.state(String.format(java.util.Locale.ROOT, "white balance curve: preset %dK, gains %s", kelvin,
-            g?.let { String.format(java.util.Locale.ROOT, "%.3f/%.3f/%.3f", it.red, it.greenEven, it.blue) } ?: "NOT REPORTED"))
+        Trace.state(String.format(java.util.Locale.ROOT, "white balance curve: preset %dK, gains %s, matrix %s", kelvin,
+            g?.let { String.format(java.util.Locale.ROOT, "%.3f/%.3f/%.3f", it.red, it.greenEven, it.blue) } ?: "NOT REPORTED",
+            m?.joinToString(" ") { String.format(java.util.Locale.ROOT, "%.3f", it) } ?: "NOT REPORTED"))
         calibQueue.removeAt(0)
         val request = builder
         if (calibQueue.isNotEmpty() && request != null && nextPreset(request)) return
@@ -1761,7 +1769,7 @@ class CaptureEngine(private val context: Context) {
         if (curve != null && measuredAnchor != null && !gainsIgnored) {
             val anchor = WhiteBalance.curveKelvin(curve, measuredAnchor)
             val gains = WhiteBalance.alongCurve(curve, measuredAnchor, anchor, wanted)
-            val transform = autoTransform
+            val transform = autoTransform?.let { WhiteBalance.matrixAlongCurve(curve, it, anchor, wanted) }
             setWb(request, CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
             setWb(request, CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
             setWb(request, CaptureRequest.COLOR_CORRECTION_GAINS, RggbChannelVector(gains[0], gains[1], gains[2], gains[3]))

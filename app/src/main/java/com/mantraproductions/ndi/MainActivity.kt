@@ -2191,7 +2191,7 @@ class MainActivity : AppCompatActivity() {
 
     /** The open lens's measured white balance curve, from settings, onto the engine (or none). */
     private fun loadWbCurve() {
-        pipeline.engine.presetCurve = WhiteBalance.usableCurve(WhiteBalance.decodeCurve(settings.wbCurve(lensKey())))
+        pipeline.engine.presetCurve = WhiteBalance.usableCurve(WhiteBalance.decodeCurve(settings.wbCurve("m." + lensKey())))
     }
 
     private fun probeWhiteBalance() {
@@ -2208,7 +2208,7 @@ class MainActivity : AppCompatActivity() {
                     val usable = WhiteBalance.usableCurve(found)
                     if (usable != null && lensKey() == lens) {
                         engine.presetCurve = usable
-                        settings.setWbCurve(lens, WhiteBalance.encodeCurve(usable))
+                        settings.setWbCurve("m." + lens, WhiteBalance.encodeCurve(usable))
                         Trace.control("white balance curve", WhiteBalance.encodeCurve(usable), "kept for lens $lens")
                     } else {
                         Trace.refused("white balance curve", "the presets gave no usable curve (" +
