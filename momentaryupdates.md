@@ -405,3 +405,10 @@ Needs the GPU stage (Settings → Picture path).
 11. A freeze watchdog: when a change (e.g. a log curve on the Nothing Phone 2a) stops the picture, say "this
     feature is not available on this phone" and go back to the settings before it. Check the MDs for what was
     done about the Nothing Phone's log-curve freeze. — **Status:** open (after the white balance test)
+
+## 2.10.2026, 04:15 — one L key for the lenses
+
+> This lenses chooser is taking too much space, so we should simply— L, only one icon. When user press L, they uncollapse. User choose one lens and then it collapse again. So then we have space for our square and triangle.
+
+12. The lens keys L1..L5 fold into ONE key, L: a press unfolds them, choosing a lens folds them again; the room
+    goes to the square, circle and triangle keys. — **Status:** open (with the rail keys, item 9)
