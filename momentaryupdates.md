@@ -597,3 +597,10 @@ Needs the GPU stage (Settings → Picture path).
 
 - Session closed 2.10.2026 08:50. Open for next time: remote pinch; the camera's settings over the wire; put FILE back
   on his Pixel (disarmed since the NDI tests); the 16 KB-alignment notice of the NDI libraries.
+
+## 2.10.2026 — the ramp: every recalibration glides like a hand on analog gear
+
+> please write this as a rule and fix this app the same as focus exposure circle or wide balance circle. When the user clicks to recalibrate the camera, the change itself is not happening suddenly. It emulates the analog equipment, so it happens like the person doing it manually understands. There is a ramp, understand. So if I'm in exposure and I expose to a new area in my image, then the camera just does a gradual change in that way. I can record that change. Understand. Change must be pleasant for recording
+
+36. The rule, in MANTRA_MANIFEST: a recalibration (focus, exposure, white balance) never jumps; it ramps like a hand on analog equipment, pleasant to record. — **Status:** started
+37. The camera: focus SQUARE, exposure CIRCLE, white balance TRIANGLE all ramp to their new value. — **Status:** started
