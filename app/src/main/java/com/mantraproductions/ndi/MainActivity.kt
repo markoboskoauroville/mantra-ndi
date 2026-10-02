@@ -1647,11 +1647,16 @@ class MainActivity : AppCompatActivity() {
      */
     private fun tapAt(x: Float, y: Float) {
         // v125: a tap on one or more marks sets every one of them where they are (the monitor's taps too)
+        // The armed mark still goes where the finger is, unless it is already there.
         val under = marksUnder(x, y)
-        if (under.isNotEmpty()) {
+        if (settings.pinchTarget.coerceIn(0, 2) in under) {
             Trace.control("tap", String.format("%.2f,%.2f", x, y), "on marks " + under.joinToString())
             under.forEach { fireMark(it) }
             return
+        }
+        if (under.isNotEmpty()) {
+            Trace.control("tap", String.format("%.2f,%.2f", x, y), "also on marks " + under.joinToString())
+            under.forEach { fireMark(it) }
         }
         when (settings.pinchTarget) {
             1 -> {
@@ -1734,6 +1739,14 @@ class MainActivity : AppCompatActivity() {
     private val exposureRamp by lazy { Ramp(ui) }
     private var circleHolds = false
     private var circleTicket = 0
+    /**
+     * v126: how many stops the picture moves for a stop of exposure, per curve, learnt round to round. The
+     * phone's own tone curve answered 0.58 (Pixel 7, 2.10.2026 10:02), so v125 needed a second ramp after a
+     * pause; with this the next tap arrives in one move.
+     */
+    private val exposureResponse = HashMap<Int, Double>()
+    private var circleLastLinear = 0.0
+    private var circleLastStops = 0.0
 
     /** A tap on the circle: exposure is read there and locks. Orange while it reads, green when locked. */
     private fun meterExposure() {
@@ -1810,13 +1823,21 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val error = Mechanism.circleExposureError(linear)
+        if (round > 1 && kotlin.math.abs(circleLastStops) > 0.15 && circleLastLinear > 1e-4) {
+            val answered = kotlin.math.ln(linear / circleLastLinear) / kotlin.math.ln(2.0)
+            exposureResponse[curveIndex] = (answered / circleLastStops).coerceIn(0.3, 1.5)
+        }
+        val response = exposureResponse[curveIndex] ?: 1.0
         val iso0 = engine.lastIso ?: return
         val shutter0 = engine.lastExposureNs ?: return
         val isoRange = engine.isoRange() ?: return
         val (shMin, shMax) = shutterBounds() ?: (shutter0 to shutter0)
-        val (iso1, shutter1) = Mechanism.splitExposure(error, iso0, shutter0, isoRange.lower, isoRange.upper, shMin, shMax)
+        val (iso1, shutter1) = Mechanism.splitExposure((error / response).coerceIn(-4.0, 4.0),
+            iso0, shutter0, isoRange.lower, isoRange.upper, shMin, shMax)
+        circleLastLinear = linear
+        circleLastStops = kotlin.math.ln(iso1.toDouble() / iso0 * shutter1.toDouble() / shutter0) / kotlin.math.ln(2.0)
         Trace.state(String.format(java.util.Locale.ROOT,
-            "exposure circle: round %d, light %.3f, %+.2f stops, ISO %d → %d, %s → %s", round, linear, error,
+            "exposure circle: round %d, light %.3f, %+.2f stops (response %.2f), ISO %d → %d, %s → %s", round, linear, error, response,
             iso0, iso1, Mechanism.formatShutter(shutter0), Mechanism.formatShutter(shutter1)))
         val nothingToMove = iso1 == iso0 && shutter1 == shutter0
         if (kotlin.math.abs(error) < CIRCLE_TOLERANCE_STOPS || round > CIRCLE_ROUNDS || nothingToMove) {
@@ -1907,6 +1928,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var spotTicket = 0
+    /** v126: how strongly the picture answered the gains, per curve, learnt by the last tap. */
+    private val spotResponse = HashMap<Int, DoubleArray>()
     private val wbRamp by lazy { Ramp(ui) }
     private var spotLearn: WhiteBalance.SpotLearn? = null
 
@@ -1915,7 +1938,9 @@ class MainActivity : AppCompatActivity() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
         val ticket = ++spotTicket
         probeTicket++                       // a running A gives way
-        spotLearn = WhiteBalance.SpotLearn()
+        // v126: from what the last tap on this curve learnt, or cautious (a first step that falls short)
+        spotLearn = WhiteBalance.SpotLearn(spotResponse[curveIndex]
+            ?: doubleArrayOf(WhiteBalance.CAUTIOUS_RESPONSE, WhiteBalance.CAUTIOUS_RESPONSE))
         wbBox.state = MarkView.State.MEASURING
         wbLockedAt = null
         say("White balance: reading the triangle…")
@@ -1944,6 +1969,7 @@ class MainActivity : AppCompatActivity() {
             "white balance spot: round %d, triangle linear r/g %.3f b/g %.3f", round, rgb[0] / rgb[1], rgb[2] / rgb[1]))
         val neutral = WhiteBalance.spotNeutral(rgb, SPOT_TOLERANCE)
         if (neutral || round > WhiteBalance.SPOT_ROUNDS) {
+            if (round > 2) spotResponse[curveIndex] = learn.p.copyOf()
             val k = engine.adoptSpotAsAnchor()
             if (k != null) wbKelvin = k
             wbAuto = false

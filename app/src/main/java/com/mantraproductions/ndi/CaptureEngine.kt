@@ -608,12 +608,15 @@ class CaptureEngine(private val context: Context) {
             pendingGlide?.let { waiting ->
                 val st = result.get(CaptureResult.CONTROL_AF_STATE)
                 glideFrames++
+                // the lens's path, frame by frame, so the trace shows whether the glide is a glide
+                if (glidePath.length < 2000) glidePath.append(String.format(java.util.Locale.ROOT, " %.2f", lastFocusDistance ?: -1f))
                 if (st == CaptureResult.CONTROL_AF_STATE_PASSIVE_SCAN) glideScanned = true
                 val rested = st == CaptureResult.CONTROL_AF_STATE_PASSIVE_FOCUSED ||
                     st == CaptureResult.CONTROL_AF_STATE_PASSIVE_UNFOCUSED
                 if ((rested && (glideScanned || glideFrames >= GLIDE_MIN_FRAMES)) || glideFrames > GLIDE_MAX_FRAMES) {
                     pendingGlide = null
                     val focused = st == CaptureResult.CONTROL_AF_STATE_PASSIVE_FOCUSED
+                    Trace.state("focus glide path (dioptres per frame):$glidePath")
                     Trace.control("focus glide", "came to rest after $glideFrames frames",
                         if (focused) "focused" else if (glideFrames > GLIDE_MAX_FRAMES) "still travelling, held" else "not focused")
                     waiting(focused || glideFrames > GLIDE_MAX_FRAMES)
@@ -1012,6 +1015,7 @@ class CaptureEngine(private val context: Context) {
     @Volatile private var pendingGlide: ((Boolean) -> Unit)? = null
     private var glideFrames = 0
     private var glideScanned = false
+    private val glidePath = StringBuilder()
 
     /**
      * THE FOCUS GLIDE (v125): focus at a point the way a video camera does, not a photo camera.
@@ -1033,6 +1037,7 @@ class CaptureEngine(private val context: Context) {
         pendingFocus = null
         glideFrames = 0
         glideScanned = false
+        glidePath.setLength(0)
         pendingGlide = onResult
         if (!apply()) { pendingGlide = null; return false }
         return true

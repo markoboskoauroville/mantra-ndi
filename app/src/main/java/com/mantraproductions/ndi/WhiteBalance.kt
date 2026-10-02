@@ -477,6 +477,8 @@ object WhiteBalance {
     const val SPOT_MIN_GAIN = 0.5f
     const val SPOT_MAX_GAIN = 8.0f
     const val SPOT_ROUNDS = 10
+    /** v126: the response assumed before any is measured: the strongest seen, so a first step falls short. */
+    const val CAUTIOUS_RESPONSE = 5.0
 
     /**
      * How strongly the picture answers a gain change, learned while it is measured (v101).
@@ -487,10 +489,17 @@ object WhiteBalance {
      * ratio ∝ gain^p, starts at 1, is re-estimated from every two rounds, and a step is ratio^(-1/p),
      * never more than ×1.25 or ×0.8 a round — it cannot swing, and it still closes in a few rounds.
      */
-    class SpotLearn {
+    /**
+     * [prior]: how strongly the picture answers a gain change, before this tap has measured it. v125 started
+     * at 1 and the Pixel 7 in HLG answered red at 4.2: the first step went four times too far and the picture
+     * swung cool and back (measured 2.10.2026 10:03). v126: the camera starts from [CAUTIOUS_RESPONSE], so the
+     * first step can only fall short and the rounds keep going the same way, and it keeps what it learnt for
+     * the next tap (THE RAMP: never past the mark and back).
+     */
+    class SpotLearn(prior: DoubleArray = doubleArrayOf(1.0, 1.0)) {
         private var lastLogGain = DoubleArray(2) { Double.NaN }
         private var lastLogRatio = DoubleArray(2) { Double.NaN }
-        val p = doubleArrayOf(1.0, 1.0)
+        val p = prior.copyOf()
 
         fun next(gains: FloatArray, rgb: DoubleArray): FloatArray {
             val out = gains.copyOf()
