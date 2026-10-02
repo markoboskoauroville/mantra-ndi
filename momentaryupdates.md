@@ -591,4 +591,4 @@ Needs the GPU stage (Settings → Picture path).
   86 Mbit/s link: a 50 Mbit/s stream through the router needs ~100 Mbit/s of air. Separately, a live drop to 16
   Mbit/s made the Pixel's HEVC encoder go silent (no frames, no error) — twice. **v124:** a keyframe is requested
   after every rate change; the camera's ENCODER WATCHDOG restarts the pipeline when no frame leaves the encoder for
-  two seconds while streaming (max 3 a minute), and a restart keeps the monitor's chosen rate. — **Status:** built
+  two seconds while streaming (max 3 a minute), and a restart keeps the monitor's chosen rate. — **Status:** MEASURED 08:45 at 16 Mbit/s: the encoder kept going (no restart needed), 25 fps at 17–18 Mbit/s for most of 40 s, one 7 s gap where the Pixel stopped sending and resumed by itself (2.4 GHz air, not the app)

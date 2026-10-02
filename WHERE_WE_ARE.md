@@ -22,6 +22,12 @@ working state of *this* app.
 - **The Nothing's freeze, found and cured (v115/v116):** S-Log3 and V-Log stop its picture and crash its camera driver
   ("Camera error 4"); the app now takes the curve back for good on that lens, says it is not available, and reopens
   the camera with retries (back in ~2 s). Everything else in scripts/stress.py ran clean on it.
+- **v118–v124, measured between his phones:** HX − / + on the monitor set the camera's stream rate live (50 → 32 →
+  24 → 16 Mbit/s); the monitor shows its own fps and Mbit/s. The remote's metadata had held up the video (same
+  native lock): fixed in v123 (25 fps steady instead of stopping after 5 s). Both apps hold the low-latency Wi-Fi
+  lock. A live drop made the Pixel's HEVC encoder go silent: a keyframe after each change and an encoder watchdog
+  (v124). The remaining gaps are the AIR: both phones on 2.4 GHz channel 2, the Pixel at −68 dBm; 50 Mbit/s through
+  the router saturates it. On this network: HX 12–16 Mbit/s, or a 5 GHz network / the Pixel's own hotspot.
 - **Next:** remote pinch (resize the armed mark from the monitor), and the camera's settings over the wire; FILE is
   disarmed on his Pixel since the NDI tests — put it back.
 
