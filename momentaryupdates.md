@@ -495,3 +495,16 @@ Needs the GPU stage (Settings → Picture path).
     to the next value). — **Status:** v111
 23. Focus square, exposure circle, white balance triangle: their shape icon on the left of each, all three in ONE
     line, the size a drop-down in steps of 25 % (25, 50, 75, 100). — **Status:** v111
+
+## 2.10.2026, 05:15 — settings as quick toggles above tabs; the status line takes the free space
+
+> when my outputs are gone, the status line has a gap. Top status line, it needs to move always aligning to or using the free space available to go to the edge of the screen also, we need to better organize the settings in sections and name sections accordingly. This settings title is not needed in settings. We can use this real estate more, so we remove this text and see the sections. For example, when we use organize it better, simply let's say for example display. So on the display, we can have picking, we can have hiding the streaming destinations. Anything that was shown on display should be under display. Then camera settings, all related to the camera. So the idea is in the area where there is this torch and when there is this settings text which is going to be deleted, what I say there will be toggles for adjusting camera settings. These are quick settings, and down there are better organized settings
+
+> and I prefer to tab the interface rather than scrolling. One, so organizing settings in tabs. Above these tabs there is a quick settings toggles, and that's our new user interface for settings
+
+24. The status line moves up into the outputs line's place when that is hidden (no gap). — **Status:** v111
+25. No "SETTINGS" title. At the top: QUICK SETTINGS, one line of toggles (torch, frame rate, bit depth,
+    resolution), and the three marks with their icons and 25 % size drop-downs (items 22, 23). — **Status:** v111
+26. Below: TABS instead of scrolling, sections named by what they are about: DISPLAY (everything shown on the
+    screen: peaking, zebra, the outputs line…), CAMERA (everything about the camera), and the rest by subject.
+    — **Status:** v111
