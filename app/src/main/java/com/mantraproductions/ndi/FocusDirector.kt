@@ -73,9 +73,35 @@ class FocusDirector(
         }
     }
 
-    /** The box was tapped. In either mode that means focus here, then hold. */
+    /** True while the lens is gliding to a mark (v125): a new tap only moves the mark it travels to. */
+    private var gliding = false
+
+    /**
+     * The box was tapped. In either mode that means focus here, then hold.
+     *
+     * v125, THE RAMP: with a rack time the lens GLIDES there (the camera's video focus, eased by its own
+     * drive) and is locked where it comes to rest; a rack time of zero is the photo search, the snap.
+     */
     fun focusHereAndHold() {
         val c = controls() ?: return
+        if (searching && !gliding) return
+        if (rampMs > 0L) {
+            val started = c.glideFocusAtNormalisedPoint(target.first, target.second) { focused ->
+                searching = false
+                gliding = false
+                // locked either way: a lens left in a continuous mode keeps hunting, on the recording
+                c.lockFocusHere()
+                lensPosition = c.lastFocusDistance ?: lensPosition
+                reference = currentSharpness
+                onState(if (focused) FocusSquareView.State.LOCKED else FocusSquareView.State.FAILED)
+            }
+            if (started) {
+                searching = true
+                gliding = true
+                onState(FocusSquareView.State.SEEKING)
+                return
+            }
+        }
         if (searching) return
         searching = true
         onState(FocusSquareView.State.SEEKING)
@@ -103,6 +129,8 @@ class FocusDirector(
     fun stop() {
         handler.removeCallbacksAndMessages(null)
         racking = false
+        searching = false
+        gliding = false
     }
 
     private fun focusNowThenHold() {
@@ -140,6 +168,17 @@ class FocusDirector(
     private fun rackToNewMark() {
         val c = controls() ?: return
         if (searching) return
+        // v125: the glide, so nothing jumps there and back before the walk
+        if (rampMs > 0L && c.glideFocusAtNormalisedPoint(target.first, target.second) { _ ->
+                searching = false
+                gliding = false
+                c.lockFocusHere()
+                settle(c.lastFocusDistance ?: lensPosition)
+            }) {
+            searching = true
+            gliding = true
+            return
+        }
         searching = true
         val from = c.lastFocusDistance ?: lensPosition
 

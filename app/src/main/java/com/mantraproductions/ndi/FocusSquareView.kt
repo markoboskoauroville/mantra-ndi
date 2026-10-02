@@ -104,6 +104,21 @@ class FocusSquareView @JvmOverloads constructor(
     /** Fired when a pinch ends, with the new size, so it can be remembered. */
     var onResized: ((Float) -> Unit)? = null
 
+    /** Where the last tap landed, normalised: the other marks under the same finger take it too (v125). */
+    var tapX = 0.5f
+        private set
+    var tapY = 0.5f
+        private set
+
+    /** v125: the point is on the drawn box or within a finger's reach of it (what its own touch claims). */
+    fun hits(nx: Float, ny: Float): Boolean {
+        if (!drawn || visibility != VISIBLE || width <= 0 || height <= 0) return false
+        val (hw, hh) = halves().let { it[0] to it[1] }
+        val reach = 20f * density
+        return Math.abs(nx * width - width * drawnCentreX()) <= hw + reach &&
+            Math.abs(ny * height - height * drawnCentreY()) <= hh + reach
+    }
+
     /** Half the box, across and down, in pixels. */
     private fun halves(): FloatArray = Mechanism.focusBoxHalves(size, width, height)
 
@@ -380,6 +395,7 @@ class FocusSquareView @JvmOverloads constructor(
                 if (event.actionMasked == MotionEvent.ACTION_UP &&
                     wasGrabbed && !wasDragging && !wasPinching
                 ) {
+                    tapX = (event.x / width).coerceIn(0f, 1f); tapY = (event.y / height).coerceIn(0f, 1f)
                     if (tapMovesMe) {
                         takePending()
                         onTapped?.invoke()

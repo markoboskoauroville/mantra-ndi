@@ -289,7 +289,7 @@ class SettingsActivity : AppCompatActivity() {
         slider(
             R.id.rack, R.id.rackValue,
             value = (settings.focusRackMs / 100).toInt(),
-            label = { "rack  ${seconds(it)}" },
+            label = { "ramp  ${seconds(it)}" },
             onSet = { settings.focusRackMs = it * 100L }
         )
         slider(

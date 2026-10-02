@@ -14,7 +14,7 @@
     <string name="stream_bitrate">STREAMING</string>
     <string name="bitrate_hint">One HEVC encoder makes both the file and the NDI HX stream, so this is the quality of both. 24 Mbit/s suits 1080p, 50 to 100 suits 4K. Over Wi-Fi keep HX modest; over the USB cable it can go high.</string>
     <string name="focus">Focus</string>
-    <string name="focus_hint">How long the director holds before it will consider moving, and how long the move itself takes. Zero rack is a snap, for anybody who wants the phone to behave like a phone.</string>
+    <string name="focus_hint">How long the director holds before it will consider moving, and how long a move takes. The ramp is every recalibration: a tap on the square glides the lens, on the circle walks the exposure, on the triangle walks the white balance, each eased in and out like a hand on analog gear, so it can be recorded. Zero ramp is a snap, for anybody who wants the phone to behave like a phone.</string>
     <string name="peaking">Peaking</string>
     <string name="peaking_hint">How faint an edge still counts, and what colour to mark it. Monitor only; none of it reaches the stream.</string>
     <string name="trace">The trace</string>

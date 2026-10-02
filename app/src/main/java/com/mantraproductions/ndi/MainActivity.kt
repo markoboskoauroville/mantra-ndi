@@ -285,7 +285,7 @@ class MainActivity : AppCompatActivity() {
             if (tracking) startTrack()
         }
         pipeline.trackListener = GpuStage.TrackListener { x, y, score -> ui.post { onTracked(x, y, score) } }
-        focusSquare.onTapped = { focus.focusHereAndHold() }
+        focusSquare.onTapped = { focus.focusHereAndHold(); alsoUnder(focusSquare.tapX, focusSquare.tapY, 0) }
         // v101: the white balance triangle. A tap balances on what is inside; where it is dragged is kept.
         wbBox.kind = MarkView.Kind.TRIANGLE
         wbBox.size = settings.wbSize
@@ -295,14 +295,14 @@ class MainActivity : AppCompatActivity() {
         exposureCircle.size = settings.circleSize
         exposureCircle.post { exposureCircle.moveTo(settings.circleX, settings.circleY) }
         exposureCircle.onMoved = { x, y -> settings.circleX = x; settings.circleY = y; exposureCircle.state = MarkView.State.IDLE }
-        exposureCircle.onTapped = { meterExposure() }
+        exposureCircle.onTapped = { meterExposure(); alsoUnder(exposureCircle.tapX, exposureCircle.tapY, 1) }
         focusSquare.onStateChanged = { refreshKeys() }
         exposureCircle.onStateChanged = { refreshKeys() }
         wbBox.onStateChanged = { refreshKeys() }
         focusSquare.onTapFor = { x, y -> tapAt(x, y) }
         refreshMarks()
         wbBox.onMoved = { x, y -> settings.wbBoxX = x; settings.wbBoxY = y }
-        wbBox.onTapped = { spotWhiteBalance() }
+        wbBox.onTapped = { spotWhiteBalance(); alsoUnder(wbBox.tapX, wbBox.tapY, 2) }
 
         onBackPressedDispatcher.addCallback(this, leaveFullScreen)
         // The clean feed's only control: two taps anywhere on the glass. One
@@ -1384,6 +1384,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun applyExposure() {
         val engine = pipeline.engine
+        releaseCircle(backToAuto = false)
         ui.removeCallbacks(priorityLoop)
         loopNative = false
         when (Mechanism.exposureMode(isoAuto, shutterAuto)) {
@@ -1618,7 +1619,7 @@ class MainActivity : AppCompatActivity() {
                 settings.marksShown = settings.marksShown and bit.inv()
                 // the orange goes to the next mark still on the picture, or stays (a pinch with none is nothing)
                 (0..2).firstOrNull { settings.marksShown and (1 shl it) != 0 }?.let { settings.pinchTarget = it }
-                if (i == 1 && pipeline.isRunning) { pipeline.engine.releaseExposureLock(); exposureCircle.state = MarkView.State.IDLE }
+                if (i == 1 && pipeline.isRunning) { releaseCircle(backToAuto = true); exposureCircle.state = MarkView.State.IDLE }
             }
         }
         Trace.control("marks", "shown ${settings.marksShown}, pinch ${settings.pinchTarget}", "key ${i}")
@@ -1645,6 +1646,13 @@ class MainActivity : AppCompatActivity() {
      * Square: focus there. Circle: exposure read there. Triangle: white balance from there.
      */
     private fun tapAt(x: Float, y: Float) {
+        // v125: a tap on one or more marks sets every one of them where they are (the monitor's taps too)
+        val under = marksUnder(x, y)
+        if (under.isNotEmpty()) {
+            Trace.control("tap", String.format("%.2f,%.2f", x, y), "on marks " + under.joinToString())
+            under.forEach { fireMark(it) }
+            return
+        }
         when (settings.pinchTarget) {
             1 -> {
                 exposureCircle.moveTo(x, y)
@@ -1660,6 +1668,31 @@ class MainActivity : AppCompatActivity() {
             }
             else -> focusAt(x, y)
         }
+    }
+
+    /**
+     * v125, OVERLAP: *"If they're overlapping and the user clicks basically on all three at the same time,
+     * all three are doing their thing."* Which marks (0 square, 1 circle, 2 triangle) are under the point,
+     * on them or within a finger's reach. A grey (hidden) mark is not under anything.
+     */
+    private fun marksUnder(x: Float, y: Float): List<Int> = buildList {
+        if (focusSquare.hits(x, y)) add(0)
+        if (exposureCircle.hits(x, y)) add(1)
+        if (wbBox.hits(x, y)) add(2)
+    }
+
+    private fun fireMark(i: Int) = when (i) {
+        0 -> focus.focusHereAndHold()
+        1 -> meterExposure()
+        else -> spotWhiteBalance()
+    }
+
+    /** The mark that took the touch has fired; the others under the same finger fire with it. */
+    private fun alsoUnder(x: Float, y: Float, took: Int) {
+        val others = marksUnder(x, y) - took
+        if (others.isEmpty()) return
+        Trace.control("tap", String.format("%.2f,%.2f", x, y), "overlap: mark $took and " + others.joinToString())
+        others.forEach { fireMark(it) }
     }
 
     /** A pinch anywhere resizes the orange mark, when that is the circle or the triangle. */
@@ -1697,10 +1730,26 @@ class MainActivity : AppCompatActivity() {
         return Mechanism.streamRegionToArray(onStream, bufferSize.width, bufferSize.height, array.width(), array.height())
     }
 
+    /** v125: the circle's ramps; true while automatic exposure is held by the circle at the ramped values. */
+    private val exposureRamp by lazy { Ramp(ui) }
+    private var circleHolds = false
+    private var circleTicket = 0
+
     /** A tap on the circle: exposure is read there and locks. Orange while it reads, green when locked. */
     private fun meterExposure() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
         val engine = pipeline.engine
+        // v125, THE RAMP: on automatic exposure the circle is read off the picture (which changes nothing)
+        // and the exposure walks there, eased in and out, instead of the camera's own jump
+        if (Mechanism.exposureMode(isoAuto, shutterAuto) == Mechanism.Exposure.AUTO && settings.focusRackMs > 0 &&
+            engine.lastIso != null && engine.lastExposureNs != null && engine.isoRange() != null
+        ) {
+            exposureCircle.state = MarkView.State.MEASURING
+            exposureLockedAt = null
+            say("Exposure: reading the circle…")
+            exposureRound(1, ++circleTicket)
+            return
+        }
         if (engine.manualExposure) {
             exposureCircle.state = MarkView.State.NEUTRAL
             say("Manual exposure: the circle is where the grey card is read")
@@ -1720,6 +1769,93 @@ class MainActivity : AppCompatActivity() {
         if (!started) {
             exposureCircle.state = MarkView.State.FAILED
             say("The camera would not meter on the circle")
+        }
+    }
+
+    /** The circle's mean scene light, linear 0..1 (luma of the decoded channels), or null with no picture. */
+    private fun sampleCircleLinear(): Double? {
+        if (!preview.isAvailable) return null
+        val w = (preview.width / 4).coerceAtLeast(48)
+        val h = (preview.height / 4).coerceAtLeast(48)
+        val bmp = runCatching { preview.getBitmap(w, h) }.getOrNull() ?: return null
+        val bd = exposureCircle.normalisedBounds()
+        val curve = LogCurves.Curve.entries[curveIndex]
+        var sum = 0.0
+        var n = 0
+        for (y in (bd[1] * h).toInt().coerceIn(0, h - 1) until (bd[3] * h).toInt().coerceIn(1, h))
+            for (x in (bd[0] * w).toInt().coerceIn(0, w - 1) until (bd[2] * w).toInt().coerceIn(1, w)) {
+                if (!exposureCircle.contains((x + 0.5f) / w, (y + 0.5f) / h)) continue
+                val c = bmp.getPixel(x, y)
+                sum += 0.2126 * LogCurves.decode(curve, android.graphics.Color.red(c) / 255.0) +
+                    0.7152 * LogCurves.decode(curve, android.graphics.Color.green(c) / 255.0) +
+                    0.0722 * LogCurves.decode(curve, android.graphics.Color.blue(c) / 255.0)
+                n++
+            }
+        bmp.recycle()
+        return if (n < 4) null else sum / n
+    }
+
+    /**
+     * One round of the circle (v125): read it, and if it is more than a fifth of a stop off 18% grey, walk
+     * ISO (then shutter, for what ISO cannot reach) there over the ramp time, eased in and out; read again.
+     * Held where it lands — the lock — until the circle is put away or exposure is changed.
+     */
+    private fun exposureRound(round: Int, ticket: Int) {
+        if (circleTicket != ticket || !pipeline.isRunning) return
+        val engine = pipeline.engine
+        val linear = sampleCircleLinear()
+        if (linear == null) {
+            exposureCircle.state = MarkView.State.FAILED
+            say("Exposure: the circle could not be read")
+            return
+        }
+        val error = Mechanism.circleExposureError(linear)
+        val iso0 = engine.lastIso ?: return
+        val shutter0 = engine.lastExposureNs ?: return
+        val isoRange = engine.isoRange() ?: return
+        val (shMin, shMax) = shutterBounds() ?: (shutter0 to shutter0)
+        val (iso1, shutter1) = Mechanism.splitExposure(error, iso0, shutter0, isoRange.lower, isoRange.upper, shMin, shMax)
+        Trace.state(String.format(java.util.Locale.ROOT,
+            "exposure circle: round %d, light %.3f, %+.2f stops, ISO %d → %d, %s → %s", round, linear, error,
+            iso0, iso1, Mechanism.formatShutter(shutter0), Mechanism.formatShutter(shutter1)))
+        val nothingToMove = iso1 == iso0 && shutter1 == shutter0
+        if (kotlin.math.abs(error) < CIRCLE_TOLERANCE_STOPS || round > CIRCLE_ROUNDS || nothingToMove) {
+            // held here: from the camera's auto exposure to these same values, which changes nothing on the picture
+            if (!circleHolds) { circleHolds = true; engine.setManualExposure(iso0, shutter0) }
+            val there = kotlin.math.abs(error) < CIRCLE_TOLERANCE_STOPS
+            exposureCircle.state = if (there) MarkView.State.NEUTRAL else MarkView.State.FAILED
+            exposureLockedAt = exposureLockText()
+            say(if (there) "Exposure locked on the circle"
+                else String.format(java.util.Locale.ROOT, "Exposure: as close as it goes (%+.1f stops)", error))
+            refreshZones()
+            return
+        }
+        circleHolds = true
+        val ms = if (round == 1) settings.focusRackMs else (settings.focusRackMs / 2).coerceAtLeast(300L)
+        exposureRamp.run(ms,
+            step = { p ->
+                circleTicket == ticket && engine.setManualExposure(
+                    Math.round(Mechanism.rampLog(iso0.toDouble(), iso1.toDouble(), p)).toInt(),
+                    Mechanism.rampLog(shutter0.toDouble(), shutter1.toDouble(), p).toLong(),
+                    trace = p >= 1f)
+            },
+            done = { ui.postDelayed({ exposureRound(round + 1, ticket) }, CIRCLE_SETTLE_MS) },
+            failed = {
+                if (circleTicket == ticket) {
+                    exposureCircle.state = MarkView.State.FAILED
+                    say("Exposure: the camera refused the ramp")
+                }
+            })
+    }
+
+    /** The circle is put away or exposure changed: the ramp stops and the hold is let go. */
+    private fun releaseCircle(backToAuto: Boolean) {
+        circleTicket++
+        exposureRamp.cancel()
+        val held = circleHolds
+        circleHolds = false
+        if (backToAuto && pipeline.isRunning) {
+            if (held) pipeline.engine.setAutoExposure() else pipeline.engine.releaseExposureLock()
         }
     }
 
@@ -1771,6 +1907,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var spotTicket = 0
+    private val wbRamp by lazy { Ramp(ui) }
     private var spotLearn: WhiteBalance.SpotLearn? = null
 
     /** A tap on the white balance rectangle. */
@@ -1819,12 +1956,22 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val next = learn.next(gains, rgb)
-        if (!engine.setWhiteBalanceGains(next, round)) {
-            wbBox.state = MarkView.State.FAILED
-            say("White balance: the camera refused the gains")
-            return
-        }
-        ui.postDelayed({ spotRound(round + 1, ticket) }, SPOT_SETTLE_MS)
+        // v125, THE RAMP: the gains walk to the next step, eased in and out, in ratios (a stop of red looks
+        // the same at either end); the round reads the picture once it has arrived and settled
+        val ms = if (round == 1) settings.focusRackMs else (settings.focusRackMs / 2).coerceAtLeast(300L)
+        wbRamp.run(if (settings.focusRackMs > 0) ms else 0L,
+            step = { p ->
+                spotTicket == ticket && engine.setWhiteBalanceGains(
+                    FloatArray(4) { Mechanism.rampLog(gains[it].toDouble(), next[it].toDouble(), p).toFloat() },
+                    round, trace = p >= 1f)
+            },
+            done = { ui.postDelayed({ spotRound(round + 1, ticket) }, SPOT_SETTLE_MS) },
+            failed = {
+                if (spotTicket == ticket) {
+                    wbBox.state = MarkView.State.FAILED
+                    say("White balance: the camera refused the gains")
+                }
+            })
     }
 
     /** The last compensation move and the error before it, and the step it proved to be. */
@@ -1853,7 +2000,8 @@ class MainActivity : AppCompatActivity() {
     private fun stepLogExposure() {
         val engine = pipeline.engine
         val curve = LogCurves.Curve.entries[curveIndex]
-        val auto = isoAuto && shutterAuto
+        // v125: not while the circle holds the exposure, or the compensation would creep while nothing answers
+        val auto = isoAuto && shutterAuto && !circleHolds
         val target = Mechanism.greyTarget(curve)
         if (target == null) {
             greyReadout = null
@@ -2752,4 +2900,8 @@ private const val SPOT_DARK = 25
 private const val SPOT_CLIPPED = 245
 private const val SPOT_MIN_PIXELS = 12
 private const val SPOT_SETTLE_MS = 450L
+/** v125: the exposure circle is there inside a fifth of a stop; three rounds at most; a read after each ramp. */
+private const val CIRCLE_TOLERANCE_STOPS = 0.2
+private const val CIRCLE_ROUNDS = 3
+private const val CIRCLE_SETTLE_MS = 300L
 private const val SPOT_TOLERANCE = 0.03

@@ -139,10 +139,27 @@ class MarkView @JvmOverloads constructor(
 
     private val holdToDrag = Runnable { dragging = true }
 
+    /** Where the last tap landed, normalised: the other marks under the same finger take it too (v125). */
+    var tapX = 0.5f
+        private set
+    var tapY = 0.5f
+        private set
+
+    /**
+     * v125: is the normalised point on this mark or within a finger's reach of it — the same ground its own
+     * touch claims. A tap where marks overlap or touch sets every one it hits.
+     */
+    fun hits(nx: Float, ny: Float): Boolean {
+        if (visibility != VISIBLE || width <= 0 || height <= 0) return false
+        val reach = REACH_DP * density
+        return Math.abs(nx * width - width * centreX) <= halfW() + reach &&
+            Math.abs(ny * height - height * centreY) <= halfH() + reach
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                val reach = 14f * density
+                val reach = REACH_DP * density
                 val inside = Math.abs(event.x - width * centreX) <= halfW() + reach &&
                     Math.abs(event.y - height * centreY) <= halfH() + reach
                 // not on the rectangle: not ours, it goes on to the focus square underneath
@@ -175,7 +192,10 @@ class MarkView @JvmOverloads constructor(
                 grabbed = false
                 dragging = false
                 if (event.actionMasked == MotionEvent.ACTION_UP && was) {
-                    if (wasDragging) onMoved?.invoke(centreX, centreY) else onTapped?.invoke()
+                    if (wasDragging) onMoved?.invoke(centreX, centreY) else {
+                        tapX = (event.x / width).coerceIn(0f, 1f); tapY = (event.y / height).coerceIn(0f, 1f)
+                        onTapped?.invoke()
+                    }
                 }
                 return was
             }
@@ -186,5 +206,6 @@ class MarkView @JvmOverloads constructor(
     private companion object {
         const val HOLD_TO_DRAG_MS = 260L
         const val FAR_SLOP = 44f
+        const val REACH_DP = 14f
     }
 }

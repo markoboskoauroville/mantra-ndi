@@ -1186,10 +1186,59 @@ object Mechanism {
      * a mistake, and the same move with soft ends reads as a decision. This is
      * the shape a focus puller's hand makes.
      */
-    fun rackPosition(from: Float, to: Float, progress: Float): Float {
+    fun rackPosition(from: Float, to: Float, progress: Float): Float =
+        from + (to - from) * rampEase(progress)
+
+    // --- the ramp (v125) --------------------------------------------------------
+
+    /**
+     * THE RAMP. *"When the user clicks to recalibrate the camera, the change itself is not happening
+     * suddenly. It emulates the analog equipment ... Change must be pleasant for recording"* and *"in any
+     * ramping algorithm you need to implement ease-in and ease-out curves"* (Marko, 2.10.2026).
+     *
+     * Smootherstep, 6t⁵ − 15t⁴ + 10t³: it leaves at zero speed AND zero acceleration and arrives the same
+     * way, so neither end has the small kick smoothstep still has. That is the hand on a ring: it takes up
+     * the slack, turns, and lets go.
+     */
+    fun rampEase(progress: Float): Float {
         val t = progress.coerceIn(0f, 1f)
-        val eased = t * t * (3f - 2f * t)
-        return from + (to - from) * eased
+        return t * t * t * (t * (t * 6f - 15f) + 10f)
+    }
+
+    /**
+     * A ramp for a quantity the eye reads in ratios — ISO, shutter, a colour gain: eased in stops, not in
+     * units, so the first half of a move from ISO 100 to 1600 looks like the second half.
+     */
+    fun rampLog(from: Double, to: Double, progress: Float): Double {
+        val e = rampEase(progress).toDouble()
+        if (from <= 0.0 || to <= 0.0) return from + (to - from) * e
+        return from * (to / from).pow(e)
+    }
+
+    /**
+     * The exposure circle (v125): how many stops to open up so the circle's mean scene light lands on
+     * 18% grey. Positive opens up; held inside ±4 stops a round so a clipped or black circle still moves the
+     * right way and the next round finishes the job.
+     */
+    fun circleExposureError(linearMean: Double): Double {
+        if (linearMean <= 1e-4) return 4.0
+        return (ln(0.18 / linearMean) / ln(2.0)).coerceIn(-4.0, 4.0)
+    }
+
+    /**
+     * Where the stops go: ISO first, the shutter only for what ISO cannot reach, so the motion of the shot
+     * (its shutter) stays what it was. Both held inside the sensor's ranges.
+     */
+    fun splitExposure(
+        stops: Double, iso: Int, shutterNs: Long,
+        isoMin: Int, isoMax: Int, shutterMin: Long, shutterMax: Long
+    ): Pair<Int, Long> {
+        val from = iso.coerceIn(isoMin, isoMax).toDouble()
+        val newIso = (from * 2.0.pow(stops)).coerceIn(isoMin.toDouble(), isoMax.toDouble())
+        val left = stops - ln(newIso / from) / ln(2.0)
+        val sh = shutterNs.coerceIn(shutterMin, shutterMax).toDouble()
+        val newShutter = (sh * 2.0.pow(left)).coerceIn(shutterMin.toDouble(), shutterMax.toDouble())
+        return Math.round(newIso).toInt() to newShutter.toLong()
     }
 
     // --- the waveform ---------------------------------------------------------

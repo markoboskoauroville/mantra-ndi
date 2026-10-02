@@ -604,6 +604,21 @@ class CaptureEngine(private val context: Context) {
                     waiting(settled)
                 }
             }
+            // v125: the glide, answered when the lens has travelled and come to rest on the mark
+            pendingGlide?.let { waiting ->
+                val st = result.get(CaptureResult.CONTROL_AF_STATE)
+                glideFrames++
+                if (st == CaptureResult.CONTROL_AF_STATE_PASSIVE_SCAN) glideScanned = true
+                val rested = st == CaptureResult.CONTROL_AF_STATE_PASSIVE_FOCUSED ||
+                    st == CaptureResult.CONTROL_AF_STATE_PASSIVE_UNFOCUSED
+                if ((rested && (glideScanned || glideFrames >= GLIDE_MIN_FRAMES)) || glideFrames > GLIDE_MAX_FRAMES) {
+                    pendingGlide = null
+                    val focused = st == CaptureResult.CONTROL_AF_STATE_PASSIVE_FOCUSED
+                    Trace.control("focus glide", "came to rest after $glideFrames frames",
+                        if (focused) "focused" else if (glideFrames > GLIDE_MAX_FRAMES) "still travelling, held" else "not focused")
+                    waiting(focused || glideFrames > GLIDE_MAX_FRAMES)
+                }
+            }
             pendingFocus?.let { waiting ->
                 when (result.get(CaptureResult.CONTROL_AF_STATE)) {
                     CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED -> {
@@ -956,19 +971,9 @@ class CaptureEngine(private val context: Context) {
         // screen. Until v82 this was a fixed patch of 16% round the point,
         // taken as if screen and sensor were the same way up, so the box's size
         // meant nothing and a tap upright focused somewhere else.
-        val r = focusRegion ?: run {
-            val half = 0.08f
-            floatArrayOf(x - half, y - half, x + half, y + half)
-        }
-        val left = (r[0].coerceIn(0f, 1f) * array.width()).toInt()
-        val top = (r[1].coerceIn(0f, 1f) * array.height()).toInt()
-        val right = (r[2].coerceIn(0f, 1f) * array.width()).toInt()
-        val bottom = (r[3].coerceIn(0f, 1f) * array.height()).toInt()
-        val region = MeteringRectangle(
-            Rect(left, top, maxOf(right, left + 1), maxOf(bottom, top + 1)),
-            MeteringRectangle.METERING_WEIGHT_MAX
-        )
+        val region = focusRectangle(x, y, array)
 
+        pendingGlide = null
         pendingFocus = onResult
         request.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region))
         request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
@@ -989,9 +994,54 @@ class CaptureEngine(private val context: Context) {
         }
     }
 
+    private fun focusRectangle(x: Float, y: Float, array: Rect): MeteringRectangle {
+        val r = focusRegion ?: run {
+            val half = 0.08f
+            floatArrayOf(x - half, y - half, x + half, y + half)
+        }
+        val left = (r[0].coerceIn(0f, 1f) * array.width()).toInt()
+        val top = (r[1].coerceIn(0f, 1f) * array.height()).toInt()
+        val right = (r[2].coerceIn(0f, 1f) * array.width()).toInt()
+        val bottom = (r[3].coerceIn(0f, 1f) * array.height()).toInt()
+        return MeteringRectangle(
+            Rect(left, top, maxOf(right, left + 1), maxOf(bottom, top + 1)),
+            MeteringRectangle.METERING_WEIGHT_MAX
+        )
+    }
+
+    @Volatile private var pendingGlide: ((Boolean) -> Unit)? = null
+    private var glideFrames = 0
+    private var glideScanned = false
+
+    /**
+     * THE FOCUS GLIDE (v125): focus at a point the way a video camera does, not a photo camera.
+     *
+     * The trigger above is the photo search: the lens jumps, hunts, lands, all in a few frames, and a
+     * recording shows every one of them. CONTINUOUS_VIDEO is the mode Android defines for recording —
+     * *"slower focus changes ... the lens is moved smoothly"* — so the region goes in, the lens travels
+     * there at the camera's video pace, and when it reports focused the caller locks it
+     * ([lockFocusHere]). A new call while one is travelling just moves the region: the lens turns
+     * towards the new mark from wherever it is.
+     */
+    fun glideFocusAtNormalisedPoint(x: Float, y: Float, onResult: (Boolean) -> Unit): Boolean {
+        val request = builder ?: return false
+        val array = characteristics?.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return false
+        if (CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO !in afModes()) return false
+        request.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(focusRectangle(x, y, array)))
+        request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
+        request.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+        pendingFocus = null
+        glideFrames = 0
+        glideScanned = false
+        pendingGlide = onResult
+        if (!apply()) { pendingGlide = null; return false }
+        return true
+    }
+
     /** Stops the lens where it has arrived, so nothing moves it again. */
     fun lockFocusHere(): Boolean {
         val request = builder ?: return false
+        pendingGlide = null
         val reached = lastFocusDistance
         request.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
         request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
@@ -1007,6 +1057,7 @@ class CaptureEngine(private val context: Context) {
      * ignored.
      */
     fun setFocusDistance(dioptres: Float): Boolean {
+        pendingGlide = null
         val request = builder ?: run {
             Trace.refused("focus", "the camera has no request to change")
             return false
@@ -1031,6 +1082,7 @@ class CaptureEngine(private val context: Context) {
     }
 
     fun setContinuousFocus(): Boolean {
+        pendingGlide = null
         val request = builder ?: return false
         focusCommanded = null
         request.set(
@@ -1059,7 +1111,7 @@ class CaptureEngine(private val context: Context) {
      * camera resolves the contradiction by dropping the rate — which on a live
      * stream is worse than a dark picture.
      */
-    fun setManualExposure(iso: Int, shutterNs: Long): Boolean {
+    fun setManualExposure(iso: Int, shutterNs: Long, trace: Boolean = true): Boolean {
         val request = builder ?: return false
         manualExposure = true
         if (hasNativePriority(1) || hasNativePriority(2)) clearPriority(request)
@@ -1074,7 +1126,7 @@ class CaptureEngine(private val context: Context) {
         request.set(CaptureRequest.SENSOR_EXPOSURE_TIME, safe)
         request.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDuration)
         val ok = apply()
-        Trace.control("exposure", "iso $iso, ${Mechanism.formatShutter(shutterNs)}",
+        if (trace || !ok) Trace.control("exposure", "iso $iso, ${Mechanism.formatShutter(shutterNs)}",
             if (ok) "iso $sensitivity, ${Mechanism.formatShutter(safe)}" else "refused")
         return ok
     }
@@ -1195,6 +1247,7 @@ class CaptureEngine(private val context: Context) {
 
     /** Focus as a fraction of this lens's travel, 0 at infinity, 1 at closest. */
     fun setManualFocus(fraction: Float): Boolean {
+        pendingGlide = null
         val closest = minimumFocusDistance()
         if (closest <= 0f) {
             Trace.refused("focus", "this lens has no focus travel; it is fixed")
@@ -1555,7 +1608,7 @@ class CaptureEngine(private val context: Context) {
      * THE SPOT (v100): exactly these gains, with the matrix already on the picture, no temperature model in
      * between. MainActivity's rounds call it until the focus box reads neutral.
      */
-    fun setWhiteBalanceGains(gains: FloatArray, round: Int): Boolean {
+    fun setWhiteBalanceGains(gains: FloatArray, round: Int, trace: Boolean = true): Boolean {
         val request = builder ?: run {
             Trace.refused("white balance spot", "the camera has no request to change")
             return false
@@ -1570,8 +1623,8 @@ class CaptureEngine(private val context: Context) {
         checkFrames = GAIN_CHECK_FRAMES
         manualWhiteBalance = true
         val ok = apply()
-        reportWhiteBalance = ok
-        Trace.control("white balance spot",
+        if (trace) reportWhiteBalance = ok
+        if (trace || !ok) Trace.control("white balance spot",
             String.format(java.util.Locale.ROOT, "round %d, gains %.3f/%.3f/%.3f", round, gains[0], gains[1], gains[3]),
             if (ok) "applied" else "refused")
         return ok
@@ -1817,6 +1870,9 @@ class CaptureEngine(private val context: Context) {
         /** Frames after a white balance change before its gains are checked. */
         const val GAIN_CHECK_FRAMES = 8
         const val AE_MAX_FRAMES = 60
+        /** v125: a glide that shows no scan has this long to say it is already there; then 6 s at most. */
+        const val GLIDE_MIN_FRAMES = 15
+        const val GLIDE_MAX_FRAMES = 180
         const val AE_MIN_FRAMES = 6
         const val FREEZE_MS = 1200L
         const val FREEZE_WATCH_FOR_MS = 4000L

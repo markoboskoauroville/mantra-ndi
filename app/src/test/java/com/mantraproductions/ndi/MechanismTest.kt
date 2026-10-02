@@ -1502,4 +1502,43 @@ class MechanismTest {
         assertFalse(Mechanism.trackRefocus(0.5f, 0.5f, 0.53f, 0.5f, 0.05f))
         assertEquals(0.6f, Mechanism.follow(0.5f, 0.7f, 0.5f), 1e-6f)
     }
+
+    // --- the ramp (v125) ------------------------------------------------------
+
+    @Test fun theRampLeavesAndArrivesAtRest() {
+        assertEquals(0f, Mechanism.rampEase(0f), 1e-6f)
+        assertEquals(1f, Mechanism.rampEase(1f), 1e-6f)
+        assertEquals(0.5f, Mechanism.rampEase(0.5f), 1e-6f)
+        // ease in: the first 10% of the time covers under 1% of the way; ease out the same at the end
+        assertTrue(Mechanism.rampEase(0.1f) < 0.01f)
+        assertTrue(Mechanism.rampEase(0.9f) > 0.99f)
+        // and it never goes back on itself
+        var last = 0f
+        for (i in 1..100) { val e = Mechanism.rampEase(i / 100f); assertTrue(e >= last); last = e }
+        assertEquals(1f, Mechanism.rampEase(1.7f), 1e-6f)
+    }
+
+    @Test fun aRampInStopsIsEvenInStops() {
+        // ISO 100 → 1600 is four stops: halfway in time is two stops, ISO 400, not 850
+        assertEquals(400.0, Mechanism.rampLog(100.0, 1600.0, 0.5f), 1e-6)
+        assertEquals(100.0, Mechanism.rampLog(100.0, 1600.0, 0f), 1e-9)
+        assertEquals(1600.0, Mechanism.rampLog(100.0, 1600.0, 1f), 1e-6)
+    }
+
+    @Test fun theCircleOpensUpOnDarkAndStopsDownOnBright() {
+        assertEquals(0.0, Mechanism.circleExposureError(0.18), 1e-9)
+        assertEquals(1.0, Mechanism.circleExposureError(0.09), 1e-9)
+        assertEquals(-2.0, Mechanism.circleExposureError(0.72), 1e-9)
+        assertEquals(4.0, Mechanism.circleExposureError(0.0), 1e-9)
+    }
+
+    @Test fun exposureGoesToIsoFirstAndShutterOnlyForTheRest() {
+        val fiftieth = 20_000_000L
+        // one stop up: ISO 200 → 400, the shutter untouched
+        assertEquals(400 to fiftieth, Mechanism.splitExposure(1.0, 200, fiftieth, 50, 3200, 100_000L, fiftieth))
+        // two stops down from ISO 100 with a floor at 50: one stop of ISO, one of shutter
+        assertEquals(50 to fiftieth / 2, Mechanism.splitExposure(-2.0, 100, fiftieth, 50, 3200, 100_000L, fiftieth))
+        // nowhere left to go: held at the ends
+        assertEquals(3200 to fiftieth, Mechanism.splitExposure(4.0, 1600, fiftieth, 50, 3200, 100_000L, fiftieth))
+    }
 }
