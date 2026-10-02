@@ -374,3 +374,16 @@ Needs the GPU stage (Settings → Picture path).
   unclipped pixels read in linear light, red and blue gain moved by G/R and G/B, up to 5 rounds until the box
   is neutral (±2 %); the result becomes the fader's anchor. With the box put away, A is as before.
   — **Status:** built, unit-tested (3 new tests); to be tried on his Pixel against a white G815 key
+
+## 2.10.2026, 03:45 — exposure circle, white balance rectangle, flashlight, settings reorganised
+
+> And also you need to build new features, which is a circle in the image, which is actually point of exposure, automatic exposure. So I can limit circle is exposure and the square is focus, as is it now. And the size of both of them, default size, can be set in settings. And also at the top of the settings, put one icon with the flashlight, and that icon is turning on the flash. I don't want it to take over my user interface, but under settings can be the first thing. So the first thing important in the settings are something I'm using all the time, and that's the settings of the first focus size, then this round exposure window, and then light. After that we have 8-bit/10-bit switch, and after that we have a resolution. And we need to remove interface orientation from the settings. It, it can be always at 0, so we can remove that part. And let's reorganize the settings and add the new features after white balance is done.Also, to the white balance, we need to add a 3rd rectangle, and that's the white balance rectangle. So I can point that rectangle or anything gray or white in the scene, tap on it, and it will, it will do white balancing.
+
+1. White balance first (v100 = the spot on the focus box; being tested). — **Status:** in test
+2. A THIRD shape, the WHITE BALANCE RECTANGLE: point it at anything grey or white, tap it, and it white-balances
+   on what is inside it (replaces v100's use of the focus box). — **Status:** open, next
+3. A CIRCLE = the exposure point (auto exposure meters inside it); the square stays focus. — **Status:** open
+4. Settings: default size of the focus square and of the exposure circle. — **Status:** open
+5. Settings, at the very top: a flashlight icon that turns the torch on (not on the main screen). — **Status:** open
+6. Settings order: focus size, exposure circle size, light; then 8-bit/10-bit; then resolution. — **Status:** open
+7. Remove "interface orientation" from settings; always 0. — **Status:** open
