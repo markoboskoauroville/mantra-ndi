@@ -528,3 +528,8 @@ Needs the GPU stage (Settings → Picture path).
     and one is chosen. When the source is this camera, the monitor shows the camera's whole interface and drives
     it remotely (nothing is recorded on the monitor). REBUILD.md's Phase 4 (remote control over NDI metadata) and
     Phase 5 (monitor). — **Status:** open; platform to confirm with Marko
+    — Platform (asked 05:27): **Android phone** (e.g. the Nothing Phone 2a watching and driving the Pixel).
+
+> (05:28) inside latest release of this app, there should be both apps listed— sister app and main app
+
+30. One release carries BOTH APKs: the camera and the sister monitor. — **Status:** open (with item 29)
