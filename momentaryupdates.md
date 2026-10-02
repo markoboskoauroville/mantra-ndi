@@ -432,3 +432,11 @@ Needs the GPU stage (Settings → Picture path).
   last made a frame is kept; frames stopping 1.2 s after any change put it back and the screen says "That
   setting is not available on this phone — put back as it was" (items 4, 5, 6, 7, 11). Not provable on the
   Pixel (nothing freezes there); the curve's own v83 watch, proven on the Nothing, stays. — **Status:** built
+
+## 2.10.2026, 04:22 — a tap anywhere is for the armed shape, also in full screen
+
+> So when we are talking about red triangle, red square, and red circle, the one which is in pinch action, also in the full screen when I remove everything, the tap still works. So tapping is always 2 actions: it moves the shape to the position and do automatic correction and then locks.
+
+13. The armed shape (orange key — "red" in his words — the one the pinch resizes) is also the one a tap on the
+    picture serves: the tap MOVES that shape to where it landed, runs its automatic correction (focus, exposure
+    or white balance) and LOCKS. The same in FULL screen, where nothing is drawn. — **Status:** v105
