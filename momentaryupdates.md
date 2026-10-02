@@ -539,3 +539,8 @@ Needs the GPU stage (Settings → Picture path).
 31. Both phones on adb + scrcpy: test the sister app between them, and stress-test the camera on the Nothing
     Phone 2a to find where it freezes (and prove the freeze watch). — **Status:** started
 - **v113 (2.10.2026):** MANTRA MONITOR, the sister app, a second module (monitor/) in the same repo and release: lists every NDI source after a double tap in the middle, watches one with the hardware decoder, remembers it; asks a Mantra camera for its state (remote control: v114/v115). CameraCommand moved to shared/kotlin for both apps. The release carries both APKs (item 29, 30). — **Status:** built, to test between his two phones
+- **v113 PROVEN 05:52 between his two phones:** the Nothing Phone 2a's monitor found "LOCALHOST (Pixel 7 Camera)"
+  after a double tap in the middle, connected, and received 1920x1080 HX at ~25 fps (~40 Mbit/s over Wi-Fi) through
+  the hardware decoder. Faults seen: the picture is SIDEWAYS (the sensor's landscape frame from an upright phone)
+  and STRETCHED to the portrait screen. adb taps cannot make a double tap (too slow); a real double click on the
+  scrcpy window does. — **Status:** v114 fixes the shape and the turn
