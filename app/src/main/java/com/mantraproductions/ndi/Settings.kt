@@ -149,6 +149,14 @@ class Settings(context: Context) {
         get() = prefs.getFloat(WB_Y, 0.5f)
         set(value) = prefs.edit().putFloat(WB_Y, value.coerceIn(0f, 1f)).apply()
 
+    /**
+     * v115: the curves that crashed a lens's camera ("lens/CURVE"), kept across starts so they are never sent again.
+     * MEASURED 2.10.2026 on the Nothing Phone 2a: S-Log3 → no frame for 1.2 s → "Camera error 4" (fatal device error).
+     */
+    var refusedCurves: Set<String>
+        get() = prefs.getStringSet(REFUSED_CURVES, emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet(REFUSED_CURVES, value).apply()
+
     /** v106: the outputs line (FILE USB NDI YT) on the camera screen, or hidden. */
     var showOutputs: Boolean
         get() = prefs.getBoolean(SHOW_OUTPUTS, true)
@@ -282,6 +290,7 @@ class Settings(context: Context) {
         const val WB_X = "wbBoxX"
         const val TORCH = "torch"
         const val SHOW_OUTPUTS = "showOutputs"
+        const val REFUSED_CURVES = "refusedCurves"
         const val CIRCLE_X = "circleX"
         const val CIRCLE_Y = "circleY"
         const val CIRCLE_SIZE = "circleSize"

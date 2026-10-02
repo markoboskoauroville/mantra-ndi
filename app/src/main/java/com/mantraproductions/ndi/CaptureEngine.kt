@@ -658,6 +658,9 @@ class CaptureEngine(private val context: Context) {
      * it over as the tone curve. Any curve is legal, so this costs nothing per
      * frame: the camera was already tone mapping, it just uses ours instead.
      */
+    /** v115: the curve the next session starts with, without sending anything (the camera may be gone). */
+    fun forgetCurve(back: LogCurves.Curve) { activeCurve = back }
+
     fun setLogCurve(curve: LogCurves.Curve): Boolean {
         val previous = activeCurve
         val before = lastGood

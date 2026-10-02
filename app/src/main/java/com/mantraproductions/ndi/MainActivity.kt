@@ -356,6 +356,8 @@ class MainActivity : AppCompatActivity() {
             ui.post {
                 curveIndex = back.ordinal
                 refusedCurves.add(lensKey() + "/" + refused.name)
+                settings.refusedCurves = refusedCurves
+                risk = null
                 say("${curveLabel(refused)} is not supported on this lens — back to ${curveLabel(back)}")
                 refreshKeys()
             }
@@ -387,7 +389,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             override fun onError(message: String) {
-                ui.post { say(message); Trace.refused("pipeline", message) }
+                ui.post {
+                    say(message); Trace.refused("pipeline", message)
+                    // v115: a dead camera is opened again, and a risky step that killed it is taken back
+                    if (message.startsWith("Camera error")) onCameraDied(message)
+                }
             }
             override fun onRate(fps: Double, megabitsPerSecond: Double, connections: Int) {
                 ui.post { showRate(fps, megabitsPerSecond, connections); refreshZones() }
@@ -1219,10 +1225,42 @@ class MainActivity : AppCompatActivity() {
         Trace.control("still", "${w}x$h", "PNG")
     }
 
-    /** Curves a lens froze on, "lens/CURVE": stepped over from then on. */
-    private val refusedCurves = mutableSetOf<String>()
+    /** Curves a lens froze on, "lens/CURVE": stepped over from then on, and since v115 kept across starts. */
+    private val refusedCurves by lazy { settings.refusedCurves.toMutableSet() }
+
+    /**
+     * v115: THE LAST RISKY STEP, so a fatal camera error that follows it can be blamed on it. Marko, 2.10.2026: "say
+     * this feature is not available and go back to the old settings." MEASURED on the Nothing Phone 2a: a log curve
+     * made its camera stop (no frame), then the driver closed the camera ("Camera error 4"), and the app went on
+     * sending to a closed camera — the freeze he saw.
+     */
+    private var risk: Triple<String, Long, () -> Unit>? = null
+    private val reopenTimes = ArrayDeque<Long>()
+
+    private fun onCameraDied(message: String) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val r = risk
+        risk = null
+        if (r != null && now - r.second < 10_000) {
+            r.third()                                    // forget the step, put the old value back
+            say("${r.first} is not available on this phone — back as it was")
+            Trace.refused("camera died", "$message after ${r.first}: taken back, the camera opened again")
+        } else {
+            say("The camera stopped ($message) — opened again")
+        }
+        // never a loop: at most three reopenings a minute
+        while (reopenTimes.isNotEmpty() && now - reopenTimes.first() > 60_000) reopenTimes.removeFirst()
+        if (reopenTimes.size >= 3) { say("The camera keeps stopping — not opened again; reopen the app"); return }
+        reopenTimes.addLast(now)
+        restoreMode = pipeline.mode
+        pipeline.stop(keepSource = restoreMode != CameraPipeline.Mode.OFF)
+        ui.postDelayed({ if (preview.isAvailable) openCamera() }, 600)
+    }
+
+    private var previousCurve = LogCurves.Curve.REC709
 
     private fun nextCurve() {
+        previousCurve = LogCurves.Curve.entries[curveIndex]
         val count = LogCurves.Curve.entries.size
         for (step in 1..count) {
             curveIndex = (curveIndex + 1) % count
@@ -1230,6 +1268,15 @@ class MainActivity : AppCompatActivity() {
             if (lensKey() + "/" + name !in refusedCurves) break
         }
         val curve = LogCurves.Curve.entries[curveIndex]
+        val before = previousCurve
+        risk = Triple(curveLabel(curve), android.os.SystemClock.uptimeMillis()) {
+            refusedCurves.add(lensKey() + "/" + curve.name)
+            settings.refusedCurves = refusedCurves
+            curveIndex = before.ordinal
+            pipeline.engine.forgetCurve(before)
+            refreshKeys()
+        }
+        previousCurve = curve
         val ok = pipeline.setLogCurve(curve)
         say(if (ok) (if (curve == LogCurves.Curve.REC709) curveLabel(curve) + ", the camera's own curve"
                      else "${curve.vendor} ${curve.displayName}") else "${curveLabel(curve)} refused")

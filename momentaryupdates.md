@@ -545,3 +545,9 @@ Needs the GPU stage (Settings → Picture path).
   and STRETCHED to the portrait screen. adb taps cannot make a double tap (too slow); a real double click on the
   scrcpy window does. — **Status:** v114 fixes the shape and the turn
 - **v114 (2.10.2026):** the monitor keeps the picture's own shape (letterboxed, never stretched) and has a TURN key: a quarter turn per tap, remembered per source. — **Status:** proven 07:12 between his phones (16:9 letterboxed, one TURN = upright, as the Pixel sees it)
+- **MEASURED 07:14 on the Nothing Phone 2a (stress.py):** LOG → S-Log3 accepted → no frame for 1.2 s (the v104
+  freeze watch fired and put the last request back) → "Camera error 4" (the driver closed the camera) → every later
+  request "CameraDevice was already closed": the freeze. **v115:** a fatal camera error within 10 s of a risky step
+  (a curve) takes the step back, marks that curve refused for this lens FOR GOOD (kept across starts), says "<curve>
+  is not available on this phone — back as it was", and opens the camera again; any other fatal error also reopens
+  it (at most 3 a minute). — **Status:** built
