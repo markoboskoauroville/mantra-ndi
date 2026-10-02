@@ -17,6 +17,8 @@ working state of *this* app.
 - **Exposure = the CIRCLE.** A tap meters auto exposure on it and locks (AE regions, precapture, AE lock).
 - **Focus = the SQUARE**, as before. Left rail: L (lenses fold out and back) □ ○ △: grey off the picture,
   white on it, orange = the one a pinch resizes AND a tap anywhere serves (also in FULL).
+- **v107: the □ ○ △ keys wear their shape's colour** of the moment (white idle, orange searching, green locked,
+  red failed; grey off), and a bar under a key marks the armed one. Proven on his Pixel 04:44.
 - **Status line** names the armed shape and its locked numbers (focus m/dpt, ISO·shutter·EV, K·gains).
 - **Settings:** the torch at the top (proven: the desk lit), the three sizes, then depth and resolution;
   "Turn the preview" removed (turn always 0); SHOW ON THE CAMERA hides the outputs line.
