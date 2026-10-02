@@ -472,3 +472,10 @@ Needs the GPU stage (Settings → Picture path).
 18. A letter inside each mark key — PROVEN v108 on his Pixel 04:58: F in the square (focus), E in the circle (exposure), W in the triangle (white
     balance), in the key's own colour. — **Status:** v108 (the rail keys; the shapes on the picture stay empty so
     they cover nothing of the subject, unless he asks)
+
+## 2.10.2026, 05:00 — the triangle filled instead of W
+
+> w doesn't look good because it's smaller. Instead of w, just put fill the triangle inside with white colorOr
+
+19. No W: the triangle key is a FILLED triangle (white when idle; it keeps following its shape's colour —
+    orange searching, green locked, grey off — so the keys stay in sync, item 17). F and E stay. — **Status:** v109
