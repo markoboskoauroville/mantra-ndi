@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mantraproductions.ndi.monitor"
-    android:versionCode="117"
-    android:versionName="117" >
+    android:versionCode="118"
+    android:versionName="118" >
 
     <uses-sdk
         android:minSdkVersion="26"

@@ -79,6 +79,20 @@ class MonitorEngine(
 
     internal fun markFrame() {
         lastFrameAt = android.os.SystemClock.elapsedRealtime()
+        shown.incrementAndGet()
+    }
+
+    // v118: what this monitor actually receives and shows, for its own status line
+    private val shown = java.util.concurrent.atomic.AtomicLong()
+    private val received = java.util.concurrent.atomic.AtomicLong()
+    private var statsAt = android.os.SystemClock.elapsedRealtime()
+
+    /** Frames shown per second and Mbit/s received since the last call. */
+    fun stats(): Pair<Double, Double> {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val dt = ((now - statsAt).coerceAtLeast(1)) / 1000.0
+        statsAt = now
+        return shown.getAndSet(0) / dt to received.getAndSet(0) * 8 / dt / 1_000_000.0
     }
 
     fun stop() {
@@ -131,6 +145,7 @@ class MonitorEngine(
                         if (!configureCodec(width, height, isHevc)) return
                     }
 
+                    received.addAndGet(size.toLong())
                     feedDecoder(buffer, size, ptsUs)
                     drainDecoder()
 

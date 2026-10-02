@@ -1506,6 +1506,12 @@ class MainActivity : AppCompatActivity() {
                 Trace.control("remote", xml.take(120), "from the monitor")
                 c.key?.let { pressKey(it) }
                 if (c.tapX != null && c.tapY != null) streamToView(c.tapX, c.tapY)?.let { (x, y) -> tapAt(x, y) }
+                c.streamMbps?.let { m ->
+                    val v = m.coerceIn(2, 100)
+                    settings.streamMbps = v
+                    pipeline.setStreamBitRateLive(v * 1_000_000)
+                    say("Streaming $v Mbit/s (set from the monitor)")
+                }
                 remoteDirty = true
             }
             val now = android.os.SystemClock.uptimeMillis()
@@ -1571,7 +1577,8 @@ class MainActivity : AppCompatActivity() {
         ).joinToString("|")
         return CameraState(
             recording = rolling, cameraName = settings.sourceName, status = status.text.toString(),
-            keys = keys, marks = marks, armed = settings.pinchTarget, turns = (d / 90) % 4
+            keys = keys, marks = marks, armed = settings.pinchTarget, turns = (d / 90) % 4,
+            streamMbps = pipeline.streamBitRate / 1_000_000
         )
     }
 

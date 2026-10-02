@@ -92,6 +92,17 @@ class CameraPipeline(private val context: Context) {
 
     /** The stream's bit rate when the GPU stage gives it its own encoder. */
     var streamBitRate: Int = BIT_RATE
+
+    /**
+     * v118: the stream's bit rate changed LIVE, from the monitor's HX keys. The encoder takes a new rate without a
+     * restart (PARAMETER_KEY_VIDEO_BITRATE). On the direct path the take shares that encoder, so it changes too.
+     */
+    fun setStreamBitRateLive(bps: Int) {
+        streamBitRate = bps
+        encoder?.setBitRate(bps)
+        if (gpu == null) videoBitRate = bps
+        Trace.control("stream bit rate", "${bps / 1_000_000} Mbit/s", if (gpu == null) "live, the take too (direct path)" else "live")
+    }
     private var fullReader: ImageReader? = null
     private var fullThread: HandlerThread? = null
     private var sourceName: String = "Mantra Manual Camera"

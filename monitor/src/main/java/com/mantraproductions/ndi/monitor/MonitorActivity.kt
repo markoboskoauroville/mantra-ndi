@@ -54,6 +54,12 @@ class MonitorActivity : Activity() {
     private var fitMatrix: Matrix? = null
     private var keysShown = ""
     private var remote = false
+    // v118: the monitor's own numbers, and the camera's HX bit rate under the operator's thumb
+    private lateinit var info: LinearLayout
+    private lateinit var stats: TextView
+    private lateinit var rateWord: TextView
+    private var cameraMbps = 0
+    private val rates = listOf(4, 8, 12, 16, 24, 32, 50)
     private lateinit var status: TextView
     private lateinit var picker: ScrollView
     private lateinit var list: LinearLayout
@@ -84,6 +90,20 @@ class MonitorActivity : Activity() {
         railBottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.BLACK); visibility = View.GONE }
         root.addView(railTop, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(56), Gravity.TOP).apply { topMargin = dp(24) })
         root.addView(railBottom, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(56), Gravity.BOTTOM).apply { bottomMargin = dp(48) })
+        stats = word("", Color.parseColor("#E6E8EA"), 12f, null).apply { setPadding(dp(12), dp(6), dp(12), dp(6)) }
+        rateWord = word("", Color.parseColor("#F2DDB4"), 14f, null).apply { setPadding(dp(6), dp(6), dp(6), dp(6)) }
+        info = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Color.parseColor("#88000000"))
+            addView(stats, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(word("HX", Color.parseColor("#7A8087"), 12f, null))
+            addView(word("  −  ", Color.parseColor("#F2DDB4"), 18f) { stepRate(-1) })
+            addView(rateWord)
+            addView(word("  +  ", Color.parseColor("#F2DDB4"), 18f) { stepRate(+1) })
+            visibility = View.GONE
+        }
+        root.addView(info, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(48 + 56) })
+        ui.post(statsTick)
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(40), dp(24), dp(16)) }
         picker = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#E60B0D10")); visibility = View.GONE; addView(list)
@@ -161,6 +181,27 @@ class MonitorActivity : Activity() {
                 ui.post { sources = found; if (picker.visibility == View.VISIBLE) fillPicker() }
             }
         }
+    }
+
+    /** Once a second: what this monitor receives and shows. */
+    private val statsTick = object : Runnable {
+        override fun run() {
+            ui.postDelayed(this, 1000)
+            val e = engine ?: return
+            val (fps, mbps) = e.stats()
+            stats.text = String.format(java.util.Locale.ROOT, "MONITOR  %.1f fps · %.1f Mbit/s", fps, mbps)
+            stats.setTextColor(if (fps < 1) Color.parseColor("#FF3B30") else Color.parseColor("#E6E8EA"))
+            if (!remote) info.visibility = View.VISIBLE
+        }
+    }
+
+    /** The HX keys: the camera's stream bit rate one step down or up; the camera answers with what it took. */
+    private fun stepRate(dir: Int) {
+        if (!remote) return
+        val i = rates.indexOfFirst { it >= cameraMbps }.let { if (it < 0) rates.size - 1 else it }
+        val next = rates[(i + dir).coerceIn(0, rates.size - 1)]
+        NdiReceiver.sendCommand(CameraCommand(streamMbps = next))
+        rateWord.text = "$next Mbit/s…"
     }
 
     private fun showPicker(on: Boolean) {
@@ -257,6 +298,8 @@ class MonitorActivity : Activity() {
         }
         if (st.turns != turns) { turns = st.turns; fit() }
         status.text = st.status.ifEmpty { st.cameraName }
+        info.visibility = View.VISIBLE
+        if (st.streamMbps > 0) { cameraMbps = st.streamMbps; rateWord.text = "${st.streamMbps} Mbit/s" }
         if (st.keys != keysShown) { keysShown = st.keys; drawKeys(st.keys) }
         overlay.marks = st.marks.split("|").mapNotNull { m ->
             val f = m.split(","); if (f.size < 7) null else runCatching {

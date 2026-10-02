@@ -42,7 +42,9 @@ data class CameraCommand(
     val key: String? = null,
     /** v117: a tap on the picture, in the STREAM's coordinates (fractions of the NDI frame); the camera turns it. */
     val tapX: Float? = null,
-    val tapY: Float? = null
+    val tapY: Float? = null,
+    /** v118: the NDI HX bit rate the stream should use, Mbit/s. */
+    val streamMbps: Int? = null
 ) {
     fun toXml(): String {
         val sb = StringBuilder("<$ROOT")
@@ -64,6 +66,7 @@ data class CameraCommand(
         key?.let { sb.append(" key=\"${esc(it)}\"") }
         tapX?.let { sb.append(" tap_x=\"$it\"") }
         tapY?.let { sb.append(" tap_y=\"$it\"") }
+        streamMbps?.let { sb.append(" stream_mbps=\"$it\"") }
         sb.append("/>")
         return sb.toString()
     }
@@ -91,7 +94,8 @@ data class CameraCommand(
                 requestState = attr(xml, "request_state") == "1",
                 key = attr(xml, "key")?.let { unesc(it) },
                 tapX = attr(xml, "tap_x")?.toFloatOrNull(),
-                tapY = attr(xml, "tap_y")?.toFloatOrNull()
+                tapY = attr(xml, "tap_y")?.toFloatOrNull(),
+                streamMbps = attr(xml, "stream_mbps")?.toIntOrNull()
             )
         }
 
@@ -142,7 +146,9 @@ data class CameraState(
     /** v117: which mark a tap and a pinch serve: 0 square, 1 circle, 2 triangle. */
     val armed: Int = 0,
     /** v117: the quarter turns from the stream to the camera's own view, so the monitor can stand it upright. */
-    val turns: Int = 0
+    val turns: Int = 0,
+    /** v118: the stream's bit rate now, Mbit/s. */
+    val streamMbps: Int = 0
 ) {
     fun toXml(): String = "<$ROOT iso_min=\"$isoMin\" iso_max=\"$isoMax\"" +
             " shutter_min=\"$shutterMinNs\" shutter_max=\"$shutterMaxNs\"" +
@@ -153,7 +159,7 @@ data class CameraState(
             " wb_kelvin=\"${whiteBalanceKelvin ?: -1}\"" +
             " name=\"${CameraCommand.esc(cameraName)}\"" +
             " status=\"${CameraCommand.esc(status)}\" keys=\"${CameraCommand.esc(keys)}\"" +
-            " marks=\"$marks\" armed=\"$armed\" turns=\"$turns\"/>"
+            " marks=\"$marks\" armed=\"$armed\" turns=\"$turns\" stream_mbps=\"$streamMbps\"/>"
 
     companion object {
         const val ROOT = "mantra_cam_state"
@@ -185,7 +191,8 @@ data class CameraState(
                 keys = a("keys")?.let { CameraCommand.unesc(it) } ?: "",
                 marks = a("marks") ?: "",
                 armed = a("armed")?.toIntOrNull() ?: 0,
-                turns = a("turns")?.toIntOrNull() ?: 0
+                turns = a("turns")?.toIntOrNull() ?: 0,
+                streamMbps = a("stream_mbps")?.toIntOrNull() ?: 0
             )
         }
     }
