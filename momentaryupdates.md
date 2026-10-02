@@ -478,4 +478,4 @@ Needs the GPU stage (Settings → Picture path).
 > w doesn't look good because it's smaller. Instead of w, just put fill the triangle inside with white colorOr
 
 19. No W: the triangle key is a FILLED triangle (white when idle; it keeps following its shape's colour —
-    orange searching, green locked, grey off — so the keys stay in sync, item 17). F and E stay. — **Status:** v109
+    orange searching, green locked, grey off — so the keys stay in sync, item 17). F and E stay. — **Status:** proven v109 on his Pixel 05:05
