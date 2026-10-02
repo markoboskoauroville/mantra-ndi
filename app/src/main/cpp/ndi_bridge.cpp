@@ -45,6 +45,12 @@ NDIlib_send_instance_t g_send_instance = nullptr;
 // of the phone does, since a rotation rebuilds the pipeline underneath.
 std::mutex g_send_mutex;
 
+// v123: the remote control's metadata has its OWN lock. v117 polled and sent it under g_send_mutex, and a metadata
+// send waiting on the network held up the video behind it: the picture came in bursts and stopped (MEASURED
+// 2.10.2026, Pixel → Nothing: 10-19 fps for five seconds, then nothing, while v113-v114 without metadata held 25 fps).
+// Creating or destroying the sender takes BOTH locks, so neither side can ever use a sender being torn down.
+std::mutex g_meta_mutex;
+
 // SPS/PPS (and VPS for H.265), attached to keyframes as the packet's extra
 // data. A receiver that joins mid-stream has no other way to learn the format.
 std::vector<uint8_t> g_video_extra;
@@ -102,7 +108,7 @@ Java_com_mantraproductions_ndi_NdiSender_nativeCreate(
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_send_mutex);
+        std::scoped_lock lock(g_send_mutex, g_meta_mutex);
         NDIlib_send_instance_t old = g_send_instance;
         g_send_instance = fresh;
         if (old) NDIlib_send_destroy(old);
@@ -113,7 +119,7 @@ Java_com_mantraproductions_ndi_NdiSender_nativeCreate(
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_mantraproductions_ndi_NdiSender_nativeDestroy(JNIEnv*, jobject) {
-    std::lock_guard<std::mutex> lock(g_send_mutex);
+    std::scoped_lock lock(g_send_mutex, g_meta_mutex);
     if (g_send_instance) {
         NDIlib_send_destroy(g_send_instance);
         g_send_instance = nullptr;
@@ -389,11 +395,11 @@ Java_com_mantraproductions_ndi_NdiSender_nativeTally(JNIEnv*, jobject, jint time
 
 /**
  * v117, REMOTE CONTROL: a command a receiver (Mantra Monitor) sent up this source, or null. Polled, never blocking
- * (timeout 0, under the sender's lock), so it can never hold up a video frame nor outlive a sender being torn down.
+ * (timeout 0, under the metadata lock since v123), so it never holds up a video frame nor outlives a sender being torn down.
  */
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_mantraproductions_ndi_NdiSender_nativePollMetadata(JNIEnv* env, jobject) {
-    std::lock_guard<std::mutex> lock(g_send_mutex);
+    std::lock_guard<std::mutex> lock(g_meta_mutex);
     if (!g_send_instance) return nullptr;
     NDIlib_metadata_frame_t frame = {};
     if (NDIlib_send_capture(g_send_instance, &frame, 0) != NDIlib_frame_type_metadata) return nullptr;
@@ -405,7 +411,7 @@ Java_com_mantraproductions_ndi_NdiSender_nativePollMetadata(JNIEnv* env, jobject
 /** v117: the camera's state, down the wire to every receiver, as one metadata frame. */
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_mantraproductions_ndi_NdiSender_nativeSendMetadata(JNIEnv* env, jobject, jstring xml) {
-    std::lock_guard<std::mutex> lock(g_send_mutex);
+    std::lock_guard<std::mutex> lock(g_meta_mutex);
     if (!g_send_instance || xml == nullptr) return JNI_FALSE;
     const char* data = env->GetStringUTFChars(xml, nullptr);
     NDIlib_metadata_frame_t frame = {};
