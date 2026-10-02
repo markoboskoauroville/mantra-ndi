@@ -397,3 +397,11 @@ Needs the GPU stage (Settings → Picture path).
    pinch resizes (only one at a time, a toggle). — **Status:** open (v102)
 10. White balance is a tap: it reads, probes, LOCKS and stays — nothing tracks. Orange while searching, green
     when locked, as the focus square. — **Status:** v101
+
+## 2.10.2026, 04:05 — a feature that freezes another phone says "not available" and goes back
+
+> Also, one more time, one more thing, because this app is compatible with Pixel 7 mostly, and on other phones it can freeze when using some features. And map should detect freezing and say just to user feature not supported and not freeze. So we have this issue on Nothing Phone 2A when I change to low curves, then it freezes. I think we solved this problem, but check the MDs, what was with that. And if we, if we can apply this feature instead of freezing the screen, just to say this feature is not available and go back to the old settings.
+
+11. A freeze watchdog: when a change (e.g. a log curve on the Nothing Phone 2a) stops the picture, say "this
+    feature is not available on this phone" and go back to the settings before it. Check the MDs for what was
+    done about the Nothing Phone's log-curve freeze. — **Status:** open (after the white balance test)
