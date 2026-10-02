@@ -418,3 +418,6 @@ Needs the GPU stage (Settings → Picture path).
   Pure colours afterwards through the camera: red, green, cyan, blue right; orange pale (legends clipped),
   yellow leans green, magenta violet. Next: his precise light, and exposure for the LEDs. — **Status:** item 1
   and 10 done for the white; colour accuracy of saturated colours open
+- **Re-measured 03:52 with truly white keys** (the first run had his orange M2 bank under the triangle — he had
+  switched banks): locked neutral after 6 steps (r/g 1.018, b/g 0.998). Through the camera then: red, orange,
+  yellow, green, cyan, blue, magenta and white all read as themselves. — **Status: white balance DONE.**
