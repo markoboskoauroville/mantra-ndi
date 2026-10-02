@@ -358,3 +358,14 @@ Needs the GPU stage (Settings → Picture path).
   (ff00ff) show BLUE, white shows bluish, orange (ff6000) shows red, yellow shows olive. To his own eye the keys
   are right (magenta, white, orange), so the error is the camera's: too much blue, too little green/red balance.
   — **Status:** started 2.10.2026
+
+> (2.10.2026, 03:10) now instead of using an emulator, you can use my real Pixel phone. It's now in debugging mode, and we're going to fix the camera. You can do anything through my screen copy because it's a full-featured touchscreen. Make the camera use the right white balance first. Test is with the keyboard, and then I give you precise light with precise colors, and we're going to make this white balance perfect
+
+- The real Pixel 7 over adb + scrcpy, not the emulator. First the right white balance, tested against the G815;
+  then Marko gives a precise light with precise colours and it is made perfect. — **Status:** started
+- Diagnosis (read-only study, 2.10.2026): "A" is the Pixel's whole-frame AWB (no region of its own,
+  CONTROL_AWB_REGIONS never set) and it neutralises the warm room lamp, so the self-lit LEDs read blue;
+  anchorKelvin clamps at 3200 K (WhiteBalance.kt:48-49); LEDs over-exposed so red clips and CCM crosstalk
+  eats orange's green. Plan: A becomes a spot white balance on the focus box (sampleGreyCard,
+  MainActivity.kt:1331, to return mean R G B, linearised, clipped pixels rejected; gains iterated until
+  R=G=B in the box), Kelvin range widened to ~2500-10000 K.
