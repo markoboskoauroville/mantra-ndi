@@ -131,13 +131,18 @@ class MonitorActivity : Activity() {
         }
         root.addView(turnKey, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(20), dp(28)) })
         // v131: the CLEAN monitor: the picture, the record key and its counter, nothing else
-        cleanRec = word("●", Color.parseColor("#FF3B30"), 44f) { link?.key("REC") }.apply { setPadding(dp(18), 0, dp(18), 0) }
+        cleanRec = word("●", Color.parseColor("#FF3B30"), 44f) { link?.key("REC") }.apply { setPadding(0, 0, 0, 0) }
         cleanTime = word("", Color.WHITE, 22f, null)
+        // v133: the record key never moves: an empty slot on its left as wide as the counter's on its right (v132's
+        // bar grew when the counter appeared and pushed the key aside; the press to stop missed it)
         cleanBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE
-            addView(cleanRec); addView(cleanTime)
+            addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+            addView(cleanRec, LinearLayout.LayoutParams(dp(96), dp(96)))
+            cleanRec.gravity = Gravity.CENTER
+            addView(cleanTime, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         }
-        root.addView(cleanBar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(36) })
+        root.addView(cleanBar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(24) })
         // v132: in CLEAN, what the camera just said (a refusal, a mode) for three seconds above the record key
         cleanSaid = word("", Color.parseColor("#E6E8EA"), 13f, null).apply {
             gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#88000000")); setPadding(dp(12), dp(6), dp(12), dp(6)); visibility = View.GONE

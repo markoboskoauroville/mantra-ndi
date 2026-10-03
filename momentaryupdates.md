@@ -672,3 +672,7 @@ Needs the GPU stage (Settings → Picture path).
   the monitor; the camera app killed: monitor 0 fps, then back at 24 fps 1 s after the camera returned, untouched.
 - **v132:** the camera's last words in its state; a clean monitor shows them 3 s above REC (a press that does
   nothing says why). — **Status:** built
+- **v132 MEASURED (08:54):** the clean monitor showed the camera's words ("Recording → DCIM/…mp4") above the key,
+  the key turned ■, the counter ran. FOUND: the bar grew when the counter appeared and pushed the key to the left;
+  the press to stop hit the counter (the take ran 3:45, 5601 frames, 0 refused; my two test takes were deleted).
+  **v133:** the key never moves (an empty slot on its left balances the counter's on its right). — **Status:** built
