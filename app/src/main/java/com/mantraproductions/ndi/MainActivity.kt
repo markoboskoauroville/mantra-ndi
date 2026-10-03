@@ -373,11 +373,9 @@ class MainActivity : AppCompatActivity() {
                     reopenTries = -1                // v116: up again, the recovery is over
                     // v104: the light, switched in settings, is put on whenever the camera opens
                     if (settings.torch) pipeline.engine.setTorch(true)
-                    if (restoreMode != CameraPipeline.Mode.OFF) {
-                        val want = restoreMode
-                        restoreMode = CameraPipeline.Mode.OFF
-                        pipeline.setMode(want)
-                    }
+                    restoreMode = CameraPipeline.Mode.OFF
+                    // v130: NDI runs whenever it is armed, from the moment the camera is up (item 47)
+                    followNdiSwitch()
                     // A new session starts from the template, which is all
                     // automatic: his A / M switches are put back on it.
                     if (!isoAuto || !shutterAuto) applyExposure()
@@ -468,9 +466,23 @@ class MainActivity : AppCompatActivity() {
         // v103: ONE key, L (Marko, 2.10.2026: "This lenses chooser is taking too much space ... L, only one
         // icon. When user press L, they uncollapse. User choose one lens and then it collapse again"). Its
         // whisper is the lens in use; the lens keys appear beside it only while it is open.
-        lensChooser = newKey("L") { lensesOpen = !lensesOpen; refreshKeys() }.also { railLeft.addView(it) }
+        lensChooser = newKey("L") { openDrawer(!lensesOpen) }.also { railLeft.addView(it) }
+        // v130, THE LENS DRAWER (Marko, 3.10.2026: "when I press lens, it should actually take all available space
+        // ... all other icons are gone ... millimeters ... next to the letter ... aperture opening for each lens and
+        // resolution"). Each lens key reads "L1 24mm" over "f/1.85 · 12MP · 4K".
         for (i in 1..lenses.size) {
-            val key = newKey("L$i") { lensesOpen = false; chooseLens(i - 1); refreshKeys() }
+            val lens = lenses[i - 1]
+            val mm = lens.equivalentMm.takeIf { it > 0 }?.let { " ${it}mm" } ?: ""
+            val video = runCatching { pipeline.widthsOffered(lens.id, lens.physicalId).maxOrNull() }.getOrNull()
+            val res = when { video == null -> null; video >= 3840 -> "4K"; video >= 2560 -> "1440p"; video >= 1920 -> "1080p"; else -> "720p" }
+            val sub = listOfNotNull(
+                lens.aperture.takeIf { it > 0f }?.let { "f/" + String.format(java.util.Locale.ROOT, "%.2f", it).trimEnd('0').trimEnd('.') },
+                lens.megapixels.takeIf { it > 0 }?.let { "${it}MP" },
+                res
+            ).joinToString(" · ")
+            val key = newKey("L$i$mm") { openDrawer(false); chooseLens(i - 1) }
+            key.sub = sub.ifEmpty { null }
+            key.scale = 1.35f
             lensKeys.add(key)
             railLeft.addView(key)
         }
@@ -524,6 +536,13 @@ class MainActivity : AppCompatActivity() {
         storageKey = newKey("—") { openSettings() }.also { railRight.addView(it) }
     }
 
+    /** v130: the lens drawer opens over the whole left rail (wider in landscape, taller upright) and closes again. */
+    private fun openDrawer(open: Boolean) {
+        lensesOpen = open
+        refreshKeys()
+        layoutForOrientation(resources.configuration.orientation)
+    }
+
     private fun openSettings() {
         // The lens in use, so ROT in settings turns this lens and no other.
         startActivity(
@@ -559,9 +578,11 @@ class MainActivity : AppCompatActivity() {
         railLeft.orientation = if (landscape) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         railRight.orientation = if (landscape) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
 
-        val thickness = (44 * resources.displayMetrics.density).toInt()
-        val margin = (2 * resources.displayMetrics.density).toInt()
+        val density = resources.displayMetrics.density
+        val margin = (2 * density).toInt()
         for (rail in listOf(railLeft, railRight)) {
+            // v130: the open lens drawer takes room for its words, across in landscape and down when upright
+            val thickness = ((if (rail === railLeft && lensesOpen) (if (landscape) 150 else 72) else 44) * density).toInt()
             val lp = rail.layoutParams as LinearLayout.LayoutParams
             if (landscape) {
                 lp.width = thickness
@@ -829,54 +850,57 @@ class MainActivity : AppCompatActivity() {
     private var rolling = false
 
     /**
-     * THE MASTER TRIGGER (v91). *"Activating a destination in the Settings
-     * menu only arms that specific channel ... will not commence until the
-     * user presses the master Record button ... both armed streams will start
-     * perfectly synchronized."* Every armed destination starts in this one
-     * call, off the one encoder, so they share frames and time from the first
-     * one; the record-run timecode counts from here.
+     * THE RECORD KEY (v130): the take, and only the take.
+     *
+     * v91 started every armed destination from this key. Marko, 3.10.2026: *"NDI Stream should start actually as
+     * soon as it's enabled. It's not any more connected with the record button."* So NDI follows its switch in
+     * settings ([followNdiSwitch]) and the record key records the file; the record-run timecode counts from here.
      */
     private fun startAll() {
         if (!pipeline.isRunning) { say("The camera is not open"); return }
-        val file = settings.armFile
-        val ndi = settings.armNdi
-        if (!file && !ndi) {
-            say("Nothing is armed — arm FILE or NDI in settings (the gear)")
+        if (!settings.armFile) {
+            say("FILE is not armed — arm it in settings (the gear)")
             return
         }
         rolling = true
         recordingSince = android.os.SystemClock.elapsedRealtime()
-        val started = mutableListOf<String>()
-        if (ndi) {
-            val want = if (settings.ndiKind == 2) CameraPipeline.Mode.FULL else CameraPipeline.Mode.HX
-            val possible = if (want == CameraPipeline.Mode.FULL) pipeline.fullAvailable else pipeline.hxAvailable
-            if (possible) {
-                pipeline.setMode(want)
-                started += if (want == CameraPipeline.Mode.FULL) "NDI FULL" else "NDI HX"
-            } else {
-                say("${if (want == CameraPipeline.Mode.FULL) "Full NDI" else "NDI HX"} is not possible on this lens")
-            }
-        }
-        if (file && startRecording()) started += "FILE"
-        if (started.isEmpty()) { rolling = false; refreshKeys(); return }
-        Trace.control("master", "start", started.joinToString(" + "))
+        if (!startRecording()) { rolling = false; refreshKeys(); return }
+        Trace.control("record", "start", "FILE")
         showTimecode(true)
         refreshTelemetry()
         refreshKeys()
     }
 
-    /** Everything that is running stops together. */
+    /** The take stops; NDI goes on as long as it is armed. */
     private fun stopAll() {
         rolling = false
         if (pipeline.isRecording) stopRecording()
-        if (pipeline.mode != CameraPipeline.Mode.OFF) {
-            pipeline.setMode(CameraPipeline.Mode.OFF)
-            if (!settings.armFile) say("Stopped")
-        }
-        Trace.control("master", "stop", "all")
+        Trace.control("record", "stop", "FILE")
         showTimecode(false)
         refreshTelemetry()
         refreshKeys()
+    }
+
+    /**
+     * v130: the NDI stream follows its switch, not the record key. Armed: it runs as soon as the camera is open, the
+     * kind chosen in settings (HX or FULL). Not armed: it stops. Called whenever the camera comes up.
+     */
+    private fun followNdiSwitch() {
+        if (!pipeline.isRunning) return
+        if (!settings.armNdi) {
+            if (pipeline.mode != CameraPipeline.Mode.OFF) pipeline.setMode(CameraPipeline.Mode.OFF)
+            return
+        }
+        val want = if (settings.ndiKind == 2) CameraPipeline.Mode.FULL else CameraPipeline.Mode.HX
+        if (pipeline.mode == want) return
+        val possible = if (want == CameraPipeline.Mode.FULL) pipeline.fullAvailable else pipeline.hxAvailable
+        if (!possible) {
+            say("${if (want == CameraPipeline.Mode.FULL) "Full NDI" else "NDI HX"} is not possible on this lens")
+            return
+        }
+        pipeline.setMode(want)
+        Trace.control("ndi", want.name, "armed in settings")
+        refreshTelemetry()
     }
 
     private fun startRecording(): Boolean {
@@ -2851,6 +2875,11 @@ class MainActivity : AppCompatActivity() {
         lenses.getOrNull(activeLens)?.equivalentMm?.takeIf { it > 0 }?.let { lensChooser.sub = "${it}mm" }
         lensChooser.state = if (lensesOpen) RailButton.State.ARMED else RailButton.State.ON
         lensKeys.forEach { it.visibility = if (lensesOpen) View.VISIBLE else View.GONE }
+        // v130: while the drawer is open it is the whole rail; every other key steps aside
+        for (i in 0 until railLeft.childCount) {
+            val k = railLeft.getChildAt(i)
+            if (k !== lensChooser && k !in lensKeys) k.visibility = if (lensesOpen) View.GONE else View.VISIBLE
+        }
         // v107: each mark key wears its shape's colour of the moment (white, orange searching, green locked,
         // red failed), grey when the shape is off; a bar under it says which one is armed.
         markKeys.forEachIndexed { i, key ->
@@ -2867,7 +2896,6 @@ class MainActivity : AppCompatActivity() {
                 i == activeLens && pipeline.isRunning -> RailButton.State.ON
                 else -> RailButton.State.OFF
             }
-            key.sub = lens?.equivalentMm?.takeIf { it > 0 }?.let { "${it}mm" }
         }
 
         focusKey.label = when {

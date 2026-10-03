@@ -1550,4 +1550,39 @@ class MechanismTest {
         assertTrue("never past the goal", path.all { it <= 1.0 + 1e-9 })
         assertTrue("there within two seconds", path.last() > 0.97)
     }
+
+    // --- the follower (v130) ----------------------------------------------------
+
+    /** A pretend camera: the picture shows the control four frames late, answering [r] per unit. */
+    private fun follow(r: (Double) -> Double, target: Double = 2.0): List<Double> {
+        val core = FollowerCore(doubleArrayOf(0.0), 2000L, 0.85, 0.05)
+        val path = ArrayList<Double>()
+        for (f in 0 until 300) {
+            val now = f * 33L
+            path += core.frame(now, 0.033)[0]
+            if (f % 3 == 2) {
+                val seen = path[maxOf(0, path.size - 5)]
+                if (core.reading(now, doubleArrayOf(r(seen) * (target - seen)))) break
+            }
+        }
+        return path
+    }
+
+    @Test fun theFollowerNeverGoesPastTheMark() {
+        for (r in doubleArrayOf(0.3, 0.8, 1.5)) {
+            val path = follow({ r })
+            assertTrue("r $r: never past", path.all { it <= 2.0 * 1.03 })
+            val at = path.indexOfFirst { kotlin.math.abs(it - 2.0) < 0.1 }
+            assertTrue("r $r: there within 4 s (frame $at)", at in 0..120)
+            assertTrue("r $r: eases in", path[1] - path[0] < (path[20] - path[19]))
+        }
+        // a picture whose answer changes on the way (weak in the shadows, strong in the highlights)
+        val path = follow({ seen -> if (seen < 1.0) 0.5 else 1.3 })
+        assertTrue(path.all { it <= 2.0 * 1.03 })
+    }
+
+    @Test fun theFollowerNeverGoesBack() {
+        val path = follow({ 0.8 })
+        for (i in 1 until path.size) assertTrue("frame $i", path[i] >= path[i - 1] - 1e-6)
+    }
 }

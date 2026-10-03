@@ -7,8 +7,8 @@ public final class BuildConfig {
   public static final boolean DEBUG = Boolean.parseBoolean("true");
   public static final String APPLICATION_ID = "com.mantraproductions.ndi.monitor";
   public static final String BUILD_TYPE = "debug";
-  public static final int VERSION_CODE = 122;
-  public static final String VERSION_NAME = "122";
+  public static final int VERSION_CODE = 129;
+  public static final String VERSION_NAME = "129";
   // Field from default config.
   public static final boolean NDI_SDK_PRESENT = true;
 }

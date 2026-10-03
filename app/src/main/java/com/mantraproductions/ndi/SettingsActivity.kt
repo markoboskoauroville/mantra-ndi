@@ -125,6 +125,7 @@ class SettingsActivity : AppCompatActivity() {
         slots = LutSlots(this)
 
         switchboard()
+        findViewById<View>(R.id.closeSettings).setOnClickListener { finish() }
 
         // Where takes go.
         showFolder()

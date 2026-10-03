@@ -58,6 +58,10 @@ class RailButton @JvmOverloads constructor(
     var sub: String? = null
         set(value) { field = value; describe(); invalidate() }
 
+    /** v130: how much larger than a rail key the words may be drawn (the lens drawer's keys have the room). */
+    var scale: Float = 1f
+        set(value) { field = value; invalidate() }
+
     var state: State = State.OFF
         set(value) { field = value; describe(); invalidate() }
 
@@ -142,15 +146,15 @@ class RailButton @JvmOverloads constructor(
         // "SHOOT", "FALSE" and "ZEBRA" clipped at both ends (v85 on the
         // emulator). A word is drawn at its full size when it fits, and
         // smaller, never clipped, when it does not.
-        fit(word, label, density(13f))
-        sub?.let { fit(whisper, it, density(9f)) }
+        fit(word, label, density(13f * scale))
+        sub?.let { fit(whisper, it, density(9f * scale)) }
 
         val hasSub = !sub.isNullOrBlank()
         val metrics = word.fontMetrics
         val centre = height / 2f
         if (hasSub) {
-            canvas.drawText(label, width / 2f, centre - density(1.5f), word)
-            canvas.drawText(sub!!, width / 2f, centre + density(10f), whisper)
+            canvas.drawText(label, width / 2f, centre - density(1.5f * scale), word)
+            canvas.drawText(sub!!, width / 2f, centre + density(10f * scale), whisper)
         } else {
             canvas.drawText(
                 label, width / 2f, centre - (metrics.ascent + metrics.descent) / 2f, word

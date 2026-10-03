@@ -103,6 +103,18 @@
             android:fontFamily="monospace"
             android:textSize="13sp"
             android:textColor="@color/amber" />
+        <!-- v130: the way out (Marko, 3.10.2026: "for the settings, i need close button to exit settings") -->
+        <TextView
+            android:id="@+id/closeSettings"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:gravity="center"
+            android:contentDescription="close"
+            android:fontFamily="monospace"
+            android:text="✕"
+            android:textSize="22sp"
+            android:textColor="@color/sand" />
     </LinearLayout>
 
     <LinearLayout
