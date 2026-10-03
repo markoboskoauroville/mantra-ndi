@@ -21,6 +21,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.mantraproductions.ndi.CameraCommand
 import com.mantraproductions.ndi.CameraState
+import com.mantraproductions.ndi.Link
+import com.mantraproductions.ndi.LinkClient
 import com.mantraproductions.ndi.MonitorEngine
 import com.mantraproductions.ndi.NdiFinder
 import com.mantraproductions.ndi.NdiReceiver
@@ -68,6 +70,15 @@ class MonitorActivity : Activity() {
     @Volatile private var finding = false
     private var current: String? = null
     private var cameraSeen = false
+    // v131, MANTRA LINK: the camera's own window over our socket (LinkClient); its cameras found by NSD
+    private var link: LinkClient? = null
+    private val linkHosts = mutableMapOf<String, String>()        // "LINK name" -> host
+    private lateinit var cleanRec: TextView
+    private lateinit var cleanTime: TextView
+    private lateinit var cleanBar: LinearLayout
+    private var linkClean = false
+    private var nsd: android.net.nsd.NsdManager? = null
+    private var nsdListener: android.net.nsd.NsdManager.DiscoveryListener? = null
 
     private val prefs by lazy { getSharedPreferences("monitor", MODE_PRIVATE) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -117,6 +128,14 @@ class MonitorActivity : Activity() {
             fit()
         }
         root.addView(turnKey, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(20), dp(28)) })
+        // v131: the CLEAN monitor: the picture, the record key and its counter, nothing else
+        cleanRec = word("●", Color.parseColor("#FF3B30"), 44f) { link?.key("REC") }.apply { setPadding(dp(18), 0, dp(18), 0) }
+        cleanTime = word("", Color.WHITE, 22f, null)
+        cleanBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE
+            addView(cleanRec); addView(cleanTime)
+        }
+        root.addView(cleanBar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(36) })
         root.addView(picker, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
 
@@ -139,11 +158,13 @@ class MonitorActivity : Activity() {
             }
             override fun onDown(e: MotionEvent) = true
         })
-        surface.setOnTouchListener { _, ev -> taps.onTouchEvent(ev) }
+        surface.setOnTouchListener { _, ev -> if (link != null) linkTouch(ev) else taps.onTouchEvent(ev) }
 
         surface.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) {
                 output = Surface(t)
+                // `adb shell am start … --es link 192.168.1.102` connects straight to a camera (tests, the emulator)
+                intent?.getStringExtra("link")?.let { h -> linkHosts["LINK $h"] = h; current = "LINK $h" }
                 val again = current ?: prefs.getString("source", null)
                 if (again != null) watch(again) else say("Double tap in the middle to choose a source")
             }
@@ -179,12 +200,38 @@ class MonitorActivity : Activity() {
         super.onPause()
         finding = false
         NdiFinder.stop()
+        nsdListener?.let { l -> runCatching { nsd?.stopServiceDiscovery(l) } }; nsdListener = null
         runCatching { wifiLock?.release() }
         wifiLock = null
     }
 
     /** The finder runs while the app is in front; the list on screen follows it. */
+    /** v131: Mantra cameras announce their link on the network (NSD); each becomes a source "LINK name". */
+    private fun findLinks() {
+        val m = getSystemService(NSD_SERVICE) as android.net.nsd.NsdManager
+        nsd = m
+        val l = object : android.net.nsd.NsdManager.DiscoveryListener {
+            override fun onDiscoveryStarted(t: String) {}
+            override fun onDiscoveryStopped(t: String) {}
+            override fun onStartDiscoveryFailed(t: String, e: Int) {}
+            override fun onStopDiscoveryFailed(t: String, e: Int) {}
+            override fun onServiceLost(i: android.net.nsd.NsdServiceInfo) {}
+            override fun onServiceFound(i: android.net.nsd.NsdServiceInfo) {
+                @Suppress("DEPRECATION")
+                runCatching { m.resolveService(i, object : android.net.nsd.NsdManager.ResolveListener {
+                    override fun onResolveFailed(x: android.net.nsd.NsdServiceInfo, e: Int) {}
+                    override fun onServiceResolved(x: android.net.nsd.NsdServiceInfo) {
+                        val h = x.host?.hostAddress ?: return
+                        ui.post { linkHosts["LINK ${x.serviceName}"] = h; if (picker.visibility == View.VISIBLE) fillPicker() }
+                    }
+                }) }
+            }
+        }
+        runCatching { m.discoverServices(Link.SERVICE, android.net.nsd.NsdManager.PROTOCOL_DNS_SD, l); nsdListener = l }
+    }
+
     private fun startFinding() {
+        if (nsdListener == null) findLinks()
         if (!NdiFinder.available) { say("The NDI runtime is not in this build"); return }
         if (!NdiFinder.start(this)) { say("NDI discovery would not start"); return }
         finding = true
@@ -200,9 +247,17 @@ class MonitorActivity : Activity() {
     private var lastTotals = 0L to 0L
     private var lastTotalsAt = 0L
     private var lastEngine: MonitorEngine? = null
+    private var linkLast = 0L to 0L
     private val statsTick = object : Runnable {
         override fun run() {
             ui.postDelayed(this, 1000)
+            link?.let { lk ->
+                val t = lk.frames.get() to lk.bytes.get()
+                android.util.Log.i("MonitorStats", String.format(java.util.Locale.ROOT, "link %d fps, %.1f Mbit/s",
+                    t.first - linkLast.first, (t.second - linkLast.second) * 8 / 1e6))
+                linkLast = t
+                return
+            }
             val e = engine ?: return
             val now = android.os.SystemClock.elapsedRealtime()
             val t = e.totals()
@@ -246,7 +301,13 @@ class MonitorActivity : Activity() {
         head.addView(word("SOURCES", Color.parseColor("#E8A33D"), 13f, null), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         head.addView(word("✕", Color.parseColor("#F2DDB4"), 20f) { showPicker(false) })
         list.addView(head)
-        if (sources.isEmpty()) {
+        for (name in linkHosts.keys.sorted()) {
+            val on = name == current
+            list.addView(word(name, if (on) Color.parseColor("#33D17A") else Color.parseColor("#F2DDB4"), 16f) {
+                showPicker(false); watch(name)
+            })
+        }
+        if (sources.isEmpty() && linkHosts.isEmpty()) {
             list.addView(word("looking for NDI on this network…", Color.parseColor("#7A8087"), 14f, null))
         }
         for (s in sources) {
@@ -266,11 +327,13 @@ class MonitorActivity : Activity() {
      * turns it about its centre, and scales it to fit.
      */
     private fun fit() {
-        val e = engine ?: return
-        val vw = e.lastWidth.toFloat(); val vh = e.lastHeight.toFloat()
+        val lk = link
+        val e = engine
+        if (lk == null && e == null) return
+        val vw = (lk?.width ?: e!!.lastWidth).toFloat(); val vh = (lk?.height ?: e!!.lastHeight).toFloat()
         val w = surface.width.toFloat(); val h = surface.height.toFloat()
         if (vw <= 0 || vh <= 0 || w <= 0 || h <= 0) return
-        fittedW = e.lastWidth; fittedH = e.lastHeight
+        fittedW = vw.toInt(); fittedH = vh.toInt()
         val sideways = turns % 2 == 1
         val cw = if (sideways) vh else vw
         val ch = if (sideways) vw else vh
@@ -288,7 +351,9 @@ class MonitorActivity : Activity() {
     }
 
     private fun watch(source: String) {
-        engine?.stop()
+        engine?.stop(); engine = null
+        link?.stop(); link = null; linkClean = false; cleanBar.visibility = View.GONE; status.visibility = View.VISIBLE
+        if (source.startsWith("LINK ")) { watchLink(source); return }
         current = source
         turns = prefs.getInt("turns:$source", 0)
         remote = false; keysShown = ""; railTop.visibility = View.GONE; railBottom.visibility = View.GONE
@@ -308,6 +373,79 @@ class MonitorActivity : Activity() {
         ui.postDelayed({
             if (current == source) runCatching { NdiReceiver.sendCommand(CameraCommand(requestState = true)) }
         }, 1500)
+    }
+
+    /**
+     * v131: the camera's own window, over Mantra Link. Every key and its settings are on the picture itself and
+     * every touch goes back to it; the monitor adds nothing of its own except, in CLEAN, the record key and counter.
+     */
+    private fun watchLink(source: String) {
+        val host = linkHosts[source] ?: source.removePrefix("LINK ").takeIf { it.contains('.') } ?: run { say("Not found: $source"); return }
+        current = source
+        prefs.edit().putString("source", source).apply()
+        turns = 0
+        remote = false; railTop.visibility = View.GONE; railBottom.visibility = View.GONE; info.visibility = View.GONE
+        overlay.marks = emptyList(); turnKey.visibility = View.GONE
+        status.visibility = View.GONE
+        fittedW = 0; fittedH = 0
+        val out = output ?: run { say("No picture surface yet"); return }
+        val c = LinkClient(host, Link.PORT, out,
+            onStatus = { msg -> ui.post { status.visibility = View.VISIBLE; say(msg); ui.removeCallbacks(hideStatus); ui.postDelayed(hideStatus, 2500) } },
+            onSize = { _, _ -> ui.post { fit() } },
+            onState = { st -> ui.post { linkState(st) } })
+        link = c
+        c.start()
+    }
+
+    private val hideStatus = Runnable { if (link != null) status.visibility = View.GONE }
+
+    private fun linkState(st: Map<String, String>) {
+        val clean = st["clean"] == "1"
+        if (clean != linkClean) { linkClean = clean; cleanBar.visibility = if (clean) View.VISIBLE else View.GONE }
+        val rec = st["rec"] == "1"
+        cleanRec.text = if (rec) "■" else "●"
+        val ms = st["since"]?.toLongOrNull() ?: 0
+        cleanTime.text = if (rec) String.format(java.util.Locale.ROOT, "%02d:%02d:%02d", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60) else ""
+    }
+
+    private var cleanTapAt = 0L
+
+    /** Every finger to the camera, as fractions of its picture; three fingers open the sources; CLEAN: a double tap returns. */
+    private fun linkTouch(ev: MotionEvent): Boolean {
+        val c = link ?: return false
+        if (linkClean) {
+            if (ev.actionMasked == MotionEvent.ACTION_UP) {
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - cleanTapAt < 350) c.mode(false)
+                cleanTapAt = now
+            }
+            return true
+        }
+        if (ev.pointerCount >= 3) {
+            if (ev.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+                c.touch(MotionEvent.ACTION_CANCEL, 0, intArrayOf(0), floatArrayOf(0f), floatArrayOf(0f))
+                showPicker(true)
+            }
+            return true
+        }
+        val inv = Matrix(); if (fitMatrix?.invert(inv) != true) return true
+        val n = ev.pointerCount
+        val ids = IntArray(n); val xs = FloatArray(n); val ys = FloatArray(n)
+        for (i in 0 until n) {
+            val p = floatArrayOf(ev.getX(i), ev.getY(i)); inv.mapPoints(p)
+            ids[i] = ev.getPointerId(i)
+            xs[i] = (p[0] / surface.width).coerceIn(0f, 1f); ys[i] = (p[1] / surface.height).coerceIn(0f, 1f)
+        }
+        c.touch(ev.actionMasked, ev.actionIndex, ids, xs, ys)
+        return true
+    }
+
+    @Deprecated("the back key goes to the camera in link mode")
+    override fun onBackPressed() {
+        val c = link
+        if (c != null && picker.visibility != View.VISIBLE) { c.key("BACK"); return }
+        if (picker.visibility == View.VISIBLE) { showPicker(false); return }
+        @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     /**

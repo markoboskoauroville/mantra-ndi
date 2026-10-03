@@ -260,6 +260,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         buildRails()
+        startLink()
         applyShootMode()
         layoutForOrientation(resources.configuration.orientation)
 
@@ -496,7 +497,12 @@ class MainActivity : AppCompatActivity() {
         manualKey = newKey("M") { nextCameraMode() }.also { railLeft.addView(it) }
         ctrlKey = newKey("CTRL") { toggleZones() }.also { railLeft.addView(it) }
         // The clean feed, for a phone that is being broadcast by its screen.
-        screenKey = newKey("FULL") { setFullScreen(!fullScreen) }
+        // v131: FULL pressed by the monitor's finger (Mantra Link) makes the MONITOR clean, not this screen
+        // (Marko, 3.10.2026: "full screen button to make it full screen on the phone, which I'm not there. Doesn't
+        // make any sense"): the monitor then shows the picture, the record key and its counter.
+        screenKey = newKey("FULL") {
+            if (LinkServer.fromMonitorJustNow()) LinkServer.setClean(!LinkServer.clean) else setFullScreen(!fullScreen)
+        }
             .also { railLeft.addView(it) }
 
         // THE RIGHT RAIL, v85: the take, the look, the measuring tools, and
@@ -541,6 +547,36 @@ class MainActivity : AppCompatActivity() {
         lensesOpen = open
         refreshKeys()
         layoutForOrientation(resources.configuration.orientation)
+    }
+
+    /** v131, MANTRA LINK (LinkServer, Link.kt): the monitor sees this window and plays its touches into it. */
+    private fun startLink() {
+        LinkServer.start(application)
+        LinkServer.onKey = { name -> pressKey(name) }
+        LinkServer.onModeChanged = { refreshKeys() }
+        LinkServer.stateProvider = {
+            mapOf(
+                "rec" to if (rolling) "1" else "0",
+                "since" to if (rolling) (android.os.SystemClock.elapsedRealtime() - recordingSince).toString() else "0",
+                "name" to settings.sourceName
+            )
+        }
+        // the clean picture: the preview as it is drawn (TextureView.getBitmap, on the UI thread)
+        LinkServer.cleanSource = { w, h ->
+            var b: android.graphics.Bitmap? = null
+            val done = java.util.concurrent.CountDownLatch(1)
+            ui.post {
+                b = runCatching {
+                    if (!preview.isAvailable || preview.width <= 0) null else {
+                        val k = minOf(w.toFloat() / preview.width, h.toFloat() / preview.height)
+                        preview.getBitmap((preview.width * k).toInt().coerceAtLeast(2), (preview.height * k).toInt().coerceAtLeast(2))
+                    }
+                }.getOrNull()
+                done.countDown()
+            }
+            done.await(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+            b
+        }
     }
 
     private fun openSettings() {
@@ -2918,7 +2954,7 @@ class MainActivity : AppCompatActivity() {
         manualKey.state = if (mode == "AUTO") RailButton.State.OFF else RailButton.State.ON
         manualKey.sub = mode
         ctrlKey.state = if (zonesOn) RailButton.State.ON else RailButton.State.OFF
-        screenKey.state = if (fullScreen) RailButton.State.ON else RailButton.State.OFF
+        screenKey.state = if (fullScreen || LinkServer.clean) RailButton.State.ON else RailButton.State.OFF
 
         // The LUT switcher says which LUT is on, or OFF.
         lutKey.sub = if (activeSlot > 0) slots.slot(activeSlot).label?.take(5) ?: "$activeSlot" else "OFF"

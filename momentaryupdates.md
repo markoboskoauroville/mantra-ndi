@@ -651,3 +651,15 @@ Needs the GPU stage (Settings → Picture path).
   pressed on the camera (a remote session of the camera app, no adb, no developer mode). When the monitor goes full
   screen, the camera sends the clean picture only and the monitor shows just the record key and its counter. NDI
   stays as an optional output for vMix / OBS. — **Status:** go-ahead, after items 46–48
+
+## 3.10.2026, 08:00 — alone with the Pixel (Marko away, no voice); Mantra Link built
+
+> exactly at 8 a.m. in one hour, I'm going to take out my phone not in front of a and I'm going to leave connected Pixel 7 through debugging. So please use this opportunity to test my camera, whatever needs to be done there. Unfortunately no remote, but if you can somehow simulate input and use one phone for both functions, or maybe use a virtual phone emulator and real phone in combination as two phones and make this remote control working through screen copy protocols
+> after 8 you are going to be left alone to do everything automatically. That means no audio subtitles output. No need. After 8 until 8 we can talk
+
+- **v131, MANTRA LINK** (items 42–45): Link.kt (the wire), LinkServer.kt (camera: its window by PixelCopy → H.264
+  1280 px 24 fps 8 Mbit/s over TCP 48100, announced by NSD; touches played into the window as MotionEvents; keys by
+  name; BACK), LinkClient.kt (monitor: decode to the screen; every touch back; ZERO FRAMES: 2.5 s of nothing →
+  reconnect). FULL pressed by the monitor's finger → the MONITOR goes clean (the preview only, with ● REC and the
+  counter; a double tap returns). Three fingers open the sources on the monitor; its back key goes to the camera.
+  Test: the Pixel as camera, the Pixel 7 emulator as monitor (`am start --es link 192.168.1.102`). — **Status:** built
