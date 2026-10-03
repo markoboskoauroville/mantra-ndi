@@ -643,3 +643,11 @@ Needs the GPU stage (Settings → Picture path).
 46. Settings: a close key to leave them. — **Status:** started
 47. The NDI stream starts as soon as NDI is enabled, no longer tied to the record key. — **Status:** started
 48. The lens key opens a DRAWER: it takes the whole area, every other key gone; millimetres next to the letter, and each lens's aperture and resolution. — **Status:** started
+
+> (05:58, answer to the voice proposal) Yes, build everything proposed. You have a good uh uh Reasoning
+
+- The proposal he said yes to (item 45): **our own link, the scrcpy way, no NDI fees.** The camera sends its own
+  window (picture, keys, settings) as H.265 straight to the monitor over Wi-Fi, and every touch on the monitor is
+  pressed on the camera (a remote session of the camera app, no adb, no developer mode). When the monitor goes full
+  screen, the camera sends the clean picture only and the monitor shows just the record key and its counter. NDI
+  stays as an optional output for vMix / OBS. — **Status:** go-ahead, after items 46–48
