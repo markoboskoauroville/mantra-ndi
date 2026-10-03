@@ -558,7 +558,9 @@ class MainActivity : AppCompatActivity() {
             mapOf(
                 "rec" to if (rolling) "1" else "0",
                 "since" to if (rolling) (android.os.SystemClock.elapsedRealtime() - recordingSince).toString() else "0",
-                "name" to settings.sourceName
+                "name" to settings.sourceName,
+                // v132: what the camera last said, so a clean monitor can show why a press did nothing
+                "msg" to lastSaid.replace("=", "-"), "msgAt" to lastSaidAt.toString()
             )
         }
         // the clean picture: the preview as it is drawn (TextureView.getBitmap, on the UI thread)
@@ -2976,9 +2978,11 @@ class MainActivity : AppCompatActivity() {
     // --- the status line ------------------------------------------------------
 
     private var lastSaid = ""
+    private var lastSaidAt = 0L
 
     private fun say(text: String) {
         lastSaid = text
+        lastSaidAt = android.os.SystemClock.elapsedRealtime()
         status.text = markStatus() + text
         Trace.state(text)
     }

@@ -662,4 +662,13 @@ Needs the GPU stage (Settings → Picture path).
   name; BACK), LinkClient.kt (monitor: decode to the screen; every touch back; ZERO FRAMES: 2.5 s of nothing →
   reconnect). FULL pressed by the monitor's finger → the MONITOR goes clean (the preview only, with ● REC and the
   counter; a double tap returns). Three fingers open the sources on the monitor; its back key goes to the camera.
-  Test: the Pixel as camera, the Pixel 7 emulator as monitor (`am start --es link 192.168.1.102`). — **Status:** built
+  Test: the Pixel as camera, the Pixel 7 emulator as monitor (`am start --es link 192.168.1.102`). — **Status:** PROVEN
+  08:23–08:40 (Pixel camera, emulator monitor upright): 24–25 fps at ~8.5 Mbit/s, the camera's window 576x1280;
+  a tap on the monitor's L opened the lens drawer on the Pixel, a lens key changed the lens; FULL from the monitor
+  made the MONITOR clean (the picture, ● REC) while the Pixel kept its keys with FULL green; REC from the clean
+  monitor reached the camera (it answered "FILE is not armed"); the gear opened the camera's settings ON THE
+  MONITOR, FILE was armed there and ✕ closed them (the encoder followed: 1280x576 for the landscape settings, back
+  to 576x1280); a 4.9 s take recorded from the monitor's window (117 frames, 0 refused) with the counter running on
+  the monitor; the camera app killed: monitor 0 fps, then back at 24 fps 1 s after the camera returned, untouched.
+- **v132:** the camera's last words in its state; a clean monitor shows them 3 s above REC (a press that does
+  nothing says why). — **Status:** built

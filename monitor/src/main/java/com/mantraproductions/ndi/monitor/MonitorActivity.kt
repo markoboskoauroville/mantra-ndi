@@ -76,6 +76,8 @@ class MonitorActivity : Activity() {
     private lateinit var cleanRec: TextView
     private lateinit var cleanTime: TextView
     private lateinit var cleanBar: LinearLayout
+    private lateinit var cleanSaid: TextView
+    private var saidAt = ""
     private var linkClean = false
     private var nsd: android.net.nsd.NsdManager? = null
     private var nsdListener: android.net.nsd.NsdManager.DiscoveryListener? = null
@@ -136,6 +138,11 @@ class MonitorActivity : Activity() {
             addView(cleanRec); addView(cleanTime)
         }
         root.addView(cleanBar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(36) })
+        // v132: in CLEAN, what the camera just said (a refusal, a mode) for three seconds above the record key
+        cleanSaid = word("", Color.parseColor("#E6E8EA"), 13f, null).apply {
+            gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#88000000")); setPadding(dp(12), dp(6), dp(12), dp(6)); visibility = View.GONE
+        }
+        root.addView(cleanSaid, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(110) })
         root.addView(picker, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
 
@@ -398,10 +405,22 @@ class MonitorActivity : Activity() {
     }
 
     private val hideStatus = Runnable { if (link != null) status.visibility = View.GONE }
+    private val hideSaid = Runnable { cleanSaid.visibility = View.GONE }
 
     private fun linkState(st: Map<String, String>) {
         val clean = st["clean"] == "1"
         if (clean != linkClean) { linkClean = clean; cleanBar.visibility = if (clean) View.VISIBLE else View.GONE }
+        val at = st["msgAt"] ?: ""
+        if (at != saidAt) {
+            val first = saidAt.isEmpty()
+            saidAt = at
+            val msg = st["msg"].orEmpty()
+            if (!first && clean && msg.isNotBlank()) {
+                cleanSaid.text = msg; cleanSaid.visibility = View.VISIBLE
+                ui.removeCallbacks(hideSaid); ui.postDelayed(hideSaid, 3000)
+            }
+        }
+        if (!clean) cleanSaid.visibility = View.GONE
         val rec = st["rec"] == "1"
         cleanRec.text = if (rec) "■" else "●"
         val ms = st["since"]?.toLongOrNull() ?: 0

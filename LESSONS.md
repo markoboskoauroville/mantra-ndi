@@ -148,3 +148,14 @@ At 2800K the phone's screen showed the paper cyan (screen red near zero) while t
 had it plainly blue (r/g 0.41, b/g 1.75, as the physics predicts). The HDR preview and screencap exaggerate strong
 shifts. **Rule:** for colour, record a few seconds and decode the file (`ffmpeg ... format=rgb48le`, inverse HLG OETF)
 before calling the picture right or wrong. Ramps (time, smoothness) can be judged from `adb screenrecord`.
+
+## Mantra Link (v131, 3.10.2026)
+
+19. **A remote that mirrors the camera's own window needs no second interface.** PixelCopy of the window in front
+    (it includes the TextureView's picture) into a Surface encoder, touches played back with
+    `Activity.dispatchTouchEvent` (an app may inject into itself without any permission): the settings, the drawer,
+    every key work on the monitor because they are the camera's own. Proven with the emulator as the monitor.
+20. **A key the monitor presses must ask whose finger it was**: FULL from the link toggles the MONITOR's clean view
+    (`LinkServer.fromMonitorJustNow()`), not the camera's screen.
+21. **Zero frames = a read timeout** (soTimeout 2.5 s) that drops and reopens the socket; the camera answers a new
+    monitor with a fresh encoder (a keyframe first).
