@@ -676,3 +676,8 @@ Needs the GPU stage (Settings → Picture path).
   the key turned ■, the counter ran. FOUND: the bar grew when the counter appeared and pushed the key to the left;
   the press to stop hit the counter (the take ran 3:45, 5601 frames, 0 refused; my two test takes were deleted).
   **v133:** the key never moves (an empty slot on its left balances the counter's on its right). — **Status:** built
+- **09:00–09:15 (alone):** PINCH over the link PROVEN (a two-finger pinch sent over the wire: "mark size 1 pinched";
+  reversed after, marks restored). Mac-side lesson: macOS keeps the terminal's Python off the LAN (0 bytes, keys
+  ignored); `adb forward tcp:48101 tcp:48100` works. **LEFT CHANGED ON THE PIXEL:** my LOG key tests moved the curve
+  off HLG (now S-Log3, the cycle did not land on HLG before the usage limit): set it back to HLG with the LOG key.
+  v133 (record key fixed in place) is built by CI, not yet installed or tested.
