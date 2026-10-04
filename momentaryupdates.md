@@ -690,3 +690,10 @@ Needs the GPU stage (Settings → Picture path).
     new feature since v124: the ramps (marks, shutter keys, eased), overlapping marks, the WB fader, settings ✕, NDI on
     enable, the lens drawer, Mantra Link (window, touches, pinch, clean monitor, REC and counter, zero-frame reconnect),
     v132's words, v133's fixed record key. — **Status:** started
+
+> Just the UI: fix when the lens choice is open between lenses, please add a vertical line so there is division so it doesn't look like one stream of text.
+> Make sure the noting phone is always following the orientation of the pixel phone in this app. Now a phone is vertical and view is horizontal, and we never want that because we have just tiny tiny view. Please fix that.
+
+50. The lens drawer: a vertical line between lenses, so the row is not one stream of text. — **Status:** started
+51. The monitor (Nothing) always follows the camera's (Pixel's) orientation in the link: a portrait camera means a
+    portrait monitor, never a tiny portrait window inside a landscape screen. — **Status:** started
