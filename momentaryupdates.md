@@ -681,3 +681,12 @@ Needs the GPU stage (Settings → Picture path).
   ignored); `adb forward tcp:48101 tcp:48100` works. **LEFT CHANGED ON THE PIXEL:** my LOG key tests moved the curve
   off HLG (now S-Log3, the cycle did not land on HLG before the usage limit): set it back to HLG with the LOG key.
   v133 (record key fixed in place) is built by CI, not yet installed or tested.
+
+## 4.10.2026 — stress test with both phones on scrcpy
+
+> two phones are connected over screen copy. Please stress test the camera and test all its new features
+
+49. Stress test the camera with both phones (Pixel 7 camera, Nothing Phone 2a monitor) on adb and scrcpy, and test every
+    new feature since v124: the ramps (marks, shutter keys, eased), overlapping marks, the WB fader, settings ✕, NDI on
+    enable, the lens drawer, Mantra Link (window, touches, pinch, clean monitor, REC and counter, zero-frame reconnect),
+    v132's words, v133's fixed record key. — **Status:** started
