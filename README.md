@@ -163,7 +163,9 @@ Right rail (the bottom bar when upright):
 The geometry is written to the trace every time the preview is laid out (it was on screen until
 v88):
 
-    sensor 90 · disp 270 · rot 180 · buf 1920x1080 · view 1676x943
+```
+sensor 90 · disp 270 · rot 180 · buf 1920x1080 · view 1676x943
+```
 
 Those five numbers decide whether the preview is upright and whether it is
 stretched, and this app has shipped one or the other wrong six times. Each of
