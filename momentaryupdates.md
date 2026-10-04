@@ -689,11 +689,15 @@ Needs the GPU stage (Settings → Picture path).
 49. Stress test the camera with both phones (Pixel 7 camera, Nothing Phone 2a monitor) on adb and scrcpy, and test every
     new feature since v124: the ramps (marks, shutter keys, eased), overlapping marks, the WB fader, settings ✕, NDI on
     enable, the lens drawer, Mantra Link (window, touches, pinch, clean monitor, REC and counter, zero-frame reconnect),
-    v132's words, v133's fixed record key. — **Status:** started
+    v132's words, v133's fixed record key. — **Status:** v133 installed on both (camera on the Pixel, monitor on the
+    Nothing), link up; paused at 06:00 for items 50–51 ("just the UI")
 
 > Just the UI: fix when the lens choice is open between lenses, please add a vertical line so there is division so it doesn't look like one stream of text.
 > Make sure the noting phone is always following the orientation of the pixel phone in this app. Now a phone is vertical and view is horizontal, and we never want that because we have just tiny tiny view. Please fix that.
 
-50. The lens drawer: a vertical line between lenses, so the row is not one stream of text. — **Status:** started
+50. The lens drawer: a vertical line between lenses, so the row is not one stream of text. — **Status:** v134, PROVEN 06:05 on both screens (Pixel and its window on the Nothing)
 51. The monitor (Nothing) always follows the camera's (Pixel's) orientation in the link: a portrait camera means a
-    portrait monitor, never a tiny portrait window inside a landscape screen. — **Status:** started
+    portrait monitor, never a tiny portrait window inside a landscape screen. — **Status:** v134: the monitor takes the
+    orientation of the window it receives (taller → portrait, wider → landscape), its own sensor no longer decides. PROVEN
+    06:05 upright: the Nothing stands and the Pixel's window fills it (24–25 fps, ~8 Mbit/s; L and L1 pressed through the
+    link). The Pixel turned sideways is for his hand (the camera holds its own orientation, so adb cannot fake it).
