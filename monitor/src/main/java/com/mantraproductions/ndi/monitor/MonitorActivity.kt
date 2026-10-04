@@ -9,6 +9,7 @@ import android.os.Looper
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
+import android.content.pm.ActivityInfo
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.view.Surface
@@ -366,6 +367,7 @@ class MonitorActivity : Activity() {
         engine?.stop(); engine = null
         link?.stop(); link = null; linkClean = false; cleanBar.visibility = View.GONE; status.visibility = View.VISIBLE
         if (source.startsWith("LINK ")) { watchLink(source); return }
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         current = source
         turns = prefs.getInt("turns:$source", 0)
         remote = false; keysShown = ""; railTop.visibility = View.GONE; railBottom.visibility = View.GONE
@@ -403,10 +405,22 @@ class MonitorActivity : Activity() {
         val out = output ?: run { say("No picture surface yet"); return }
         val c = LinkClient(host, Link.PORT, out,
             onStatus = { msg -> ui.post { status.visibility = View.VISIBLE; say(msg); ui.removeCallbacks(hideStatus); ui.postDelayed(hideStatus, 2500) } },
-            onSize = { _, _ -> ui.post { fit() } },
+            onSize = { w, h -> ui.post { followCamera(w, h); fit() } },
             onState = { st -> ui.post { linkState(st) } })
         link = c
         c.start()
+    }
+
+    /**
+     * v134: over the link the monitor holds the camera's orientation (Marko, 4.10.2026: "the noting phone is always
+     * following the orientation of the pixel phone ... Now a phone is vertical and view is horizontal ... we have just
+     * tiny tiny view"). The camera's window upright → this screen upright; the window across → this screen across.
+     * Its own sensor no longer decides, so a monitor lying on a table never shows a portrait camera as a sliver.
+     */
+    private fun followCamera(w: Int, h: Int) {
+        if (w <= 0 || h <= 0) return
+        val want = if (h > w) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        if (requestedOrientation != want) requestedOrientation = want
     }
 
     private val hideStatus = Runnable { if (link != null) status.visibility = View.GONE }

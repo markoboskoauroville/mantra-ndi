@@ -65,6 +65,11 @@ class RailButton @JvmOverloads constructor(
     var state: State = State.OFF
         set(value) { field = value; describe(); invalidate() }
 
+    /** v134: a thin line on the key's leading edge, so the lens drawer's keys do not read as one stream of text
+     *  (Marko, 4.10.2026). Upright the rail runs across and the line stands; in landscape it lies. */
+    var divider = false
+        set(value) { if (field != value) { field = value; invalidate() } }
+
     /**
      * What this key is, in the view tree.
      *
@@ -134,6 +139,13 @@ class RailButton @JvmOverloads constructor(
             mark.strokeWidth = density(1.4f)
         }
 
+        if (divider) {
+            val across = (parent as? android.widget.LinearLayout)?.orientation != android.widget.LinearLayout.VERTICAL
+            rule.strokeWidth = density(1f)
+            if (across) canvas.drawLine(0.5f, height * 0.18f, 0.5f, height * 0.82f, rule)
+            else canvas.drawLine(width * 0.18f, 0.5f, width * 0.82f, 0.5f, rule)
+        }
+
         word.color = tint
         whisper.color = Color.argb(150, Color.red(tint), Color.green(tint), Color.blue(tint))
 
@@ -176,6 +188,7 @@ class RailButton @JvmOverloads constructor(
         strokeJoin = Paint.Join.ROUND
     }
     private val markPath = Path()
+    private val rule = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#4A5058") }
 
     private fun drawGlyph(canvas: Canvas, tint: Int) {
         val cx = width / 2f

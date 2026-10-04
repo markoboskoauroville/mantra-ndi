@@ -484,6 +484,7 @@ class MainActivity : AppCompatActivity() {
             val key = newKey("L$i$mm") { openDrawer(false); chooseLens(i - 1) }
             key.sub = sub.ifEmpty { null }
             key.scale = 1.35f
+            key.divider = true
             lensKeys.add(key)
             railLeft.addView(key)
         }
