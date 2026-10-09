@@ -1,0 +1,28 @@
+name: Mac remote
+
+on:
+  push:
+    paths:
+      - 'mac/**'
+      - 'shared/kotlin/com/mantraproductions/ndi/Link.kt'
+      - '.github/workflows/mac.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test the wire
+        working-directory: mac/MantraRemote
+        run: swift test
+      - name: Build the app
+        working-directory: mac/MantraRemote
+        run: |
+          ./build-app.sh
+          ditto -c -k --keepParent "Mantra Remote.app" MantraRemote.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mantra-remote-mac
+          path: mac/MantraRemote/MantraRemote.zip
+          if-no-files-found: error
