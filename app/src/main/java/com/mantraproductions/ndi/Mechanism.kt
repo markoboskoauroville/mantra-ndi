@@ -1582,6 +1582,27 @@ object Mechanism {
      * left. Upright, a tap at the top of the screen is the sensor's left edge;
      * upside down it is the opposite corner; a front camera is also a mirror.
      */
+    /** v136: the stream's quarter turns clockwise for a view angle (0, 90, 180, 270). */
+    fun streamTurns(degrees: Int): Int = (((degrees + 45) / 90) % 4 + 4) % 4
+
+    /**
+     * v136: the GPU stage's quad (x, y, u, v for the strip's BL, BR, TL, TR), its picture turned [turns] quarter
+     * turns clockwise. u, v are in image space (0,0 the top left; the texture's own flip is in them). Output corner k,
+     * clockwise from the top left, shows image corner k - turns.
+     */
+    fun turnedQuad(turns: Int): FloatArray {
+        val corners = arrayOf(floatArrayOf(0f, 0f), floatArrayOf(1f, 0f), floatArrayOf(1f, 1f), floatArrayOf(0f, 1f))
+        val positions = arrayOf(floatArrayOf(-1f, -1f), floatArrayOf(1f, -1f), floatArrayOf(-1f, 1f), floatArrayOf(1f, 1f))
+        val clockwise = intArrayOf(3, 2, 0, 1)
+        val out = FloatArray(16)
+        for (v in 0 until 4) {
+            val uv = corners[((clockwise[v] - turns) % 4 + 4) % 4]
+            out[v * 4] = positions[v][0]; out[v * 4 + 1] = positions[v][1]
+            out[v * 4 + 2] = uv[0]; out[v * 4 + 3] = uv[1]
+        }
+        return out
+    }
+
     fun sensorToViewDegrees(sensor: Int, display: Int, front: Boolean, extraTurns: Int = 0): Int {
         val base = if (front) (sensor + display) % 360 else (sensor - display + 360) % 360
         return ((base + extraTurns * 90) % 360 + 360) % 360
@@ -2059,11 +2080,15 @@ object Mechanism {
         samplesToUs(bytes / (2L * channels.coerceAtLeast(1)), sampleRate)
 
     /** RMS of 16 bit little endian PCM, sampling every [stride] bytes. */
-    fun rmsOfPcm16(pcm: ByteArray, stride: Int = 4): Float {
+    fun rmsOfPcm16(pcm: ByteArray, stride: Int = 4): Float = rmsOfPcm16Range(pcm, pcm.size, stride)
+
+    /** v136: over the first [length] bytes, so the reader thread does not copy every buffer to meter it. */
+    fun rmsOfPcm16Range(pcm: ByteArray, length: Int, stride: Int = 4): Float {
         var sumSquares = 0.0
         var counted = 0
         var i = 0
-        while (i + 1 < pcm.size) {
+        val end = minOf(length, pcm.size)
+        while (i + 1 < end) {
             val value = ((pcm[i + 1].toInt() shl 8) or (pcm[i].toInt() and 0xFF)).toShort()
             val normalised = value / 32768.0
             sumSquares += normalised * normalised

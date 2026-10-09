@@ -70,12 +70,28 @@ class GpuStage private constructor(
     lateinit var inputSurface: Surface
         private set
 
-    private class Target(val surface: Surface, var egl: EGLSurface, var enabled: Boolean)
+    private class Target(val surface: Surface, var egl: EGLSurface, var enabled: Boolean, var turns: Int = 0)
     private val targets = HashMap<Output, Target>()
 
     /** Frames drawn, for the trace and the rate readout. */
     @Volatile var framesDrawn = 0L
         private set
+
+    /** v136: when the camera last gave a frame (elapsedRealtime ms), for the stream watchdog. */
+    @Volatile var lastFrameAt = android.os.SystemClock.elapsedRealtime()
+        private set
+
+    /**
+     * v136: the quad with its texture corners turned 0..3 quarter turns CLOCKWISE, so one output (the stream) can
+     * carry the picture upright while the others keep the sensor's raw orientation. Corners clockwise from the top
+     * left are TL(0,0) TR(1,0) BR(1,1) BL(0,1) in image space; the strip's vertices are BL, BR, TL, TR (clockwise
+     * indices 3, 2, 0, 1), and output corner k shows image corner k - turns.
+     */
+    private val turnedQuads: Array<FloatBuffer> = Array(4) { turns ->
+        ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+            put(Mechanism.turnedQuad(turns)); position(0)
+        }
+    }
 
     private val quad: FloatBuffer = ByteBuffer.allocateDirect(4 * 4 * 4)
         .order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
@@ -206,6 +222,17 @@ class GpuStage private constructor(
         Trace.control("gpu output", output.name, if (enabled) "attached, on" else "attached, off")
     }
 
+    /** v136: quarter turns clockwise for one output (the stream follows the phone; see [turnedQuads]). */
+    fun setTurns(output: Output, turns: Int) = onGpu {
+        targets[output]?.let {
+            val t = ((turns % 4) + 4) % 4
+            if (it.turns != t) {
+                it.turns = t
+                Trace.control("gpu output", output.name, "turned ${t * 90}°")
+            }
+        }
+    }
+
     fun setEnabled(output: Output, enabled: Boolean) = onGpu {
         targets[output]?.let {
             if (it.enabled != enabled) {
@@ -222,6 +249,7 @@ class GpuStage private constructor(
         runCatching { EGL14.eglMakeCurrent(display, pbuffer, pbuffer, context); st.updateTexImage() }
             .onFailure { return }
         val timestamp = st.timestamp
+        lastFrameAt = android.os.SystemClock.elapsedRealtime()
         for ((output, target) in targets) {
             if (!target.enabled) continue
             if (!EGL14.eglMakeCurrent(display, target.egl, target.egl, context)) {
@@ -233,9 +261,14 @@ class GpuStage private constructor(
             EGL14.eglQuerySurface(display, target.egl, EGL14.EGL_WIDTH, size, 0)
             EGL14.eglQuerySurface(display, target.egl, EGL14.EGL_HEIGHT, size, 1)
             GLES20.glViewport(0, 0, size[0], size[1])
-            drawQuad()
+            drawQuad(target.turns)
             EGLExt.eglPresentationTimeANDROID(display, target.egl, timestamp)
-            EGL14.eglSwapBuffers(display, target.egl)
+            if (!EGL14.eglSwapBuffers(display, target.egl)) {
+                // v136: a window that went away (the preview, with the app in the background) answers with an error
+                // here; it is switched off so it can never hold the stream and the take behind it.
+                Trace.refused("gpu stage", "$output swap failed (EGL 0x" + Integer.toHexString(EGL14.eglGetError()) + "), switched off")
+                target.enabled = false
+            }
         }
         framesDrawn++
         if (trackActive && framesDrawn % trackEvery == 0L) {
@@ -444,15 +477,16 @@ class GpuStage private constructor(
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 
-    private fun drawQuad() {
+    private fun drawQuad(turns: Int = 0) {
+        val q = turnedQuads[turns and 3]
         GLES20.glUseProgram(program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture)
-        quad.position(0)
-        GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_FLOAT, false, 16, quad)
+        q.position(0)
+        GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_FLOAT, false, 16, q)
         GLES20.glEnableVertexAttribArray(aPosition)
-        quad.position(2)
-        GLES20.glVertexAttribPointer(aTexCoord, 2, GLES20.GL_FLOAT, false, 16, quad)
+        q.position(2)
+        GLES20.glVertexAttribPointer(aTexCoord, 2, GLES20.GL_FLOAT, false, 16, q)
         GLES20.glEnableVertexAttribArray(aTexCoord)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }

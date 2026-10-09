@@ -53,6 +53,7 @@ object NdiAudio {
     private fun ensureWorker() {
         if (worker?.isAlive == true) return
         worker = thread(name = "ndi-audio", isDaemon = true) {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO)
             while (true) {
                 val c = try {
                     queue.poll(500, TimeUnit.MILLISECONDS)

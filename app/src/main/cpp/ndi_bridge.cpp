@@ -66,6 +66,22 @@ int g_height = 1080;
 int g_fps_n = 30;
 int g_fps_d = 1;
 
+// v136: one tightly packed 8-bit plane (w x h) turned t quarter turns clockwise into dst (h x w when t is odd).
+void rotatePlane(const uint8_t* src, int w, int h, uint8_t* dst, int t) {
+    for (int y = 0; y < h; ++y) {
+        const uint8_t* row = src + (size_t) y * w;
+        for (int x = 0; x < w; ++x) {
+            size_t i;
+            switch (t) {
+                case 1: i = (size_t) x * h + (h - 1 - y); break;            // dst w' = h
+                case 2: i = (size_t) (h - 1 - y) * w + (w - 1 - x); break;
+                default: i = (size_t) (w - 1 - x) * h + y; break;          // t == 3
+            }
+            dst[i] = row[x];
+        }
+    }
+}
+
 std::vector<uint8_t> toVector(JNIEnv* env, jbyteArray array) {
     if (array == nullptr) return {};
     jsize len = env->GetArrayLength(array);
@@ -295,7 +311,7 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendYuv420(
         jobject uBuf, jint uStride,
         jobject vBuf, jint vStride,
         jint uvPixelStride,
-        jint width, jint height, jlong ptsUs) {
+        jint width, jint height, jlong ptsUs, jint turns) {
 
     auto* y = static_cast<const uint8_t*>(env->GetDirectBufferAddress(yBuf));
     auto* u = static_cast<const uint8_t*>(env->GetDirectBufferAddress(uBuf));
@@ -342,16 +358,31 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendYuv420(
         }
     }
 
+    // v136: the frame turned to how the phone is held, plane by plane (the chroma planes at half size).
+    const int t = ((turns % 4) + 4) % 4;
+    uint8_t* out = packed.data();
+    int outW = width, outH = height;
+    if (t != 0) {
+        static std::vector<uint8_t> turned;
+        if (turned.size() < needed) turned.resize(needed);
+        if (t % 2 == 1) { outW = height; outH = width; }
+        rotatePlane(dstY, width, height, turned.data(), t);
+        uint8_t* tu = turned.data() + (size_t) width * height;
+        rotatePlane(dstU, cw, ch, tu, t);
+        rotatePlane(dstV, cw, ch, tu + (size_t) cw * ch, t);
+        out = turned.data();
+    }
+
     NDIlib_video_frame_v2_t frame = {};
     frame.FourCC = NDIlib_FourCC_video_type_I420;
-    frame.xres = width;
-    frame.yres = height;
-    frame.line_stride_in_bytes = width;
-    frame.p_data = packed.data();
+    frame.xres = outW;
+    frame.yres = outH;
+    frame.line_stride_in_bytes = outW;
+    frame.p_data = out;
     frame.frame_rate_N = g_fps_n;
     frame.frame_rate_D = g_fps_d;
     frame.frame_format_type = NDIlib_frame_format_type_progressive;
-    frame.picture_aspect_ratio = height > 0 ? (float) width / (float) height : 0.0f;
+    frame.picture_aspect_ratio = outH > 0 ? (float) outW / (float) outH : 0.0f;
     frame.timecode = static_cast<int64_t>(ptsUs) * 10;
 
     std::lock_guard<std::mutex> lock(g_send_mutex);

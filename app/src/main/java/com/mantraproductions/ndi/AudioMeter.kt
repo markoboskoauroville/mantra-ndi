@@ -57,6 +57,10 @@ class AudioMeter(
 
     val isRunning: Boolean get() = running.get()
 
+    /** v136: reads that failed, for the trace (the stress test watches it). */
+    @Volatile var overruns = 0L
+        private set
+
     /** 1 or 2, fixed for the life of this reader (a take's AAC track is made for it). */
     var channels: Int = 1
         private set
@@ -133,6 +137,8 @@ class AudioMeter(
 
         val ch = channels
         worker = thread(name = "audio-meter") {
+            // v136: the reader is the one thread that must never wait behind the picture.
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             val buffer = ByteArray(bufferBytes)
             while (running.get()) {
                 val read = try {
@@ -140,8 +146,11 @@ class AudioMeter(
                 } catch (t: Throwable) {
                     break
                 }
-                if (read > 0) {
-                    onLevel(Mechanism.rmsOfPcm16(buffer.copyOf(read)))
+                if (read < 0) {
+                    overruns++
+                    if (overruns % 50 == 1L) Trace.refused("audio meter", "read error $read ($overruns)")
+                } else if (read > 0) {
+                    onLevel(Mechanism.rmsOfPcm16Range(buffer, read))
                     sink?.invoke(buffer, read)
                     NdiAudio.feed(buffer, read, ch, SAMPLE_RATE)
                 }
@@ -161,7 +170,10 @@ class AudioMeter(
             return null
         }
         val r = try {
-            AudioRecord(source, SAMPLE_RATE, mask, AudioFormat.ENCODING_PCM_16BIT, minBuffer * 2)
+            // v136: eight times the minimum (about 160-320 ms) inside AudioRecord. With two, any pause of the
+            // reader thread longer than one buffer (a GC, the take's AAC encoder waiting for a slot) overran it,
+            // and the lost samples were the drops heard in the stream and the take alike.
+            AudioRecord(source, SAMPLE_RATE, mask, AudioFormat.ENCODING_PCM_16BIT, minBuffer * 8)
         } catch (t: Throwable) {
             Trace.fault("audio meter", t)
             return null

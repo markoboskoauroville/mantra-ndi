@@ -18,6 +18,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
+    <!-- v136: NDI goes on with the app in the background: a camera | microphone foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Only needed below Android 10. From Q a DNG and a trace reach Downloads
          through MediaStore instead, which is the route that actually works and
          the reason the old reporter never wrote a file. -->
@@ -58,5 +64,10 @@
             android:exported="false"
             android:label="@string/settings"
             android:screenOrientation="fullUser" />
+
+        <service
+            android:name=".StreamService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone" />
     </application>
 </manifest>

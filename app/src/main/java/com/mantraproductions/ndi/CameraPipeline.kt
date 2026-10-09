@@ -362,22 +362,8 @@ class CameraPipeline(private val context: Context) {
             fps = fps,
             bitRate = bitRate,
             tenBit = tenBit,
-            onFormat = { sps, pps, vps ->
-                // Kept, because the encoder announces these exactly once and
-                // going to full NDI and back clears them. Without this, the
-                // second spell of HX sends frames no receiver can decode, and
-                // a black picture from a source that is plainly sending is as
-                // hard to read as a fault gets.
-                parameterSets = Triple(sps, pps, vps)
-                NdiSender.setVideoInfo(sps, pps, vps)
-            },
-            onFrame = { data, keyframe, ptsUs, hevc ->
-                if (mode == Mode.HX) {
-                    NdiSender.sendCompressed(data, keyframe, ptsUs, hevc)
-                    frames++
-                    bits += data.size.toLong() * 8
-                }
-            }
+            onFormat = ::onStreamFormat,
+            onFrame = ::onStreamFrame
         )
         // The muxer needs the encoder's own format, and the encoder announces
         // it exactly once, long before anybody presses record. So it is kept.
@@ -408,6 +394,9 @@ class CameraPipeline(private val context: Context) {
         }
         encoder = codec
         encoderSurface = surface
+        encoderSize = size
+        lastEncodedAt = SystemClock.elapsedRealtime()
+        NdiVideo.requestKeyframe = { encoder?.requestKeyframe() }
 
         if (stage != null) {
             // The take's own encoder, at the recording bit rate; the stream's
@@ -439,6 +428,8 @@ class CameraPipeline(private val context: Context) {
                 stage.setOutput(GpuStage.Output.PREVIEW, previewSurface, enabled = true)
                 stage.setOutput(GpuStage.Output.RECORD, takeSurface, enabled = false)
                 stage.setOutput(GpuStage.Output.STREAM, surface, enabled = false)
+                // v136: the orientation asked for before the camera opened (the activity sets it on every start)
+                if (streamTurns != 0) { val t = streamTurns; streamTurns = 0; applyStreamTurns(t) }
                 Trace.state(
                     "picture path: GPU stage — take ${bitRate / 1_000_000} Mbit/s, stream ${streamBitRate / 1_000_000} Mbit/s"
                 )
@@ -495,6 +486,140 @@ class CameraPipeline(private val context: Context) {
                 (physicalId?.let { ", physical lens $it" } ?: "")
         )
         return true
+    }
+
+    /**
+     * The stream encoder's parameter sets. Kept, because the encoder announces these exactly once and going to full
+     * NDI and back clears them. Without this, the second spell of HX sends frames no receiver can decode.
+     */
+    private fun onStreamFormat(sps: ByteArray, pps: ByteArray?, vps: ByteArray?) {
+        parameterSets = Triple(sps, pps, vps)
+        NdiSender.setVideoInfo(sps, pps, vps)
+    }
+
+    /**
+     * v136: the preview window went away (the app in the background) or came back. Only the GPU path can do this
+     * without touching the camera session: the camera writes the stage's texture, never the window itself.
+     */
+    fun detachPreview() { gpu?.setOutput(GpuStage.Output.PREVIEW, null) }
+
+    fun attachPreview(surface: Surface) { gpu?.setOutput(GpuStage.Output.PREVIEW, surface, enabled = true) }
+
+    /** v136: queued, never sent from here (see [NdiVideo]): a slow wire must never hold the encoder. */
+    private fun onStreamFrame(data: ByteArray, keyframe: Boolean, ptsUs: Long, hevc: Boolean) {
+        lastEncodedAt = SystemClock.elapsedRealtime()
+        if (mode == Mode.HX) {
+            NdiVideo.offer(data, keyframe, ptsUs, hevc)
+            frames++
+            bits += data.size.toLong() * 8
+        }
+    }
+
+    @Volatile private var lastEncodedAt = 0L
+
+    /**
+     * v136: THE STREAM FOLLOWS THE PHONE. Marko: *"When phone is oriented vertically, it should send vertical video.
+     * When it's oriented horizontally, it should send horizontal video."* The GPU stage turns the stream's output by
+     * [turns] quarter turns clockwise (the same angle that stands the preview upright, MainActivity.streamDegrees),
+     * and the stream encoder is made again at the turned size when portrait and landscape swap. The take keeps the
+     * sensor's raw orientation and its rotation flag, as proven. Full NDI turns its I420 frame in the bridge.
+     * The direct path has no GPU to turn with, and says so.
+     */
+    @Volatile var streamTurns = 0
+        private set
+
+    fun setStreamTurns(turns: Int) {
+        val t = ((turns % 4) + 4) % 4
+        if (!isRunning) { streamTurns = t; return }
+        applyStreamTurns(t)
+    }
+
+    private fun applyStreamTurns(t: Int) {
+        val stage = gpu
+        if (stage == null) {
+            if (t != streamTurns) Trace.refused("stream orientation", "the direct picture path cannot turn the stream; choose the GPU path in settings")
+            return
+        }
+        if (t == streamTurns && encoderSize == turnedSize(t)) return
+        val wasOdd = streamTurns % 2 == 1
+        streamTurns = t
+        if ((t % 2 == 1) != wasOdd || encoderSize != turnedSize(t)) rebuildStreamEncoder("orientation ${t * 90}°")
+        stage.setTurns(GpuStage.Output.STREAM, t)
+        Trace.control("stream orientation", "${t * 90}°", "${turnedSize(t).width}x${turnedSize(t).height}")
+    }
+
+    private fun turnedSize(turns: Int): Size = if (turns % 2 == 1) Size(size.height, size.width) else size
+
+    /** The size the stream encoder was made at (the GPU path), so a turn knows whether it must make a new one. */
+    private var encoderSize: Size = Size(1920, 1080)
+
+    /**
+     * v136: a new stream encoder at the turned size, on the GPU path only (the direct path's encoder is also the
+     * take's). Used for a change of orientation and by the watchdog when the encoder goes quiet.
+     */
+    private fun rebuildStreamEncoder(why: String) {
+        val stage = gpu ?: return
+        val dims = turnedSize(streamTurns)
+        stage.setOutput(GpuStage.Output.STREAM, null)
+        encoder?.stop()
+        val c = HdrVideoEncoder(
+            width = dims.width, height = dims.height, fps = fps, bitRate = streamBitRate, tenBit = isTenBit,
+            onFormat = ::onStreamFormat, onFrame = ::onStreamFrame
+        )
+        val surface = c.start()
+        if (surface == null) {
+            Trace.refused("stream encoder", "would not start at ${dims.width}x${dims.height} ($why)")
+            encoder = null; encoderSurface = null
+            return
+        }
+        encoder = c
+        encoderSurface = surface
+        encoderSize = dims
+        parameterSets = null
+        NdiSender.clearVideoInfo()
+        NdiSender.setVideoFormat(dims.width, dims.height, fps, 1)
+        stage.setOutput(GpuStage.Output.STREAM, surface, enabled = mode == Mode.HX)
+        stage.setTurns(GpuStage.Output.STREAM, streamTurns)
+        lastEncodedAt = SystemClock.elapsedRealtime()
+        c.requestKeyframe()
+        Trace.state("stream encoder made again at ${dims.width}x${dims.height}: $why")
+    }
+
+    private var quietSince = 0L
+    private var lastStall = ""
+
+    /**
+     * v136: THE STREAM WATCHDOG, once a second from the activity (foreground or not). The picture stopping while the
+     * sound goes on has three places to stop, and each is watched: the camera gives no frames to the GPU stage; the
+     * encoder gives nothing; the wire takes nothing. A quiet encoder is asked for a keyframe at 2 s and made again
+     * at 5 s; a camera that gives nothing for 4 s is reported to the activity, which reopens it.
+     * @return a line for the trace when something is wrong, else null.
+     */
+    fun watchStream(): String? {
+        if (!isRunning || mode == Mode.OFF) { quietSince = 0; return null }
+        val now = SystemClock.elapsedRealtime()
+        val camQuiet = gpu?.let { now - it.lastFrameAt } ?: 0L
+        val line = when {
+            camQuiet > 4000 -> {
+                "the camera has given no frame for ${camQuiet / 1000} s".also {
+                    if (lastStall != "camera") listener?.onError("Camera error: no frames for ${camQuiet / 1000} s")
+                    lastStall = "camera"
+                }
+            }
+            mode == Mode.HX && now - lastEncodedAt > 5000 && gpu != null -> {
+                lastStall = "encoder"
+                rebuildStreamEncoder("the encoder gave nothing for ${(now - lastEncodedAt) / 1000} s")
+                "stream encoder silent, made again"
+            }
+            mode == Mode.HX && now - lastEncodedAt > 2000 -> {
+                encoder?.requestKeyframe()
+                "stream encoder silent for ${(now - lastEncodedAt) / 1000} s, keyframe asked"
+            }
+            mode == Mode.HX && now - NdiVideo.lastSentAt > 3000 && now - lastEncodedAt < 1000 ->
+                "the wire has taken nothing for ${(now - NdiVideo.lastSentAt) / 1000} s (encoder fine)"
+            else -> { lastStall = ""; null }
+        }
+        return line
     }
 
     /**
@@ -605,7 +730,12 @@ class CameraPipeline(private val context: Context) {
 
         // The header describes what is about to be sent, so it is set before
         // the source opens rather than after the first frame.
-        NdiSender.setVideoFormat(size.width, size.height, fps, 1)
+        val sent = when {
+            next == Mode.HX && gpu != null -> encoderSize
+            next == Mode.HX -> size
+            else -> turnedSize(streamTurns)
+        }
+        NdiSender.setVideoFormat(sent.width, sent.height, fps, 1)
         if (mode == Mode.OFF) {
             // v135: pinned to the one adapter the switch names. No adapter, no sender: streaming over Wi-Fi when he
             // chose the cable is exactly the confusion the switch is there to end.
@@ -621,6 +751,7 @@ class CameraPipeline(private val context: Context) {
             }
             boundAdapter = adapter
             NdiAudio.reset()
+            NdiVideo.reset()
             Trace.state("NDI sender on ${adapter.name} ${adapter.ip} (${transport.label})")
         }
 
@@ -683,7 +814,8 @@ class CameraPipeline(private val context: Context) {
                     u.buffer, u.rowStride,
                     v.buffer, v.rowStride,
                     u.pixelStride,
-                    image.width, image.height, ptsUs
+                    image.width, image.height, ptsUs,
+                    streamTurns
                 )
                 frames++
                 // I420 on the wire: one byte of luma and half a byte of chroma

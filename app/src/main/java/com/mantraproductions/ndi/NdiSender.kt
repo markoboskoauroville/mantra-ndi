@@ -78,11 +78,13 @@ object NdiSender {
         u: ByteBuffer, uStride: Int,
         v: ByteBuffer, vStride: Int,
         uvPixelStride: Int,
-        width: Int, height: Int, ptsUs: Long
+        width: Int, height: Int, ptsUs: Long,
+        /** v136: quarter turns clockwise, so full NDI follows the phone's orientation too. */
+        turns: Int = 0
     ) {
         if (available) {
             nativeSendYuv420(
-                y, yStride, u, uStride, v, vStride, uvPixelStride, width, height, ptsUs
+                y, yStride, u, uStride, v, vStride, uvPixelStride, width, height, ptsUs, turns
             )
         }
     }
@@ -118,7 +120,7 @@ object NdiSender {
         u: ByteBuffer, uStride: Int,
         v: ByteBuffer, vStride: Int,
         uvPixelStride: Int,
-        width: Int, height: Int, ptsUs: Long
+        width: Int, height: Int, ptsUs: Long, turns: Int
     )
     private external fun nativeConnections(timeoutMs: Int): Int
 
