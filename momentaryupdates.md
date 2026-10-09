@@ -701,3 +701,14 @@ Needs the GPU stage (Settings → Picture path).
     orientation of the window it receives (taller → portrait, wider → landscape), its own sensor no longer decides. PROVEN
     06:05 upright: the Nothing stands and the Pixel's window fills it (24–25 fps, ~8 Mbit/s; L and L1 pressed through the
     link). The Pixel turned sideways is for his hand (the camera holds its own orientation, so adb cannot fake it).
+
+## 9.10.2026, 11:20 — v135 field test on the Pixel 7 over wireless adb (session "NDI Camera Local")
+
+> so the testing we call the holy land is unplugged. The cable is plugged and the phone is in tethering mode, so now we can test the streaming of NDI over the cable, limiting it to the cable only. So this app needs to limit, because the NDI on the computer does everything automatically. If I want to force the cable, I want to have a switch so same as other streaming destinations, we will have switch NDI stream Wi-Fi, NDI stream cable, and enable phone tethering
+
+52. NDI over the cable ONLY when the cable is chosen: the Mac's NDI finds the phone on every network by itself, so the
+    app must hold the stream to the cable. In settings, like the other outputs, switches: NDI STREAM WI-FI, NDI STREAM
+    CABLE, and ENABLE PHONE TETHERING. — **Status:** asked; for the cloud session (branch claude/friendly-goodall-61mhpx).
+    MEASURED 11:18 on v135 with USB CABLE chosen: the sender says "ncm0 10.67.163.234 (USB CABLE)", but the NDI ports
+    5960/5961 listen on 0.0.0.0 (reachable on 192.168.1.102 over Wi-Fi too) and Android.local is announced with both
+    10.67.163.234 (Mac en19, the cable) and 192.168.1.102 (en0/en17), so a receiver may take the Wi-Fi path.
