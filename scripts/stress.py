@@ -5,10 +5,12 @@ noting phone a to see where it freezes".
 
 The keys are found by what they say (content-desc / text), not by coordinates, so the script survives layout changes.
 """
-import re, subprocess, sys, time
+import os, re, shutil, subprocess, sys, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pixel7_lock
 
 SERIAL = sys.argv[1] if len(sys.argv) > 1 else "0005534BC000140"
-ADB = ["/Users/markobosko/Library/Android/sdk/platform-tools/adb", "-s", SERIAL]
+ADB = [shutil.which("adb") or "/Users/markobosko/Library/Android/sdk/platform-tools/adb", "-s", SERIAL]
 FILES = "/sdcard/Android/data/com.mantraproductions.ndi/files/"
 
 
@@ -93,6 +95,9 @@ def step(name, action, wait=3.5):
 
 
 if __name__ == "__main__":
+    # v136: the Pixel 7 is shared with DJ Mantra; on a Mac with the lock, the lock first, whichever phone.
+    if os.path.exists(pixel7_lock.LOCK):
+        pixel7_lock.hold_for_this_run(ADB, 20, "camera stress test", wait="--wait" in sys.argv)
     print(f"stress test on {SERIAL}")
     for i in range(6):
         step(f"LOG curve, step {i + 1}", lambda: tap_word("LOG"))

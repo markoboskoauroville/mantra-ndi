@@ -15,6 +15,8 @@ MainActivity.applyTestExtras), reading the app's own trace:
 Prints a PASS / FAIL table and writes it to field-tests/<date>/REPORT.md with the screenshots beside it.
 """
 import datetime, os, re, shutil, subprocess, sys, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pixel7_lock
 
 TARGET = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else os.environ.get("PHONE", "")
 APK = next((a for a in sys.argv[2:] if a.endswith(".apk")), None)
@@ -113,7 +115,9 @@ def scenario(name, wait=16, **extras):
 
 # --- 0. the link -------------------------------------------------------------------------------------------------
 if not TARGET:
-    sys.exit("usage: field_test.py <phone-ip:port> [app.apk] [--manual]")
+    sys.exit("usage: field_test.py <phone-ip:port> [app.apk] [--manual] [--wait]")
+# The Pixel 7 is shared with DJ Mantra: the lock first, before any adb command; given back at the end, however it ends.
+pixel7_lock.hold_for_this_run(ADB, 45 if MANUAL else 25, "camera v136 field test", wait="--wait" in sys.argv)
 print(subprocess.run([ADB_BIN, "connect", TARGET], capture_output=True, text=True).stdout.strip())
 model = sh("shell", "getprop", "ro.product.model").strip()
 record("wireless adb reaches the phone", bool(model) and "error" not in model.lower(), model)

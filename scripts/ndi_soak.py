@@ -17,6 +17,8 @@ Writes field-tests/<date>-soak/: probe.jsonl (every second), events.txt, trace-l
 about the stream: NDI LIVE, stream watch, ndi video flushes) and REPORT.md.
 """
 import argparse, datetime, json, os, re, shutil, subprocess, sys, threading, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pixel7_lock
 
 ap = argparse.ArgumentParser()
 ap.add_argument("phone", help="wireless adb address, ip:port")
@@ -24,6 +26,7 @@ ap.add_argument("--source", default="", help="part of the NDI source name")
 ap.add_argument("--minutes", type=float, default=10, help="length of the baseline phase")
 ap.add_argument("--phases", default="baseline,rotate,background,screenoff,full,hxagain")
 ap.add_argument("--extra-ips", default="", help="the phone's address when discovery cannot reach it (USB tether)")
+ap.add_argument("--wait", action="store_true", help="wait for the shared Pixel 7 instead of giving up when it is busy")
 a = ap.parse_args()
 
 ADB_BIN = shutil.which("adb") or os.path.expanduser("~/Library/Android/sdk/platform-tools/adb")
@@ -123,6 +126,10 @@ def orient(portrait):
 
 # --- go ------------------------------------------------------------------------------------------------------------
 
+# The Pixel 7 is shared with DJ Mantra: the lock first, for the run's length plus a margin, given back at exit.
+phase_minutes = {"baseline": a.minutes, "rotate": 2.5, "background": 2, "screenoff": 2, "full": 2.2, "hxagain": 1.2}
+need = sum(phase_minutes.get(p, 2) for p in a.phases.split(",")) + 3
+pixel7_lock.hold_for_this_run(ADB, min(max(15, need), 60), "camera NDI soak", wait=a.wait)
 model = sh("shell", "getprop", "ro.product.model").strip()
 event(f"phone {model} at {a.phone}")
 orient(False)
