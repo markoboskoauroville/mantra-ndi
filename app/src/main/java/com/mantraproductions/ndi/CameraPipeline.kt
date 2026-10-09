@@ -169,6 +169,20 @@ class CameraPipeline(private val context: Context) {
      */
     private var wifiLock: WifiManager.WifiLock? = null
     private var startedAtUs = 0L
+
+    /** v135: the wire NDI goes out on, set from settings before a mode is entered. */
+    @Volatile var transport: Routing.Transport = Routing.Transport.WIFI
+
+    /** v135: the adapter the live sender was pinned to, or null while there is no sender. */
+    @Volatile var boundAdapter: Routing.Nic? = null
+        private set
+
+    /**
+     * v135: what the wire would be now, if a sender were made this moment. The activity compares it with
+     * [boundAdapter] every two seconds: a tether replugged comes back on a new subnet, and a sender pinned to the
+     * old address would stream into nothing.
+     */
+    fun currentAdapter(): Routing.Nic? = Routing.adapterFor(transport, UsbLink.nics())
     @Volatile private var frames = 0L
     @Volatile private var bits = 0L
     private var rateFrames = 0L
@@ -546,6 +560,8 @@ class CameraPipeline(private val context: Context) {
         }
 
         if (next == Mode.OFF) {
+            NdiAudio.live = false
+            boundAdapter = null
             NdiSender.clearVideoInfo()
             NdiSender.destroy()
             runCatching { multicast?.release() }
@@ -590,9 +606,22 @@ class CameraPipeline(private val context: Context) {
         // The header describes what is about to be sent, so it is set before
         // the source opens rather than after the first frame.
         NdiSender.setVideoFormat(size.width, size.height, fps, 1)
-        if (mode == Mode.OFF && !NdiSender.create(sourceName)) {
-            listener?.onError("NDI source could not be opened")
-            return false
+        if (mode == Mode.OFF) {
+            // v135: pinned to the one adapter the switch names. No adapter, no sender: streaming over Wi-Fi when he
+            // chose the cable is exactly the confusion the switch is there to end.
+            val adapter = currentAdapter()
+            if (adapter == null) {
+                // Not onError: that path reopens the camera, and the camera is fine. The activity says it.
+                Trace.refused("stream", Routing.wireLabel(transport, null))
+                return false
+            }
+            if (!NdiSender.create(sourceName, Routing.ndiConfig(adapter.ip))) {
+                listener?.onError("NDI source could not be opened")
+                return false
+            }
+            boundAdapter = adapter
+            NdiAudio.reset()
+            Trace.state("NDI sender on ${adapter.name} ${adapter.ip} (${transport.label})")
         }
 
         frames = 0; bits = 0; rateFrames = 0; rateBits = 0
@@ -604,6 +633,7 @@ class CameraPipeline(private val context: Context) {
         if (!configured) {
             listener?.onError("This phone would not give a session with that target")
             NdiSender.destroy()
+            boundAdapter = null
             mode = Mode.OFF
             return false
         }
@@ -624,10 +654,12 @@ class CameraPipeline(private val context: Context) {
         if (!ok) {
             listener?.onError("The camera refused that target")
             NdiSender.destroy()
+            boundAdapter = null
             mode = Mode.OFF
             return false
         }
         mode = next
+        NdiAudio.live = true
         if (next == Mode.HX) encoder?.requestKeyframe()
         Trace.control("stream", next.name, "green")
         return true
@@ -766,7 +798,7 @@ class CameraPipeline(private val context: Context) {
             // in his take: frames going into a video encoder are converted to
             // the monotonic clock by the camera framework, whatever the
             // sensor's own source. System.nanoTime is that clock.
-            val aac = AacEncoder(clockNs = { System.nanoTime() })
+            val aac = AacEncoder(channels = meter.channels, clockNs = { System.nanoTime() })
             aac.onFormat = { format -> recorder?.setAudioFormat(format) }
             aac.onSample = { buffer, info -> recorder?.writeAudio(buffer, info) }
             if (aac.start()) {

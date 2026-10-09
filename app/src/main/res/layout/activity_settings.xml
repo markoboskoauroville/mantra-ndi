@@ -446,6 +446,26 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal" />
+            <!-- v135: the wire NDI goes out on -->
+            <TextView style="@style/MantraLabel" android:text="NETWORK" />
+            <TextView android:tag="hint" style="@style/MantraHint"
+                android:text="WI-FI: the network the phone joined. USB CABLE: plug the phone into the computer and turn USB tethering on; the stream then goes down the cable only. The stream follows the wire: it stops when the wire goes and starts again on its new address." />
+            <RadioGroup
+                android:id="@+id/ndiTransport"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+            <TextView
+                android:id="@+id/ndiWire"
+                style="@style/MantraValue"
+                android:paddingBottom="6dp" />
+            <Switch
+                android:id="@+id/ndiAudio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:textColor="@color/sand"
+                android:text="SOUND IN THE STREAM" />
             <!-- The source name -->
             <TextView style="@style/MantraLabel" android:text="@string/source_name" />
             <TextView android:tag="hint" style="@style/MantraHint" android:text="@string/source_name_hint" />
@@ -462,6 +482,32 @@
                 android:autofillHints="name"
                 android:background="@color/surface"
                 android:padding="10dp" />
+        </LinearLayout>
+        <!-- v135: SOUND, which microphone feeds the meter, the file and the stream -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="10dp">
+            <TextView style="@style/MantraLabel" android:text="SOUND SOURCE" />
+            <TextView android:tag="hint" style="@style/MantraHint"
+                android:text="Feeds the meter, the file and the NDI stream. AUTO takes a USB-C microphone, audio interface or wireless receiver when one is plugged in, else the phone microphone. Plugging in or pulling out is followed live." />
+            <RadioGroup
+                android:id="@+id/audioSource"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+            <Switch
+                android:id="@+id/audioStereo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:textColor="@color/sand"
+                android:text="STEREO (when the device has two channels)" />
+            <TextView
+                android:id="@+id/audioNow"
+                style="@style/MantraValue"
+                android:paddingBottom="6dp" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"

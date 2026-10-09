@@ -23,9 +23,12 @@ object NdiSender {
         false
     }
 
-    /** Opens the source. The name is what a receiver will see in its list. */
-    fun create(sourceName: String): Boolean =
-        if (available) nativeCreate(sourceName) else false
+    /**
+     * Opens the source. The name is what a receiver will see in its list. [configJson] (v135) is the NDI JSON
+     * configuration for this sender, [Routing.ndiConfig]: the one adapter it may use. Null leaves it to the SDK.
+     */
+    fun create(sourceName: String, configJson: String? = null): Boolean =
+        if (available) nativeCreate(sourceName, configJson) else false
 
     fun destroy() {
         if (available) nativeDestroy()
@@ -92,7 +95,15 @@ object NdiSender {
     fun tally(timeoutMs: Int = 0): Int =
         if (available) nativeTally(timeoutMs) else -1
 
-    private external fun nativeCreate(sourceName: String): Boolean
+    /**
+     * v135: one buffer of 16-bit interleaved PCM into the stream, beside the picture. False when there is no sender
+     * (between modes, or mid-rebuild), which drops that buffer and nothing else.
+     */
+    fun sendAudio(pcm: ByteArray, bytes: Int, channels: Int, sampleRate: Int): Boolean =
+        if (available) runCatching { nativeSendAudio(pcm, bytes, channels, sampleRate) }.getOrDefault(false) else false
+
+    private external fun nativeCreate(sourceName: String, configJson: String?): Boolean
+    private external fun nativeSendAudio(pcm: ByteArray, bytes: Int, channels: Int, sampleRate: Int): Boolean
     private external fun nativeDestroy()
     private external fun nativeSetVideoFormat(
         width: Int, height: Int, fpsNumerator: Int, fpsDenominator: Int

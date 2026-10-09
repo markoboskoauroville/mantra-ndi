@@ -51,6 +51,11 @@ std::mutex g_send_mutex;
 // Creating or destroying the sender takes BOTH locks, so neither side can ever use a sender being torn down.
 std::mutex g_meta_mutex;
 
+// v135: the sound has its own lock too. The SDK allows audio and video to be sent at the same time from different
+// threads, and an audio send waiting behind a video frame that waits on the network would starve the microphone's
+// reader. Creating or destroying the sender takes all three locks.
+std::mutex g_audio_mutex;
+
 // SPS/PPS (and VPS for H.265), attached to keyframes as the packet's extra
 // data. A receiver that joins mid-stream has no other way to learn the format.
 std::vector<uint8_t> g_video_extra;
@@ -75,8 +80,10 @@ std::vector<uint8_t> toVector(JNIEnv* env, jbyteArray array) {
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_mantraproductions_ndi_NdiSender_nativeCreate(
-        JNIEnv* env, jobject, jstring sourceName) {
+        JNIEnv* env, jobject, jstring sourceName, jstring configJson) {
     const char* name = env->GetStringUTFChars(sourceName, nullptr);
+    // v135: the NDI JSON configuration for this one sender (which adapter it may use), or null for the SDK's own.
+    const char* config = configJson ? env->GetStringUTFChars(configJson, nullptr) : nullptr;
 
     NDIlib_send_create_t create_desc;
     create_desc.p_ndi_name = name;
@@ -96,11 +103,14 @@ Java_com_mantraproductions_ndi_NdiSender_nativeCreate(
     if (first_init && !NDIlib_initialize()) {
         LOGE("NDIlib_initialize failed");
         env->ReleaseStringUTFChars(sourceName, name);
+        if (config) env->ReleaseStringUTFChars(configJson, config);
         return JNI_FALSE;
     }
 
-    NDIlib_send_instance_t fresh = NDIlib_send_create(&create_desc);
+    NDIlib_send_instance_t fresh = NDIlib_send_create_v2(&create_desc, config);
+    if (config) LOGI("NDI sender config %s", config);
     env->ReleaseStringUTFChars(sourceName, name);
+    if (config) env->ReleaseStringUTFChars(configJson, config);
 
     if (!fresh) {
         LOGE("NDIlib_send_create failed");
@@ -108,7 +118,7 @@ Java_com_mantraproductions_ndi_NdiSender_nativeCreate(
     }
 
     {
-        std::scoped_lock lock(g_send_mutex, g_meta_mutex);
+        std::scoped_lock lock(g_send_mutex, g_meta_mutex, g_audio_mutex);
         NDIlib_send_instance_t old = g_send_instance;
         g_send_instance = fresh;
         if (old) NDIlib_send_destroy(old);
@@ -119,7 +129,7 @@ Java_com_mantraproductions_ndi_NdiSender_nativeCreate(
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_mantraproductions_ndi_NdiSender_nativeDestroy(JNIEnv*, jobject) {
-    std::scoped_lock lock(g_send_mutex, g_meta_mutex);
+    std::scoped_lock lock(g_send_mutex, g_meta_mutex, g_audio_mutex);
     if (g_send_instance) {
         NDIlib_send_destroy(g_send_instance);
         g_send_instance = nullptr;
@@ -421,4 +431,40 @@ Java_com_mantraproductions_ndi_NdiSender_nativeSendMetadata(JNIEnv* env, jobject
     NDIlib_send_send_metadata(g_send_instance, &frame);
     env->ReleaseStringUTFChars(xml, data);
     return JNI_TRUE;
+}
+
+/**
+ * v135: the sound, inside the stream. 16-bit interleaved PCM straight from the microphone's reader, sent as an NDI
+ * audio frame beside the picture, in HX and in full NDI alike. Reference level 0 dB, which is what the SDK asks a
+ * sender to use ("most common applications produce audio at reference level"): full scale on the phone is full
+ * scale in OBS and vMix. The timecode is synthesised by the SDK from the sample count, so the sound runs on its own
+ * clock and never jumps when the picture is rebuilt.
+ */
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_mantraproductions_ndi_NdiSender_nativeSendAudio(
+        JNIEnv* env, jobject, jbyteArray pcm, jint bytes, jint channels, jint sampleRate) {
+    if (pcm == nullptr || bytes <= 0 || channels <= 0 || sampleRate <= 0) return JNI_FALSE;
+    const int samples = bytes / (2 * channels);
+    if (samples <= 0) return JNI_FALSE;
+    jbyte* data = env->GetByteArrayElements(pcm, nullptr);
+    if (!data) return JNI_FALSE;
+
+    NDIlib_audio_frame_interleaved_16s_t frame = {};
+    frame.sample_rate = sampleRate;
+    frame.no_channels = channels;
+    frame.no_samples = samples;
+    frame.timecode = NDIlib_send_timecode_synthesize;
+    frame.reference_level = 0;
+    frame.p_data = reinterpret_cast<int16_t*>(data);
+
+    jboolean sent = JNI_FALSE;
+    {
+        std::lock_guard<std::mutex> lock(g_audio_mutex);
+        if (g_send_instance) {
+            NDIlib_util_send_send_audio_interleaved_16s(g_send_instance, &frame);
+            sent = JNI_TRUE;
+        }
+    }
+    env->ReleaseByteArrayElements(pcm, data, JNI_ABORT);
+    return sent;
 }

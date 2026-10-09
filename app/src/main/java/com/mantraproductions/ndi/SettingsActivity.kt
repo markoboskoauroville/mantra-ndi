@@ -116,6 +116,82 @@ class SettingsActivity : AppCompatActivity() {
             })
         }
         kind.setOnCheckedChangeListener { _, id -> settings.ndiKind = id - 200 }
+
+        // v135: the wire, WI-FI or USB CABLE, and what it is right now.
+        val wire = findViewById<RadioGroup>(R.id.ndiTransport)
+        Routing.Transport.entries.forEach { t ->
+            wire.addView(RadioButton(this).apply {
+                id = 300 + t.ordinal
+                text = t.label
+                textSize = 13f
+                isChecked = settings.ndiTransport == t
+            })
+        }
+        wire.setOnCheckedChangeListener { _, id ->
+            Routing.Transport.entries.getOrNull(id - 300)?.let {
+                settings.ndiTransport = it
+                Trace.control("ndi wire", it.label, "chosen in settings")
+                showWire()
+            }
+        }
+        findViewById<android.widget.Switch>(R.id.ndiAudio).apply {
+            isChecked = settings.ndiAudio
+            setOnCheckedChangeListener { _, on -> settings.ndiAudio = on; Trace.control("ndi sound", if (on) "on" else "off", "settings") }
+        }
+
+        // v135: the sound source, from what is plugged in now.
+        findViewById<android.widget.Switch>(R.id.audioStereo).apply {
+            isChecked = settings.audioStereo
+            setOnCheckedChangeListener { _, on -> settings.audioStereo = on; Trace.control("sound", if (on) "stereo" else "mono", "settings") }
+        }
+        showAudioSources()
+    }
+
+    /** v135: AUTO, then every input the phone has now; a chosen device that is unplugged stays listed, marked. */
+    private fun showAudioSources() {
+        val group = findViewById<RadioGroup>(R.id.audioSource)
+        group.setOnCheckedChangeListener(null)
+        group.removeAllViews()
+        val inputs = runCatching { AudioMeter.inputs(this) }.getOrDefault(emptyList())
+        val keys = mutableListOf(Routing.AUDIO_AUTO to "AUTO (USB-C first, then the phone)")
+        inputs.forEach { keys.add(it.key to it.label + (if (it.channelCounts.contains(2)) "  · 2ch" else "")) }
+        if (keys.none { it.first == Routing.AUDIO_PHONE }) keys.add(1, Routing.AUDIO_PHONE to "PHONE MIC")
+        val chosen = settings.audioSource
+        if (keys.none { it.first == chosen }) keys.add(chosen to Routing.choiceLabel(chosen) + "  (not plugged in)")
+        keys.forEachIndexed { i, (key, label) ->
+            group.addView(RadioButton(this).apply {
+                id = 400 + i
+                text = label
+                textSize = 13f
+                isChecked = key == chosen
+            })
+        }
+        group.setOnCheckedChangeListener { _, id ->
+            keys.getOrNull(id - 400)?.let { (key, label) ->
+                settings.audioSource = key
+                Trace.control("sound source", label, "chosen in settings")
+                showAudioNow()
+            }
+        }
+        showAudioNow()
+    }
+
+    private fun showAudioNow() {
+        val inputs = runCatching { AudioMeter.inputs(this) }.getOrDefault(emptyList())
+        val pick = Routing.pick(settings.audioSource, inputs)
+        findViewById<TextView>(R.id.audioNow).text =
+            "Now: " + (pick?.label ?: "PHONE MIC (${Routing.choiceLabel(settings.audioSource)} is not plugged in)")
+    }
+
+    /** v135: the wire the switch names, and its address, or why there is none. */
+    private fun showWire() {
+        val t = settings.ndiTransport
+        val adapter = Routing.adapterFor(t, UsbLink.nics())
+        findViewById<TextView>(R.id.ndiWire).apply {
+            text = Routing.wireLabel(t, adapter) +
+                (if (adapter != null) "\nIn the receiver, if the source is not listed, add this address by hand." else "")
+            setTextColor(if (adapter != null) RailButton.GREEN else resources.getColor(R.color.sand, theme))
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -438,6 +514,8 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         showAddresses()
+        showWire()
+        showAudioSources()
         showFolder()
     }
 

@@ -33,29 +33,13 @@ import java.net.NetworkInterface
 object UsbLink {
 
     /** One interface this phone is reachable on, and what kind it is. */
-    data class Address(val interfaceName: String, val ip: String, val kind: Kind) {
-        enum class Kind { USB, WIFI, OTHER }
-
+    data class Address(val interfaceName: String, val ip: String, val kind: Routing.Kind) {
         val label: String
             get() = when (kind) {
-                Kind.USB -> "USB  $ip"
-                Kind.WIFI -> "Wi-Fi  $ip"
-                Kind.OTHER -> "$interfaceName  $ip"
+                Routing.Kind.USB -> "USB  $ip"
+                Routing.Kind.WIFI -> "Wi-Fi  $ip"
+                Routing.Kind.OTHER -> "$interfaceName  $ip"
             }
-    }
-
-    /**
-     * Android names a USB tether `rndis0` or `ncm0` depending on which gadget
-     * the phone offers — a Pixel on Android 14 and later uses NCM, older ones
-     * RNDIS — and `usb0` turns up on some builds. Matching the name is how the
-     * cable is told from the air, because nothing in the public API says which
-     * interface is which.
-     */
-    private fun kindOf(name: String): Address.Kind = when {
-        name.startsWith("rndis") || name.startsWith("ncm") || name.startsWith("usb") ->
-            Address.Kind.USB
-        name.startsWith("wlan") || name.startsWith("ap") -> Address.Kind.WIFI
-        else -> Address.Kind.OTHER
     }
 
     /**
@@ -74,7 +58,7 @@ object UsbLink {
                 nif.inetAddresses.toList()
                     .filterIsInstance<Inet4Address>()
                     .filterNot { it.isLoopbackAddress || it.isLinkLocalAddress }
-                    .map { Address(nif.name, it.hostAddress ?: "", kindOf(nif.name)) }
+                    .map { Address(nif.name, it.hostAddress ?: "", Routing.kindOf(nif.name)) }
             }
             .filter { it.ip.isNotBlank() }
             .sortedBy { it.kind.ordinal }
@@ -84,7 +68,10 @@ object UsbLink {
     }
 
     /** True when the cable is up, which is the only thing the key needs to know. */
-    fun usbUp(): Boolean = addresses().any { it.kind == Address.Kind.USB }
+    fun usbUp(): Boolean = addresses().any { it.kind == Routing.Kind.USB }
+
+    /** v135: the addresses as [Routing] reads them, to pick the one adapter the NDI switch names. */
+    fun nics(): List<Routing.Nic> = addresses().map { Routing.Nic(it.interfaceName, it.ip) }
 
     /** What to put in front of a person, cable first and never empty. */
     fun summary(): String {

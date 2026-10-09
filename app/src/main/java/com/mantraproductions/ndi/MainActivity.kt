@@ -239,6 +239,7 @@ class MainActivity : AppCompatActivity() {
         pipeline = CameraPipeline(this)
         slots = LutSlots(this)
         settings = Settings(this)
+        applyTestExtras(intent)
         manualQuarterTurns = settings.quarterTurns
         lenses = CameraCatalogue.lenses(this)
         Trace.state(
@@ -841,7 +842,15 @@ class MainActivity : AppCompatActivity() {
             refreshKeys()
             return
         }
-        val m = AudioMeter { rms -> ui.post { vu.setLevel(rms) } }
+        // v135: the microphone settings name (AUTO, the phone's, or a USB-C / wired device), mono or stereo.
+        val m = AudioMeter(this, settings.audioSource, settings.audioStereo,
+            onLevel = { rms -> ui.post { vu.setLevel(rms) } },
+            onRoute = { label, asChosen ->
+                audioLabel = label
+                if (!asChosen) say("${Routing.choiceLabel(settings.audioSource)} is not plugged in — sound from $label")
+                else say("Sound: $label")
+                refreshTelemetry()
+            })
         if (m.start()) {
             meter = m
             vu.dead = false
@@ -857,6 +866,7 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             if (pipeline.isRunning) pipeline.sampleRate()
             if (++storageTicks % 5 == 0) refreshStorage()
+            if (storageTicks % 2 == 0) watchWire()
             ui.postDelayed(this, 1000)
         }
     }
@@ -926,6 +936,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun followNdiSwitch() {
         if (!pipeline.isRunning) return
+        pipeline.transport = settings.ndiTransport
+        NdiAudio.wanted = settings.ndiAudio
         if (!settings.armNdi) {
             if (pipeline.mode != CameraPipeline.Mode.OFF) pipeline.setMode(CameraPipeline.Mode.OFF)
             return
@@ -937,9 +949,69 @@ class MainActivity : AppCompatActivity() {
             say("${if (want == CameraPipeline.Mode.FULL) "Full NDI" else "NDI HX"} is not possible on this lens")
             return
         }
-        pipeline.setMode(want)
+        // v135: no adapter for the chosen wire, no stream; the watch below starts it when the wire comes up.
+        if (pipeline.mode == CameraPipeline.Mode.OFF && pipeline.currentAdapter() == null) {
+            say("NDI waiting — " + Routing.wireLabel(settings.ndiTransport, null))
+            refreshTelemetry()
+            return
+        }
+        if (pipeline.setMode(want)) {
+            pipeline.boundAdapter?.let { say("NDI ${if (want == CameraPipeline.Mode.FULL) "FULL" else "HX"} on " + Routing.wireLabel(settings.ndiTransport, it)) }
+        }
         Trace.control("ndi", want.name, "armed in settings")
         refreshTelemetry()
+    }
+
+    /**
+     * v135: THE TEST HOOK. scripts/field_test.py starts the app with `am start -S ... --es ndi_transport USB` and so
+     * on, so every combination is set without tapping through settings (a tap by coordinates breaks with the next
+     * layout). Only in a debuggable build, which is what the releases are. Keys: ndi_arm, ndi_kind (1 HX, 2 FULL),
+     * ndi_transport (WIFI, USB), ndi_audio, audio_source (auto, phone, or a device key), audio_stereo, file_arm.
+     */
+    private fun applyTestExtras(i: android.content.Intent?) {
+        val x = i?.extras ?: return
+        if (!BuildConfig.DEBUG) return
+        fun bool(k: String) = x.getString(k)?.let { it == "1" || it.equals("true", true) || it.equals("on", true) }
+        bool("ndi_arm")?.let { settings.armNdi = it }
+        x.getString("ndi_kind")?.toIntOrNull()?.let { settings.ndiKind = it }
+        x.getString("ndi_transport")?.let { v -> runCatching { settings.ndiTransport = Routing.Transport.valueOf(v.uppercase()) } }
+        bool("ndi_audio")?.let { settings.ndiAudio = it }
+        x.getString("audio_source")?.let { settings.audioSource = it }
+        bool("audio_stereo")?.let { settings.audioStereo = it }
+        bool("file_arm")?.let { settings.armFile = it }
+        Trace.state("TEST settings: ndi=${settings.armNdi} kind=${settings.ndiKind} wire=${settings.ndiTransport} " +
+            "ndiSound=${settings.ndiAudio} source=${settings.audioSource} stereo=${settings.audioStereo} file=${settings.armFile}")
+    }
+
+    /**
+     * v135: THE WIRE WATCH, every two seconds. Marko asked for a ROBUST switch: the tether is plugged in after the
+     * app starts, pulled out mid-show, plugged back on a new subnet; Wi-Fi drops and returns. The sender is pinned to
+     * one address, so when the address the switch names changes, the sender is made again on the new one; when it
+     * goes, the stream stops and waits; when it comes, the stream starts. Lens changes keep the source as before.
+     */
+    private var wireTicks = 0
+
+    private fun watchWire() {
+        if (!pipeline.isRunning || !settings.armNdi) return
+        // Every ten seconds while streaming, one line the field test reads: the wire, and the sound that went out.
+        if (++wireTicks % 5 == 0 && pipeline.mode != CameraPipeline.Mode.OFF) {
+            Trace.state("NDI LIVE ${pipeline.mode} on ${pipeline.boundAdapter?.let { "${it.name} ${it.ip}" }} " +
+                "· sound ${if (NdiAudio.wanted) "on" else "off"} sent ${NdiAudio.sent} dropped ${NdiAudio.dropped}" +
+                " · from ${meter?.routed ?: "no meter"} ${meter?.channels ?: 0}ch · watching $lastWatching")
+        }
+        val now = pipeline.currentAdapter()
+        val bound = pipeline.boundAdapter
+        val streaming = pipeline.mode != CameraPipeline.Mode.OFF
+        when {
+            streaming && now?.ip != bound?.ip -> {
+                Trace.state("wire changed: ${bound?.let { "${it.name} ${it.ip}" } ?: "none"} → ${now?.let { "${it.name} ${it.ip}" } ?: "none"}")
+                pipeline.setMode(CameraPipeline.Mode.OFF)
+                if (now == null) say("NDI stopped — " + Routing.wireLabel(settings.ndiTransport, null) + ", waiting")
+                else followNdiSwitch()
+                refreshTelemetry()
+            }
+            !streaming && now != null -> followNdiSwitch()
+        }
     }
 
     private fun startRecording(): Boolean {
@@ -3033,6 +3105,9 @@ class MainActivity : AppCompatActivity() {
     private var lastMbps = 0.0
     private var lastWatching = 0
 
+    /** v135: where the sound comes from now, as Android routed it. */
+    private var audioLabel = ""
+
     private fun showRate(fps: Double, mbps: Double, connections: Int) {
         lastMbps = mbps
         lastWatching = connections
@@ -3054,7 +3129,9 @@ class MainActivity : AppCompatActivity() {
         val parts = Mechanism.telemetry(
             settings.armFile, pipeline.isRecording, pipeline.videoBitRate / 1_000_000.0,
             settings.armNdi, settings.ndiKind, pipeline.mode != CameraPipeline.Mode.OFF,
-            lastMbps, lastWatching
+            lastMbps, lastWatching,
+            wire = Routing.wireLabel(settings.ndiTransport, pipeline.boundAdapter ?: pipeline.currentAdapter()),
+            sound = if (meter != null && settings.ndiAudio) audioLabel.ifEmpty { "MIC" } else ""
         )
         val text = android.text.SpannableStringBuilder()
         parts.forEachIndexed { i, p ->

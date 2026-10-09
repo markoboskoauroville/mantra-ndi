@@ -1804,7 +1804,9 @@ object Mechanism {
      */
     fun telemetry(
         armFile: Boolean, fileLive: Boolean, fileMbps: Double,
-        armNdi: Boolean, ndiKind: Int, ndiLive: Boolean, ndiMbps: Double, watching: Int
+        armNdi: Boolean, ndiKind: Int, ndiLive: Boolean, ndiMbps: Double, watching: Int,
+        /** v135: the wire, as [Routing.wireLabel] says it, and the sound riding in the stream ("" = none). */
+        wire: String = "", sound: String = ""
     ): List<Telemetry> {
         fun state(armed: Boolean, live: Boolean) = when {
             live -> Output.LIVE
@@ -1817,7 +1819,11 @@ object Mechanism {
                 if (fileLive) String.format(java.util.Locale.ROOT, "%.0f Mb/s", fileMbps) else ""),
             Telemetry("USB", Output.OFF, ""),
             Telemetry(if (armNdi || ndiLive) ndiName else "NDI", state(armNdi, ndiLive),
-                if (ndiLive) String.format(java.util.Locale.ROOT, "%.1f Mb/s · %d watching", ndiMbps, watching.coerceAtLeast(0)) else ""),
+                listOf(
+                    if (armNdi || ndiLive) wire else "",
+                    if (ndiLive) String.format(java.util.Locale.ROOT, "%.1f Mb/s · %d watching", ndiMbps, watching.coerceAtLeast(0)) else "",
+                    if (ndiLive && sound.isNotEmpty()) "♪ $sound" else ""
+                ).filter { it.isNotEmpty() }.joinToString(" · ")),
             Telemetry("YT", Output.OFF, "")
         )
     }
@@ -2048,8 +2054,9 @@ object Mechanism {
     fun samplesToUs(samples: Long, sampleRate: Int): Long =
         if (sampleRate <= 0) 0L else samples * 1_000_000L / sampleRate
 
-    /** Microseconds of 16-bit mono PCM in [bytes]. */
-    fun pcmDurationUs(bytes: Int, sampleRate: Int): Long = samplesToUs(bytes / 2L, sampleRate)
+    /** Microseconds of 16-bit PCM in [bytes], [channels] interleaved (v135: stereo). */
+    fun pcmDurationUs(bytes: Int, sampleRate: Int, channels: Int = 1): Long =
+        samplesToUs(bytes / (2L * channels.coerceAtLeast(1)), sampleRate)
 
     /** RMS of 16 bit little endian PCM, sampling every [stride] bytes. */
     fun rmsOfPcm16(pcm: ByteArray, stride: Int = 4): Float {

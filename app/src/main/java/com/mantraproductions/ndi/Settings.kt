@@ -241,6 +241,27 @@ class Settings(context: Context) {
         get() = prefs.getInt(NDI_KIND, 1)
         set(value) = prefs.edit().putInt(NDI_KIND, if (value == 2) 2 else 1).apply()
 
+    /** v135: the wire NDI goes out on (Wi-Fi or the USB tether), see [Routing]. */
+    var ndiTransport: Routing.Transport
+        get() = runCatching { Routing.Transport.valueOf(prefs.getString(NDI_TRANSPORT, null) ?: "") }
+            .getOrDefault(Routing.Transport.WIFI)
+        set(value) = prefs.edit().putString(NDI_TRANSPORT, value.name).apply()
+
+    /** v135: the sound travels inside the NDI stream (on unless he turns it off). */
+    var ndiAudio: Boolean
+        get() = prefs.getBoolean(NDI_AUDIO, true)
+        set(value) = prefs.edit().putBoolean(NDI_AUDIO, value).apply()
+
+    /** v135: which microphone: [Routing.AUDIO_AUTO], [Routing.AUDIO_PHONE] or a device's [Routing.Input.key]. */
+    var audioSource: String
+        get() = prefs.getString(AUDIO_SOURCE, null)?.takeIf { it.isNotBlank() } ?: Routing.AUDIO_AUTO
+        set(value) = prefs.edit().putString(AUDIO_SOURCE, value).apply()
+
+    /** v135: two channels when the device has them (a USB-C interface, a two-transmitter wireless kit). */
+    var audioStereo: Boolean
+        get() = prefs.getBoolean(AUDIO_STEREO, false)
+        set(value) = prefs.edit().putBoolean(AUDIO_STEREO, value).apply()
+
     /** v97: the picture goes through the GPU stage (true) or the direct path. */
     var gpuStage: Boolean
         get() = prefs.getBoolean(GPU_STAGE, true)
@@ -311,5 +332,9 @@ class Settings(context: Context) {
         const val NDI_KIND = "ndiKind"
         const val GPU_STAGE = "gpuStage"
         const val STREAM_MBPS = "streamMbps"
+        const val NDI_TRANSPORT = "ndiTransport"
+        const val NDI_AUDIO = "ndiAudio"
+        const val AUDIO_SOURCE = "audioSource"
+        const val AUDIO_STEREO = "audioStereo"
     }
 }

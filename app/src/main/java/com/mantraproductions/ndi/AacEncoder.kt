@@ -32,6 +32,8 @@ import kotlin.concurrent.thread
 class AacEncoder(
     private val sampleRate: Int = AudioMeter.SAMPLE_RATE,
     private val bitRate: Int = 192_000,
+    /** v135: 1 or 2, as the microphone's reader was opened ([AudioMeter.channels]). */
+    private val channels: Int = 1,
     /** Now, in nanoseconds, on the camera's own clock. */
     private val clockNs: () -> Long = { System.nanoTime() }
 ) {
@@ -53,7 +55,7 @@ class AacEncoder(
     fun start(): Boolean {
         if (running.get()) return true
         val format = MediaFormat.createAudioFormat(
-            MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, 1
+            MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channels
         ).apply {
             setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
             setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
@@ -73,13 +75,13 @@ class AacEncoder(
         }
     }
 
-    /** One buffer of 16-bit mono PCM, straight from the meter's reader thread. */
+    /** One buffer of 16-bit PCM (interleaved when stereo), straight from the meter's reader thread. */
     fun feed(pcm: ByteArray, bytes: Int) {
         if (!running.get() || bytes <= 0) return
         val c = codec ?: return
         if (firstUs < 0) {
             // The buffer ends now; its first sample was its own length ago.
-            firstUs = clockNs() / 1000 - Mechanism.pcmDurationUs(bytes, sampleRate)
+            firstUs = clockNs() / 1000 - Mechanism.pcmDurationUs(bytes, sampleRate, channels)
         }
         var offset = 0
         try {
@@ -89,16 +91,19 @@ class AacEncoder(
                 val index = c.dequeueInputBuffer(20_000)
                 if (index < 0) {
                     droppedBytes += (bytes - offset)
-                    samples += (bytes - offset) / 2
+                    samples += (bytes - offset) / (2 * channels)
                     return
                 }
                 val input = c.getInputBuffer(index) ?: return
                 input.clear()
-                val n = minOf(bytes - offset, input.capacity()) and 1.inv()
+                // Whole frames only (2 bytes a sample, [channels] samples a frame), so a slot never splits L from R.
+                val frame = 2 * channels
+                val n = minOf(bytes - offset, input.capacity()) / frame * frame
+                if (n <= 0) return
                 input.put(pcm, offset, n)
                 val ptsUs = firstUs + Mechanism.samplesToUs(samples, sampleRate)
                 c.queueInputBuffer(index, 0, n, ptsUs, 0)
-                samples += n / 2
+                samples += n / frame
                 offset += n
             }
         } catch (t: Throwable) {
@@ -110,7 +115,7 @@ class AacEncoder(
     fun stop() {
         if (!running.getAndSet(false)) return
         Trace.state(
-            "take's sound: " + String.format("%.2f", samples.toDouble() / sampleRate) + " s" +
+            "take's sound: " + String.format("%.2f", samples.toDouble() / sampleRate) + " s, ${channels}ch" +
                 (if (droppedBytes > 0) ", $droppedBytes bytes the encoder could not take" else ", nothing dropped")
         )
         worker?.join(800)
